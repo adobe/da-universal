@@ -17,3 +17,24 @@ export function prepareHtml(daCtx, aemCtx, originalBody, headHtml) {
 
   return `<html><head>${preparedHeadHtml}${ueHeadHtml}</head>${originalBody}</html>`;
 }
+
+export function createEmptyPageResponse(daCtx, aemCtx, headHtml) {
+
+  const bodyHtml = `<body>
+    <header></header>
+    <main data-aue-type="container" data-aue-resource="urn:daconnection:1234">
+    <div data-aue-type="container" data-aue-model="section" data-aue-resource="urn:daconnection:5678">
+    <h1>Hello World</h1>
+    </div>
+    </main>
+    <footer></footer>
+  </body>`;
+
+  const responseHtml = prepareHtml(daCtx, aemCtx, bodyHtml, headHtml);
+
+  const response = new Response(responseHtml, {
+    status: 200
+  });    
+
+  return response;
+}
