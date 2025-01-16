@@ -5,4 +5,4 @@ compatibility_date = "2023-11-21"
 vars = { UE_CONNECTION = "da:https://admin.da.live/source" }
 
 [env.stage]
-vars = { ENVIRONMENT = "stage" }
+vars = { ENVIRONMENT = "stage", UE_CONNECTION = "da:https://admin.da.live/source" }

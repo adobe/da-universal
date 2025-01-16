@@ -4,7 +4,7 @@ export function prepareHtml(daCtx, aemCtx, originalBody, headHtml) {
 
   // static UE head HTML for all pages
   const ueHeadHtml = `
-    <meta name="urn:adobe:aue:system:daconnection" content="${ueUrl}/${org}/${site}${pathname}.${ext}"/>
+    <meta name="urn:adobe:aue:system:daconnection" content="${ueUrl}/${org}${pathname}.${ext}"/>
     <meta name="urn:adobe:aue:config:service" content="https://universal-editor-service-dev.adobe.io">
     <script type="application/vnd.adobe.aue.component+json" src="/${org}/${site}/component-definition.json"></script>
     <script type="application/vnd.adobe.aue.model+json" src="/${org}/${site}/component-models.json"></script>
@@ -16,7 +16,7 @@ export function prepareHtml(daCtx, aemCtx, originalBody, headHtml) {
     .replace(/<script\s+[^>]*src="\//g, `<script src="/${org}/${site}/`)  
     .replace(/<link\s+([^>]*href=")\//g, `<link $1/${org}/${site}/`);
 
-  return `<html>\n<head>\n${preparedHeadHtml}${ueHeadHtml}\n</head>${originalBody}\n</html>`;
+  return `<!DOCTYPE html>\n<html>\n<head>\n${preparedHeadHtml}${ueHeadHtml}\n</head>${originalBody}\n</html>`;
 }
 
 export function createEmptyPageResponse(daCtx, aemCtx, headHtml) {
