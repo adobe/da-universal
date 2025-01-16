@@ -23,9 +23,11 @@ export function createEmptyPageResponse(daCtx, aemCtx, headHtml) {
 
   const bodyHtml = `<body>
     <header></header>
-    <main data-aue-type="container" data-aue-resource="urn:daconnection:1234">
-    <div data-aue-type="container" data-aue-model="section" data-aue-resource="urn:daconnection:5678">
-    <h1>Hello World</h1>
+   <main data-aue-resource="urn:daconnection:main" data-aue-type="container" data-aue-label="Main">
+    <div data-aue-resource="urn:daconnection:section" data-aue-type="container" data-aue-label="Section" data-aue-behavior="component">
+      <div data-aue-resource="urn:daconnection:text" data-aue-type="richtext"  data-aue-prop="text" data-aue-label="Richtext" data-aue-behavior="component">
+      <h1>Hello World</h1>
+      </div>
     </div>
     </main>
     <footer></footer>
