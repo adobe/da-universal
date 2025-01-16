@@ -4,7 +4,7 @@ export function prepareHtml(daCtx, aemCtx, originalBody, headHtml) {
 
   // static UE head HTML for all pages
   const ueHeadHtml = `<meta name="urn:adobe:aue:system:daconnection" content="da:${ueUrl}"/>
-    <meta name="urn:adobe:aue:config:service" content="https://universal-editor-service-stage.experiencecloud.live"/>
+    <meta name="urn:adobe:aue:config:service" content="https://universal-editor-service-dev.adobe.io">
     <script type="application/vnd.adobe.aue.component+json" src="/${org}/${site}/component-definition.json"></script>
     <script type="application/vnd.adobe.aue.model+json" src="/${org}/${site}/component-models.json"></script>
     <script type="application/vnd.adobe.aue.filter+json" src="/${org}/${site}/component-filters.json"></script>
