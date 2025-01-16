@@ -1,15 +1,19 @@
 export function prepareHtml(daCtx, aemCtx, originalBody, headHtml) {
   const { org, site, pathname, ext } = daCtx;
-  const { ueUrl } = aemCtx;
+  const { ueUrl, ueService } = aemCtx;
 
   // static UE head HTML for all pages
-  const ueHeadHtml = `
-    <meta name="urn:adobe:aue:system:daconnection" content="${ueUrl}/${org}${pathname}.${ext}"/>
-    <meta name="urn:adobe:aue:config:service" content="https://universal-editor-service-dev.adobe.io">
+  let ueHeadHtml = `
+    <meta name="urn:adobe:aue:system:ab" content="${ueUrl}/${org}${pathname}.${ext}"/>
     <script type="application/vnd.adobe.aue.component+json" src="/${org}/${site}/component-definition.json"></script>
     <script type="application/vnd.adobe.aue.model+json" src="/${org}/${site}/component-models.json"></script>
     <script type="application/vnd.adobe.aue.filter+json" src="/${org}/${site}/component-filters.json"></script>
     <script src="https://universal-editor-service.adobe.io/cors.js" async=""></script>`;
+
+  if (ueService) {
+    ueHeadHtml += `
+    <meta name="urn:adobe:aue:config:service" content="${ueService}">`;
+  }
 
   // original head HTML with updated paths
   const preparedHeadHtml = headHtml
@@ -17,27 +21,4 @@ export function prepareHtml(daCtx, aemCtx, originalBody, headHtml) {
     .replace(/<link\s+([^>]*href=")\//g, `<link $1/${org}/${site}/`);
 
   return `<!DOCTYPE html>\n<html>\n<head>\n${preparedHeadHtml}${ueHeadHtml}\n</head>${originalBody}\n</html>`;
-}
-
-export function createEmptyPageResponse(daCtx, aemCtx, headHtml) {
-
-  const bodyHtml = `<body>
-    <header></header>
-   <main data-aue-resource="urn:daconnection:main" data-aue-type="container" data-aue-label="Main">
-    <div data-aue-resource="urn:daconnection:section" data-aue-type="container" data-aue-label="Section" data-aue-behavior="component">
-      <div data-aue-resource="urn:daconnection:text" data-aue-type="richtext"  data-aue-prop="text" data-aue-label="Richtext" data-aue-behavior="component">
-      <h1>Hello World</h1>
-      </div>
-    </div>
-    </main>
-    <footer></footer>
-  </body>`;
-
-  const responseHtml = prepareHtml(daCtx, aemCtx, bodyHtml, headHtml);
-
-  const response = new Response(responseHtml, {
-    status: 200
-  });    
-
-  return response;
 }

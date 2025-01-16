@@ -3,8 +3,8 @@ import { getDaCtx } from './utils/daCtx';
 import getObject from './storage/object';
 
 import { get404, daResp, getRobots } from './responses/index';
-import { getAemCtx, getHeadHtml, handleProxyRequest } from './utils/aem';
-import { createEmptyPageResponse, prepareHtml } from './ue/utils';
+import { getAemCtx, getAEMHtml, handleProxyRequest } from './utils/aem';
+import { prepareHtml } from './ue/utils';
 
 export default {
   async fetch(req, env) {
@@ -21,13 +21,12 @@ export default {
       return handleProxyRequest(aemCtx, daCtx.aemPathname, req);
     }
 
-    const headHtml = await getHeadHtml(aemCtx);
+    const headHtml = await getAEMHtml(aemCtx, "/head.html");
     let objResp = await getObject(env, daCtx);
 
     // enrich content with HTML header and UE attributes
     if (objResp && objResp.status === 200) {
       const originalBodyHtml = await objResp.body.transformToString();
-
       const responseHtml = prepareHtml(daCtx, aemCtx, originalBodyHtml, headHtml);      
       objResp = new Response(responseHtml, {
         status: objResp.status,
@@ -35,7 +34,11 @@ export default {
         headers: objResp.headers,
       });      
     } else {
-      objResp = createEmptyPageResponse(daCtx, aemCtx, headHtml);
+      const templateHtml = await getAEMHtml(aemCtx, "/ue-template.html");
+      const responseHtml = prepareHtml(daCtx, aemCtx, templateHtml, headHtml);      
+      objResp = new Response(responseHtml, {
+        status: 200
+      });     
     }
 
     return daResp(objResp);
