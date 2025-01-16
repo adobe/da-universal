@@ -1,0 +1,8 @@
+name = "da-ue"
+main = "src/index.js"
+compatibility_date = "2023-11-21"
+
+vars = { UE_CONNECTION = "https://ue.da.live" }
+
+[env.stage]
+vars = { ENVIRONMENT = "stage", UE_CONNECTION = "https://ue-stage.da.live" }
