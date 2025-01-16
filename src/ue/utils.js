@@ -12,8 +12,8 @@ export function prepareHtml(daCtx, aemCtx, originalBody, headHtml) {
 
   // original head HTML with updated paths
   const preparedHeadHtml = headHtml
-    .replace(/<script\s+[^>]*src="\//g, `<script src="/${org}/${site}/`)
-    .replace(/<link\s+[^>]*href="\//g, `<link href="/${org}/${site}/`);
+    .replace(/<script\s+[^>]*src="\//g, `<script src="/${org}/${site}/`)  
+    .replace(/<link\s+([^>]*href=")\//g, `<link $1/${org}/${site}/`);
 
   return `<html><head>${preparedHeadHtml}${ueHeadHtml}</head>${originalBody}</html>`;
 }
