@@ -7,7 +7,7 @@ export function getAemCtx(env, daCtx) {
     liveHostname: `main--${site}--${org}.aem.live`,
     liveUrl: `https://main--${site}--${org}.aem.live`,
     ueUrl: env.UE_CONNECTION,
-    ueService: env.UE_SERVICE
+    ueService: env.UE_SERVICE,
   };
 
   return obj;
@@ -19,14 +19,4 @@ export async function getAEMHtml(aemCtx, path) {
   if (!resp.ok) return undefined;
   const headHtml = await resp.text();
   return headHtml;
-}
-
-export async function handleProxyRequest(aemCtx, pathname, request) {
-  const aemUrl = new URL(pathname, aemCtx.liveUrl);
-  request = new Request(aemUrl, request);
-  request.headers.set("Origin", new URL(aemCtx.liveUrl).origin);
-  let response = await fetch(request);
-  response = new Response(response.body, response);
-  response.headers.set("Access-Control-Allow-Origin", aemUrl.origin);
-  return response;
 }
