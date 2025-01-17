@@ -6,6 +6,9 @@ vars = { UE_CONNECTION = "da:https://admin.da.live/source", DA_ADMIN = "https://
 
 services = [{ binding = "daadmin", service = "da-admin" }]
 
+[dev]
+port = 4712
+
 [env.stage]
 vars = { ENVIRONMENT = "stage", UE_CONNECTION = "da:https://admin.da.live/source", UE_SERVICE = "https://universal-editor-service-dev.adobe.io", DA_ADMIN = "https://admin-stage.da.live" }
 services = [{ binding = "daadmin", service = "da-admin-stage" }]
