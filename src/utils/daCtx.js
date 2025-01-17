@@ -52,7 +52,7 @@ export function getDaCtx(pathname) {
 
   const daPathBase = [...path, daCtx.name].join('/');
 
-  if (!daCtx.ext || daCtx.ext === 'html') {
+  if (!daCtx.ext || (!daCtx.name.includes('plain') && daCtx.ext === 'html')) {
     daCtx.pathname = `/${daPathBase}`;
     daCtx.aemPathname = `/${aemPathBase}`;
   } else {

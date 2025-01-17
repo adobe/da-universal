@@ -16,7 +16,7 @@ export default {
     const daCtx = getDaCtx(url.pathname);
     const aemCtx = getAemCtx(env, daCtx);
 
-    const resourceRegex = /\.(css|js|png|jpg|jpeg|webp|gif|svg|ico|json|woff|woff2|\.plain\.)$/i;
+    const resourceRegex = /\.(css|js|png|jpg|jpeg|webp|gif|svg|ico|json|woff|woff2|plain\.html)$/i;
     if (resourceRegex.test(url.pathname)) {
       return handleProxyRequest(aemCtx, daCtx.aemPathname, req);
     }
