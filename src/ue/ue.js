@@ -17,7 +17,6 @@ import { toHtml } from 'hast-util-to-html';
 import { getHtmlDoc, getUEHtmlHeadEntries } from './scaffold';
 import { createElementNode } from '../utils/hast';
 import { readBlockConfig } from '../utils/hast';
-import { remove } from 'unist-util-remove';
 
 export function prepareHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
   // get the HTML document tree
