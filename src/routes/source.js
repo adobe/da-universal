@@ -21,6 +21,7 @@ export async function getSource({ env, daCtx }) {
   if (objResp && objResp.status === 200) {
     // enrich content with HTML header and UE attributes
     const originalBodyHtml = await objResp.body.transformToString();
+
     const responseHtml = prepareHtml(daCtx, aemCtx, originalBodyHtml, headHtml);      
     objResp = new Response(responseHtml, {
       status: objResp.status,
