@@ -17,12 +17,12 @@ export function prepareHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
   const bodyTree = fromHtml(bodyHtmlStr, { fragment: true });
   bodyNode.children = bodyTree.children;
 
+  // output the final HTML document
   format(htmlDocTree);
   let htmlDocStr = toHtml(htmlDocTree, {
     allowDangerousHtml: true,
     upperDoctype: true
   });
-
   return htmlDocStr;
 }
 
@@ -42,8 +42,7 @@ function injectAEMHtmlHeadEntries(daCtx, headNode, headHtmlStr) {
     const attrName = node.tagName === 'script' ? 'src' : 'href';
     const url = node.properties[attrName];
     if (
-      !url.startsWith('http://') &&
-      !url.startsWith('https://') &&
+      !url.startsWith('http') &&
       !url.startsWith(`/${org}/${site}`)
     ) {
       node.properties[attrName] = `/${org}/${site}${url}`;
@@ -56,7 +55,6 @@ function injectAEMHtmlHeadEntries(daCtx, headNode, headHtmlStr) {
 function injectUEHtmlHeadEntries(daCtx, aemCtx, headNode) {
   const { org, site, pathname, ext } = daCtx;
   const { ueUrl, ueService } = aemCtx;
-
   const { children } = headNode;
 
   children.push(
@@ -73,7 +71,6 @@ function injectUEHtmlHeadEntries(daCtx, aemCtx, headNode) {
       })
     );
   }
-
   children.push(
     createHeadNode('script', {
       src: 'https://universal-editor-service.adobe.io/cors.js',
