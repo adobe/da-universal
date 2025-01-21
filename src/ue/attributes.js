@@ -3,6 +3,7 @@ import {
   getBlockNameAndClasses,
   removeWhitespaceTextNodes,
 } from '../utils/hast';
+import { visit } from 'unist-util-visit';
 const { isElement } = require('hast-util-is-element');
 
 export function injectUEAttributes(bodyTree, ueConfig) {
@@ -65,6 +66,19 @@ export function injectUEAttributes(bodyTree, ueConfig) {
   }
 }
 
+export function removeUEAttributes(tree) {
+  visit(tree, 'element', (node) => {
+    if (node.properties) {
+      Object.keys(node.properties).forEach((key) => {
+        if (key.startsWith('dataAue')) {
+          delete node.properties[key];
+        }
+      });
+    }
+  });
+  return tree;
+}
+
 function addAttributes(node, attributes) {
   Object.entries(attributes).forEach(([name, value]) => {
     node.properties[name] = value;
@@ -93,8 +107,7 @@ function getFilterDefinition(ueConfig, id) {
 
 function wrapParagraphs(section) {
   const wrappedSection = removeWhitespaceTextNodes(section);
-  //console.log(JSON.stringify(wrappedSection, null, 2));
-
+  
   const newChildren = [];
   let currentWrapper = null;
   wrappedSection.children.forEach((child) => {
@@ -127,4 +140,17 @@ function wrapParagraphs(section) {
 
   wrappedSection.children = newChildren;
   return wrappedSection;
+}
+
+export function unwrapParagraphs(tree) {
+  visit(tree, 'element', (node, index, parent) => {
+    if (node.tagName === 'div' &&
+      node.properties?.className?.includes('richtext')) {
+      if (parent && Array.isArray(parent.children)) {
+        const childrenToInsert = node.children || [];
+        parent.children.splice(index, 1, ...childrenToInsert);
+      }
+    }
+  });
+  return tree;
 }

@@ -1,37 +1,38 @@
 import putHelper from '../helpers/source';
-
-async function getFileBody(data) {
-  await data.text();
-  return { body: data, type: data.type };
-}
+import { fromHtml } from 'hast-util-from-html';
+import { select } from 'hast-util-select';
+import { toHtml } from 'hast-util-to-html';
+import { removeUEAttributes, unwrapUERichTextDivs } from '../ue/attributes';
 
 export async function handleAdminProxyRequest({ req, env, daCtx }) {
   const { path, ext } = daCtx;
 
   const obj = await putHelper(req, env, daCtx);
-  if (obj) {
-    if (obj.data) {
-      const { body: postBody } = await getFileBody(obj.data);
+  if (obj && obj.data) {
+    const postHTML = obj.data;
+    const documentTree = fromHtml(postHTML);
+    const bodyNode = select('body', documentTree);
 
-      // clean up the POST HTML
-      const postHTML = await postBody.text();
-      const bodyMatch = postHTML.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-      const bodyContent = bodyMatch ? `<body>${bodyMatch[1]}</body>` : postHTML;
-
-      // create new POST request with the body content
-      const body = new FormData();
-      const data = new Blob([bodyContent], { type: 'text/html' });
-      body.set('data', data);     
-      const headers = { Authorization: req.headers.get('Authorization') };
-      const adminUrl = new URL(`/source${path}.${ext}`, env.DA_ADMIN);
-      req = new Request(adminUrl, {
-        method: 'POST',
-        body,   
-        headers     
-      });
-      let response = await env.daadmin.fetch(req);
-      return response;
-    }
+    // unwrap rich text elements
+    // clean up UE data attributes
+    const cleanedBodyNode = unwrapUERichTextDivs(
+      removeUEAttributes(bodyNode)
+    );
+    
+    // create new POST request with the body content
+    const body = new FormData();
+    const bodyContent = toHtml(cleanedBodyNode);
+    const data = new Blob([bodyContent], { type: 'text/html' });
+    body.set('data', data);
+    const headers = { Authorization: req.headers.get('Authorization') };
+    const adminUrl = new URL(`/source${path}.${ext}`, env.DA_ADMIN);
+    req = new Request(adminUrl, {
+      method: 'POST',
+      body,
+      headers,
+    });
+    let response = await env.daadmin.fetch(req);
+    return response;
   }
 
   return undefined;
