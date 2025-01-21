@@ -2,7 +2,7 @@ name = "da-ue"
 main = "src/index.js"
 compatibility_date = "2023-11-21"
 
-vars = { UE_CONNECTION = "da:https://admin.da.live/source", DA_ADMIN = "https://admin.da.live" }
+vars = { UE_CONNECTION = "da:https://ue.da.live", DA_ADMIN = "https://admin.da.live" }
 
 services = [{ binding = "daadmin", service = "da-admin" }]
 
@@ -10,7 +10,7 @@ services = [{ binding = "daadmin", service = "da-admin" }]
 port = 4712
 
 [env.stage]
-vars = { ENVIRONMENT = "stage", UE_CONNECTION = "da:https://admin.da.live/source", UE_SERVICE = "https://universal-editor-service-dev.adobe.io", DA_ADMIN = "https://admin-stage.da.live" }
+vars = { ENVIRONMENT = "stage", UE_CONNECTION = "da:https://stage-ue.da.live", UE_SERVICE = "https://universal-editor-service-dev.adobe.io", DA_ADMIN = "https://stage-admin.da.live" }
 services = [{ binding = "daadmin", service = "da-admin-stage" }]
 
 [env.dev]
