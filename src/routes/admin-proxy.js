@@ -2,7 +2,7 @@ import putHelper from '../helpers/source';
 import { fromHtml } from 'hast-util-from-html';
 import { select } from 'hast-util-select';
 import { toHtml } from 'hast-util-to-html';
-import { removeUEAttributes, unwrapUERichTextDivs } from '../ue/attributes';
+import { removeUEAttributes, unwrapParagraphs } from '../ue/attributes';
 
 export async function handleAdminProxyRequest({ req, env, daCtx }) {
   const { path, ext } = daCtx;
@@ -15,7 +15,7 @@ export async function handleAdminProxyRequest({ req, env, daCtx }) {
 
     // unwrap rich text elements
     // clean up UE data attributes
-    const cleanedBodyNode = unwrapUERichTextDivs(
+    const cleanedBodyNode = unwrapParagraphs(
       removeUEAttributes(bodyNode)
     );
     
