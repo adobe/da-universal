@@ -14,11 +14,12 @@ import { format } from 'hast-util-format';
 import { fromHtml } from 'hast-util-from-html';
 import { select, selectAll } from 'hast-util-select';
 import { toHtml } from 'hast-util-to-html';
-import { getHtmlDoc, getUEHtmlHeadEntries } from './scaffold';
+import { getHtmlDoc, getUEConfig, getUEHtmlHeadEntries } from './scaffold';
 import { createElementNode } from '../utils/hast';
 import { readBlockConfig } from '../utils/hast';
+import { injectUEAttributes } from './attributes';
 
-export function prepareHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
+export async function prepareHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
   // get the HTML document tree
   const documentTree = getHtmlDoc();
 
@@ -32,14 +33,20 @@ export function prepareHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
   const bodyTree = fromHtml(bodyHtmlStr, { fragment: true });
   bodyNode.children = bodyTree.children;
 
+  // extract metadata block from the body
   const metaConfig = [];
   Object.entries(extractMetaData(bodyTree)).forEach(([name, value]) => {
     headNode.children.push(
-    createElementNode('meta', {
-      name,
-      content: value,
-    }));
+      createElementNode('meta', {
+        name,
+        content: value,
+      })
+    );
   });
+
+  // add data attributes for UE to the body
+  const ueConfig = await getUEConfig(aemCtx);
+  injectUEAttributes(bodyNode, ueConfig);
 
   // output the final HTML document
   format(documentTree);

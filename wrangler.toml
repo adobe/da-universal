@@ -12,6 +12,3 @@ port = 4712
 [env.stage]
 vars = { ENVIRONMENT = "stage", UE_CONNECTION = "da:https://stage-ue.da.live", UE_SERVICE = "https://universal-editor-service-dev.adobe.io", DA_ADMIN = "https://stage-admin.da.live" }
 services = [{ binding = "daadmin", service = "da-admin-stage" }]
-
-[env.dev]
-vars = { UE_SERVICE = "https://universal-editor-service-dev.adobe.io" }

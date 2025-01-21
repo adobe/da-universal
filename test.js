@@ -22,15 +22,21 @@ const MOCK_PAGE = `
     <header></header>
     <main>
       <div>
-        <p>
-          <picture>
-            <source type="image/webp" srcset="./media_1dc0a2d290d791a050feb1e159746f52db392775a.jpeg?width=2000&#x26;format=webply&#x26;optimize=medium" media="(min-width: 600px)">
-            <source type="image/webp" srcset="./media_1dc0a2d290d791a050feb1e159746f52db392775a.jpeg?width=750&#x26;format=webply&#x26;optimize=medium">
-            <source type="image/jpeg" srcset="./media_1dc0a2d290d791a050feb1e159746f52db392775a.jpeg?width=2000&#x26;format=jpeg&#x26;optimize=medium" media="(min-width: 600px)">
-            <img loading="lazy" alt="Decorative double Helix" src="./media_1dc0a2d290d791a050feb1e159746f52db392775a.jpeg?width=750&#x26;format=jpeg&#x26;optimize=medium" width="1600" height="886">
-          </picture>
-        </p>
-        <h1 id="congrats-you-are-ready-to-go">Congrats, you are ready to go!</h1>
+        <div class="hero">
+          <div>
+            <div>
+              <p>
+                <picture>
+                  <source type="image/webp" srcset="./media_1dc0a2d290d791a050feb1e159746f52db392775a.jpeg?width=2000&#x26;format=webply&#x26;optimize=medium" media="(min-width: 600px)">
+                  <source type="image/webp" srcset="./media_1dc0a2d290d791a050feb1e159746f52db392775a.jpeg?width=750&#x26;format=webply&#x26;optimize=medium">
+                  <source type="image/jpeg" srcset="./media_1dc0a2d290d791a050feb1e159746f52db392775a.jpeg?width=2000&#x26;format=jpeg&#x26;optimize=medium" media="(min-width: 600px)">
+                  <img loading="lazy" alt="Decorative double Helix" src="./media_1dc0a2d290d791a050feb1e159746f52db392775a.jpeg?width=750&#x26;format=jpeg&#x26;optimize=medium" width="1600" height="886">
+                </picture>
+              </p>
+              <h1 id="heading-in-block">Congrats, you are ready to go!</h1>
+            </div>
+          </div>
+        </div>
         <p>Your forked repo is set up as an AEM Project and you are ready to start developing.<br>The content you are looking at is served from this <a href="https://drive.google.com/drive/folders/1MGzOt7ubUh3gu7zhZIPb7R7dyRzG371j?usp=sharing">Google Drive</a><br><br>Adjust the <code>fstab.yaml</code> to point to a folder either in your sharepoint or your gdrive that you shared with AEM. See the full tutorial here:<br><br><a href="https://bit.ly/3aImqUL">https://www.aem.live/tutorial</a></p>
         <h2 id="this-is-another-headline-here-for-more-content">This is another headline here for more content</h2>
         <div class="columns">
