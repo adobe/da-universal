@@ -4,6 +4,7 @@ import {
   removeWhitespaceTextNodes,
 } from '../utils/hast';
 import { visit } from 'unist-util-visit';
+import ClassList from 'hast-util-class-list';
 const { isElement } = require('hast-util-is-element');
 
 export function injectUEAttributes(bodyTree, ueConfig) {
@@ -38,7 +39,7 @@ export function injectUEAttributes(bodyTree, ueConfig) {
             addAttributes(block, {
               'data-aue-resource': `urn:ab:section-${sIndex}/text-${bIindex}`,
               'data-aue-type': 'richtext',
-              'data-aue-label': 'Richtext',
+              'data-aue-label': 'Text',
               'data-aue-prop': 'text',
               'data-aue-behavior': 'component'
             });
@@ -124,7 +125,7 @@ function wrapParagraphs(section) {
       if (!currentWrapper) {
         currentWrapper = {
           type: 'element',
-          tagName: 'div', // or 'span' if preferred
+          tagName: 'div',
           properties: { className: ['richtext'] },
           children: [],
         };
@@ -144,8 +145,9 @@ function wrapParagraphs(section) {
 
 export function unwrapParagraphs(tree) {
   visit(tree, 'element', (node, index, parent) => {
-    if (node.tagName === 'div' &&
-      node.properties?.className?.includes('richtext')) {
+    // data-aue-type=\"richtext\"
+    const properties = node.properties || {};
+    if (node.tagName === 'div' && properties['data-aue-type'] === 'richtext') {
       if (parent && Array.isArray(parent.children)) {
         const childrenToInsert = node.children || [];
         parent.children.splice(index, 1, ...childrenToInsert);
