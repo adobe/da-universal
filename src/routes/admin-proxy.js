@@ -3,6 +3,7 @@ import { fromHtml } from 'hast-util-from-html';
 import { select } from 'hast-util-select';
 import { toHtml } from 'hast-util-to-html';
 import { removeUEAttributes, unwrapParagraphs } from '../ue/attributes';
+import { format } from 'hast-util-format';
 
 async function getFileBody(data) {
   const text = await data.text();
@@ -30,6 +31,8 @@ export async function handleAdminProxyRequest({ req, env, daCtx }) {
     // clean up UE data attributes
     bodyNode = unwrapParagraphs(bodyNode);
     bodyNode = removeUEAttributes(bodyNode);
+
+    format(bodyNode);
 
     // create new POST request with the body content
     const body = new FormData();

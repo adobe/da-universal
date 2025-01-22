@@ -4,7 +4,6 @@ import {
   removeWhitespaceTextNodes,
 } from '../utils/hast';
 import { visit } from 'unist-util-visit';
-import ClassList from 'hast-util-class-list';
 const { isElement } = require('hast-util-is-element');
 
 export function injectUEAttributes(bodyTree, ueConfig) {
@@ -147,7 +146,7 @@ export function unwrapParagraphs(tree) {
   visit(tree, 'element', (node, index, parent) => {
     // data-aue-type=\"richtext\"
     const properties = node.properties || {};
-    if (node.tagName === 'div' && properties['data-aue-type'] === 'richtext') {
+    if (node.tagName === 'div' && properties.dataAueType === 'richtext') {
       if (parent && Array.isArray(parent.children)) {
         const childrenToInsert = node.children || [];
         parent.children.splice(index, 1, ...childrenToInsert);
