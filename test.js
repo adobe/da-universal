@@ -1,4 +1,4 @@
-const DA_API = 'https://stage-ue.da.live';
+const DA_API = 'https://localhost:4712';
 const ORG = 'mhaack';
 const REPO = 'special-project';
 

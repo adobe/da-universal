@@ -4,13 +4,26 @@ import { select } from 'hast-util-select';
 import { toHtml } from 'hast-util-to-html';
 import { removeUEAttributes, unwrapParagraphs } from '../ue/attributes';
 
+
+async function getFileBody(data) {
+  const text = await data.text();
+  return { body: text, type: data.type };
+}
+
+function getTextBody(data) {
+  // TODO: This will only handle text data, need to handle other types 
+  return { body: data, type: 'text/html' };
+}
+
 export async function handleAdminProxyRequest({ req, env, daCtx }) {
   const { path, ext } = daCtx;
 
   const obj = await putHelper(req, env, daCtx);
   if (obj && obj.data) {
-    const postHTML = obj.data;
-    const documentTree = fromHtml(postHTML);
+
+    const isFile = obj.data instanceof File;
+    const { body: bodyHtml } = isFile ? await getFileBody(obj.data) : getTextBody(obj.data);
+    const documentTree = fromHtml(bodyHtml);
     const bodyNode = select('body', documentTree);
 
     // unwrap rich text elements
