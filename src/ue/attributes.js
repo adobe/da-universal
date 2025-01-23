@@ -18,6 +18,7 @@ export function injectUEAttributes(bodyTree, ueConfig) {
 
     const sections = selectAll(':scope>div', mainTree);
     sections.forEach((section, sIndex) => {
+      // Add section attributes
       const componentDef = getComponentDefinition(ueConfig, 'section');
       addAttributes(section, {
         'data-aue-resource': `urn:ab:section-${sIndex}`,
@@ -28,27 +29,51 @@ export function injectUEAttributes(bodyTree, ueConfig) {
         'data-aue-filter': 'section',
       });
 
+      // handle rich text
       section = wrapParagraphs(section);
+      const richTextWrappers = selectAll(':scope>div.richtext', section);
+      richTextWrappers.forEach((wrapper, wIndex) => {
+        addAttributes(wrapper, {
+          'data-aue-resource': `urn:ab:section-${sIndex}/text-${wIndex}`,
+          'data-aue-type': 'richtext',
+          'data-aue-label': 'Text',
+          'data-aue-prop': 'text',
+          'data-aue-behavior': 'component',
+        });
+        delete wrapper.properties.className;
+      });
 
+      // handle images
+      const images = selectAll(':scope>picture', section);
+      images.forEach((picture, iIndex) => {
+        addAttributes(picture, {
+          'data-aue-resource': `urn:ab:section-${sIndex}/asset-${iIndex}`,
+          'data-aue-label': 'Image',
+          'data-aue-behavior': 'component',
+          'data-aue-prop': 'image',
+          'data-aue-type': 'media',
+          'data-aue-model': 'image',
+        });
+        // TODO wait for SITES-27973
+        // const img = select('img', picture);
+        // addAttributes(img, {
+        //   'data-aue-prop': 'image',
+        //   'data-aue-type': 'media'
+        // });
+      });
+
+      // handle blocks
       const blocks = selectAll(':scope>div', section);
       blocks.forEach((block, bIindex) => {
         const { name: blockName } = getBlockNameAndClasses(block);
         if (blockName) {
-          if (blockName === 'richtext') {
-            addAttributes(block, {
-              'data-aue-resource': `urn:ab:section-${sIndex}/text-${bIindex}`,
-              'data-aue-type': 'richtext',
-              'data-aue-label': 'Text',
-              'data-aue-prop': 'text',
-              'data-aue-behavior': 'component'
-            });
-          } else if (blockName !== 'metadata') {
-            const componentDef = getComponentDefinition(ueConfig, blockName);
+          if (blockName !== 'metadata') {
+            const blockCmpDef = getComponentDefinition(ueConfig, blockName);
             addAttributes(block, {
               'data-aue-resource': `urn:ab:section-${sIndex}/block-${bIindex}`,
-              'data-aue-type': 'container',
-              'data-aue-label': componentDef
-                ? componentDef.title
+              'data-aue-type': 'component',
+              'data-aue-label': blockCmpDef
+                ? blockCmpDef.title
                 : `${blockName} Block`,
               'data-aue-model': blockName,
             });
@@ -57,7 +82,23 @@ export function injectUEAttributes(bodyTree, ueConfig) {
             if (filterDef) {
               addAttributes(block, {
                 'data-aue-filter': blockName,
+                'data-aue-type': 'container',
+                'data-aue-behavior': 'component',
               });
+
+              const itemId = filterDef.components[0];
+              const itemCmpDef = getComponentDefinition(ueConfig, itemId);
+              if (itemCmpDef) {
+                const blockItems = selectAll(':scope>div', block);
+                blockItems.forEach((blockItem, biIndex) => {
+                  addAttributes(blockItem, {
+                    'data-aue-resource': `urn:ab:section-${sIndex}/block-${bIindex}/item-${biIndex}`,
+                    'data-aue-type': 'component',
+                    'data-aue-label': itemCmpDef.title,
+                    'data-aue-model': itemCmpDef.id,
+                  });
+                });
+              }
             }
           }
         }
@@ -107,11 +148,15 @@ function getFilterDefinition(ueConfig, id) {
 
 function wrapParagraphs(section) {
   const wrappedSection = removeWhitespaceTextNodes(section);
-  
+
   const newChildren = [];
   let currentWrapper = null;
   wrappedSection.children.forEach((child) => {
-    if (isElement(child, 'div') || isElement(child, 'img')) {
+    if (
+      isElement(child, 'div') ||
+      isElement(child, 'img') ||
+      isElement(child, 'picture')
+    ) {
       // End the current wrapper if it exists
       if (currentWrapper) {
         newChildren.push(currentWrapper);

@@ -24,18 +24,19 @@ export async function getSource({ env, daCtx }) {
     const originalBodyHtml = await objResp.body.transformToString();
 
     const responseHtml = await prepareHtml(daCtx, aemCtx, originalBodyHtml, headHtml);      
-    objResp = new Response(responseHtml, {
-      status: objResp.status,
-      statusText: objResp.statusText,
-      headers: objResp.headers,
-    });      
+    objResp.body = responseHtml;
+    objResp.contentType = 'text/html; charset=utf-8';
+    objResp.contentLength = responseHtml.length;
   } else {
     // return a template for new page if no content found
     const templateHtml = await getAEMHtml(aemCtx, "/ue-template.html");
     const responseHtml = await prepareHtml(daCtx, aemCtx, templateHtml, headHtml);      
-    objResp = new Response(responseHtml, {
-      status: 200
-    });     
+    objResp = {
+      body: responseHtml,
+      status: 200,
+      contentType: 'text/html; charset=utf-8',
+      contentLength: responseHtml.length
+    };  
   }
   return objResp; 
 }
