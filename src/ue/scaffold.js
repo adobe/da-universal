@@ -84,9 +84,9 @@ export async function getUEConfig(aemCtx) {
 
   const responses = await Promise.all(
     jsonUrls.map(({ type, url }) =>
-      fetch(url).then((response) =>
-        response.json().then((data) => ({ type, data }))
-      )
+      fetch(url)
+        .then((response) => response.json().then((data) => ({ type, data })).catch(() => ({ type, undefined })))
+        .catch((error) => console.log(`Error fetching ${url}: ${error}`))
     )
   );
   const ueConfig = responses.reduce((acc, { type, data }) => {

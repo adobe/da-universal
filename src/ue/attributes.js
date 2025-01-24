@@ -67,14 +67,14 @@ export function injectUEAttributes(bodyTree, ueConfig) {
       blocks.forEach((block, bIindex) => {
         const { name: blockName } = getBlockNameAndClasses(block);
         if (blockName) {
-          if (blockName !== 'metadata') {
+          if (blockName !== 'metadata' && blockName !== 'section-metadata') {
             const blockCmpDef = getComponentDefinition(ueConfig, blockName);
             addAttributes(block, {
               'data-aue-resource': `urn:ab:section-${sIndex}/block-${bIindex}`,
               'data-aue-type': 'component',
               'data-aue-label': blockCmpDef
                 ? blockCmpDef.title
-                : `${blockName} Block`,
+                : `${blockName} (no definition)`,
               'data-aue-model': blockName,
             });
 
@@ -128,10 +128,12 @@ function addAttributes(node, attributes) {
 
 function getComponentDefinition(ueConfig, id) {
   const definitions = ueConfig['component-definition'];
-  for (const group of definitions.groups) {
-    const component = group.components.find((c) => c.id === id);
-    if (component) {
-      return component;
+  if (definitions) {
+    for (const group of definitions.groups) {
+      const component = group.components.find((c) => c.id === id);
+      if (component) {
+        return component;
+      }
     }
   }
   return null;
@@ -139,9 +141,11 @@ function getComponentDefinition(ueConfig, id) {
 
 function getFilterDefinition(ueConfig, id) {
   const filters = ueConfig['component-filter'];
-  const filter = filters.find((f) => f.id === id);
-  if (filter) {
-    return filter;
+  if (filters) {
+    const filter = filters.find((f) => f.id === id);
+    if (filter) {
+      return filter;
+    }
   }
   return null;
 }
