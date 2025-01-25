@@ -18,7 +18,7 @@ export function getAemCtx(env, daCtx) {
     previewUrl: `https://main--${site}--${org}.aem.page`,
     liveHostname: `main--${site}--${org}.aem.live`,
     liveUrl: `https://main--${site}--${org}.aem.live`,
-    ueUrl: env.UE_CONNECTION,
+    ueHostname: env.UE_HOST,
     ueService: env.UE_SERVICE,
   };
 

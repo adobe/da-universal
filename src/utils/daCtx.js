@@ -14,29 +14,33 @@
  * @returns {DaCtx} The Dark Alley Context.
  */
 export function getDaCtx(req) {
-  let { pathname } = new URL(req.url);
+  let { pathname, hostname } = new URL(req.url);
+
+  // TODO this requires some improvements to be more robust
+  const { org, site, path, ref } = getRefSiteOrgPath(hostname, pathname);
+
+  console.log(org, site, path, ref);
+
   // Santitize the string
-  const lower = pathname.slice(1).toLowerCase();
+  const lower = path.slice(1).toLowerCase();
   const sanitized = lower.endsWith('/') ? `${lower}index` : lower;
 
   // Get base details
-  const [org, ...parts] = sanitized.split('/');
+  const [...parts] = sanitized.split('/');
 
   // Set base details
-  const daCtx = { path:pathname, org };
+  const daCtx = { path, org, site, ref, isLocal: hostname === 'localhost' };
 
   // Sanitize the remaining path parts
-  const path = parts.filter((part) => part !== '');
-  const keyBase = path.join('/');
+  const pathParts = parts.filter((part) => part !== '');
+  const keyBase = `${site}/${pathParts.join('/')}`;
 
   // Get the final source name
-  daCtx.filename = path.pop() || '';
-
-  daCtx.site = path[0];
+  daCtx.filename = pathParts.pop() || '';
 
   // Handle folders and files under a site
   const split = daCtx.filename.split('.');
-  
+
   // DA Content - Add HTML if there is only one part to the split
   if (split.length === 1) split.push('html');
   daCtx.isFile = split.length > 1;
@@ -48,18 +52,40 @@ export function getDaCtx(req) {
   daCtx.propsKey = `${daCtx.key}.props`;
 
   // Set paths for API consumption
-  const aemParts = daCtx.site ? path.slice(1) : path;
-  const aemPathBase = [...aemParts, daCtx.name].join('/');
-
-  const daPathBase = [...path, daCtx.name].join('/');
+  daCtx.aemPathname = path;
+  const daPathBase = [org, site, daCtx.name].join('/');
 
   if (!daCtx.ext || (!daCtx.name.includes('plain') && daCtx.ext === 'html')) {
     daCtx.pathname = `/${daPathBase}`;
-    daCtx.aemPathname = `/${aemPathBase}`;
   } else {
     daCtx.pathname = `/${daPathBase}.${daCtx.ext}`;
-    daCtx.aemPathname = `/${aemPathBase}.${daCtx.ext}`;
   }
 
   return daCtx;
+}
+
+function getRefSiteOrgPath(hostname, pathname) {
+  if (hostname === 'localhost') {
+    const [org, site, ...parts] = pathname.substring(1).split('/');
+    return {
+      ref: 'main',
+      site,
+      org,
+      path: `/${parts.join('/')}`,
+    };
+  }
+  const parts = hostname.split('.');
+  if (parts.length > 2) {
+    const subdomainParts = parts[0].split('--');
+    if (subdomainParts.length === 3) {
+      return {
+        ref: subdomainParts[0],
+        site: subdomainParts[1],
+        org: subdomainParts[2],
+        path: pathname,
+      };
+    }
+  }
+
+  return undefined;
 }

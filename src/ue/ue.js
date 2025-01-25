@@ -58,19 +58,22 @@ export async function prepareHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
 }
 
 function injectAEMHtmlHeadEntries(daCtx, headNode, headHtmlStr) {
-  const { org, site } = daCtx;
+  const { org, site, isLocal } = daCtx;
   const aemHeadHtmlTree = fromHtml(headHtmlStr, { fragment: true });
-  const headScriptsAndLinks = selectAll(
-    'script[src], link[href]',
-    aemHeadHtmlTree
-  );
-  headScriptsAndLinks.forEach((node) => {
-    const attrName = node.tagName === 'script' ? 'src' : 'href';
-    const url = node.properties[attrName];
-    if (!url.startsWith('http') && !url.startsWith(`/${org}/${site}`)) {
-      node.properties[attrName] = `/${org}/${site}${url}`;
-    }
-  });
+
+  if (isLocal) {
+    const headScriptsAndLinks = selectAll(
+      'script[src], link[href]',
+      aemHeadHtmlTree
+    );
+    headScriptsAndLinks.forEach((node) => {
+      const attrName = node.tagName === 'script' ? 'src' : 'href';
+      const url = node.properties[attrName];
+      if (!url.startsWith('http') && !url.startsWith(`/${org}/${site}`)) {
+        node.properties[attrName] = `/${org}/${site}${url}`;
+      }
+    });
+  }
 
   headNode.children.push(...aemHeadHtmlTree.children);
 }

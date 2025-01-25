@@ -19,14 +19,14 @@ export function getHtmlDoc() {
 }
 
 export function getUEHtmlHeadEntries(daCtx, aemCtx) {
-  const { org, site, pathname, ext } = daCtx;
-  const { ueUrl, ueService } = aemCtx;
+  const { org, site, path } = daCtx;
+  const { ueHostname, ueService } = aemCtx;
   const children = [];
 
   children.push(
     createElementNode('meta', {
       name: 'urn:adobe:aue:system:ab',
-      content: `${ueUrl}/${org}${pathname}`,
+      content: `da:main--${site}--${org}.${ueHostname}${path}`,
     })
   );
   if (ueService) {
@@ -46,19 +46,19 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
   children.push(
     createElementNode('script', {
       type: 'application/vnd.adobe.aue.component+json',
-      src: `/${org}/${site}/component-definition.json`,
+      src: daCtx.isLocal ? `/${org}/${site}/component-definition.json` : '/component-definition.json',
     })
   );
   children.push(
     createElementNode('script', {
       type: 'application/vnd.adobe.aue.model+json',
-      src: `/${org}/${site}/component-models.json`,
+      src: daCtx.isLocal ? `/${org}/${site}/component-models.json` : '/component-models.json',
     })
   );
   children.push(
     createElementNode('script', {
       type: 'application/vnd.adobe.aue.filter+json',
-      src: `/${org}/${site}/component-filters.json`,
+      src: daCtx.isLocal ? `/${org}/${site}/component-filters.json` : '/component-filters.json',
     })
   );
 
