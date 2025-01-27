@@ -2,8 +2,8 @@ name = "da-ue"
 main = "src/index.js"
 compatibility_date = "2023-11-21"
 
-vars = { UE_HOST = "ue.da.live", DA_ADMIN = "https://admin.da.live" }
 
+vars = { UE_HOST = "ue.da.live", DA_ADMIN = "https://admin.da.live" }
 services = [{ binding = "daadmin", service = "da-admin" }]
 
 [dev]
