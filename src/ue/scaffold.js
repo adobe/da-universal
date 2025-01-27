@@ -19,14 +19,14 @@ export function getHtmlDoc() {
 }
 
 export function getUEHtmlHeadEntries(daCtx, aemCtx) {
-  const { org, site, path } = daCtx;
+  const { org, site, ref, path } = daCtx;
   const { ueHostname, ueService } = aemCtx;
   const children = [];
 
   children.push(
     createElementNode('meta', {
       name: 'urn:adobe:aue:system:ab',
-      content: `da:main--${site}--${org}.${ueHostname}${path}`,
+      content: `da:https://${ref}--${site}--${org}.${ueHostname}${path}`,
     })
   );
   if (ueService) {
