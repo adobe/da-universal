@@ -1,5 +1,6 @@
 import { selectAll, select } from 'hast-util-select';
 import { toString } from 'hast-util-to-string';
+import { visit } from 'unist-util-visit';
 
 export function childNodes(node) {
   return node.children.filter((n) => n.type === 'element');
@@ -96,4 +97,26 @@ export function createElementNode(tagName, properties, children = []) {
     properties,
     children,
   };
+}
+
+export function removeWhitespaceTextNodes(tree) {
+  visit(tree, 'text', (node, index, parent) => {
+      if (parent && typeof node.value === 'string' && /^\s*$/.test(node.value)) {
+          parent.children.splice(index, 1);
+      }
+  });
+  return tree;
+}
+
+export function getBlockNameAndClasses(blockNode) {
+  if (!blockNode.properties) node.properties = {};
+  if (!blockNode.properties.className) blockNode.properties.className = [];
+  
+  const blockConfig =  { classes: []} ;
+  if (blockNode.properties.className) {
+    const classes = [...blockNode.properties.className];
+    blockConfig.name = classes.shift();
+    blockConfig.classes.push(...blockNode.properties.className);
+  }
+  return blockConfig;
 }

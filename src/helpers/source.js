@@ -9,7 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-const FORM_TYPES = ['multipart/form-data', 'application/x-www-form-urlencoded'];
+const FORM_TYPES = ['multipart/form-data', 'application/x-www-form-urlencoded', 'text/html'];
 
 function getFormEntries(formData) {
   const entries = {};

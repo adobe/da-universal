@@ -17,6 +17,7 @@ export function getHtmlDoc() {
   const htmlDocStr = '<!DOCTYPE html><html><head></head><body></body></html>';
   return fromHtml(htmlDocStr);
 }
+
 export function getUEHtmlHeadEntries(daCtx, aemCtx) {
   const { org, site, pathname, ext } = daCtx;
   const { ueUrl, ueService } = aemCtx;
@@ -62,4 +63,36 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
   );
 
   return children;
+}
+
+export async function getUEConfig(aemCtx) {
+  const { liveUrl: host } = aemCtx;
+  const jsonUrls = [
+    {
+      type: 'component-definition',
+      url: `${host}/component-definition.json`,
+    },
+    {
+      type: 'component-model',
+      url: `${host}/component-models.json`,
+    },
+    {
+      type: 'component-filter',
+      url: `${host}/component-filters.json`,
+    },
+  ];
+
+  const responses = await Promise.all(
+    jsonUrls.map(({ type, url }) =>
+      fetch(url)
+        .then((response) => response.json().then((data) => ({ type, data })).catch(() => ({ type, undefined })))
+        .catch((error) => console.log(`Error fetching ${url}: ${error}`))
+    )
+  );
+  const ueConfig = responses.reduce((acc, { type, data }) => {
+    acc[type] = data;
+    return acc;
+  }, {});
+
+  return ueConfig;
 }
