@@ -19,11 +19,9 @@ export function getDaCtx(req) {
   // TODO this requires some improvements to be more robust
   const { org, site, path, ref } = getRefSiteOrgPath(hostname, pathname);
 
-  console.log(org, site, path, ref);
-
   // Santitize the string
   const lower = path.slice(1).toLowerCase();
-  const sanitized = lower.endsWith('/') ? `${lower}index` : lower;
+  const sanitized = (lower === '' || lower.endsWith('/')) ? `${lower}index` : lower;
 
   // Get base details
   const [...parts] = sanitized.split('/');
@@ -53,7 +51,7 @@ export function getDaCtx(req) {
 
   // Set paths for API consumption
   daCtx.aemPathname = path;
-  const daPathBase = [org, site, daCtx.name].join('/');
+  const daPathBase = [...pathParts, daCtx.name].join('/');
 
   if (!daCtx.ext || (!daCtx.name.includes('plain') && daCtx.ext === 'html')) {
     daCtx.pathname = `/${daPathBase}`;
