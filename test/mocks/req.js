@@ -9,29 +9,13 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-export function daResp({
-  body, status, contentType, contentLength,
-}) {
-  const headers = new Headers();
-  headers.append('Access-Control-Allow-Origin', '*');
 
-  if (contentType) {
-    headers.append('Content-Type', contentType);
-  }
-  if (contentLength) {
-    headers.append('Content-Length', contentLength);
-  }
+const reqs = {
+  localhost: new Request('https://localhost:4712/org/site/folder/content'),
+  localhostIndex: new Request('https://localhost:4712/org/site/'),
+  content: new Request('https://main--site--org.ue.da.live/folder/content'),
+  contentIndex: new Request('https://main--site--org.ue.da.live/'),
+  invalid: new Request('https://xyz.ue.da.live/')
+};
 
-  return new Response(body, { status, headers });
-}
-
-export function get404() {
-  return daResp({ body: '', status: 404 });
-}
-
-export function getRobots() {
-  const body = `User-agent: *
-Disallow: /`;
-
-  return daResp({ body, status: 200 });
-}
+export default reqs;

@@ -1,11 +1,107 @@
+/*
+ * Copyright 2024 Adobe. All rights reserved.
+ * This file is licensed to you under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License. You may obtain a copy
+ * of the License at http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTATIONS
+ * OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ */
 import { select, selectAll } from 'hast-util-select';
+import { visit } from 'unist-util-visit';
 import {
   getBlockNameAndClasses,
   removeWhitespaceTextNodes,
-} from '../utils/hast';
-import { visit } from 'unist-util-visit';
+} from '../utils/hast.js';
+
 const { isElement } = require('hast-util-is-element');
 
+function addAttributes(node, attributes) {
+  Object.entries(attributes).forEach(([name, value]) => {
+    // eslint-disable-next-line no-param-reassign
+    node.properties[name] = value;
+  });
+}
+
+function getComponentDefinition(ueConfig, id) {
+  const definitions = ueConfig['component-definition'];
+  if (definitions) {
+    for (const group of definitions.groups) {
+      const component = group.components.find((c) => c.id === id);
+      if (component) {
+        return component;
+      }
+    }
+  }
+  return null;
+}
+
+function getFilterDefinition(ueConfig, id) {
+  const filters = ueConfig['component-filter'];
+  if (filters) {
+    const filter = filters.find((f) => f.id === id);
+    if (filter) {
+      return filter;
+    }
+  }
+  return null;
+}
+
+function wrapParagraphs(section) {
+  const wrappedSection = removeWhitespaceTextNodes(section);
+
+  const newChildren = [];
+  let currentWrapper = null;
+  wrappedSection.children.forEach((child) => {
+    if (
+      isElement(child, 'div')
+      || isElement(child, 'img')
+      || isElement(child, 'picture')
+    ) {
+      // End the current wrapper if it exists
+      if (currentWrapper) {
+        newChildren.push(currentWrapper);
+        currentWrapper = null;
+      }
+      // Add the div or img directly
+      newChildren.push(child);
+    } else {
+      // Add to the current wrapper, or create a new one
+      if (!currentWrapper) {
+        currentWrapper = {
+          type: 'element',
+          tagName: 'div',
+          properties: { className: ['richtext'] },
+          children: [],
+        };
+      }
+      currentWrapper.children.push(child);
+    }
+  });
+
+  // Add the last wrapper if it exists
+  if (currentWrapper) {
+    newChildren.push(currentWrapper);
+  }
+
+  wrappedSection.children = newChildren;
+  return wrappedSection;
+}
+
+/**
+ * Injects Universal Editor (UE) attributes into the HTML body tree.
+ * This function adds data attributes to various elements in the body to enable UE functionality:
+ * - Adds container attributes to the main content area
+ * - Processes sections and adds section-specific attributes
+ * - Handles rich text content by wrapping paragraphs and adding text attributes
+ * - Processes images and adds media-related attributes
+ * - Handles blocks and adds component/filter attributes based on block type
+ *
+ * @param {Object} bodyTree - The HTML body tree to process
+ * @param {Object} ueConfig - Configuration object containing UE component definitions and filters
+ */
 export function injectUEAttributes(bodyTree, ueConfig) {
   const mainTree = select('main', bodyTree);
   if (mainTree) {
@@ -30,6 +126,7 @@ export function injectUEAttributes(bodyTree, ueConfig) {
       });
 
       // handle rich text
+      // eslint-disable-next-line no-param-reassign
       section = wrapParagraphs(section);
       const richTextWrappers = selectAll(':scope>div.richtext', section);
       richTextWrappers.forEach((wrapper, wIndex) => {
@@ -40,6 +137,7 @@ export function injectUEAttributes(bodyTree, ueConfig) {
           'data-aue-prop': 'text',
           'data-aue-behavior': 'component',
         });
+        // eslint-disable-next-line no-param-reassign
         delete wrapper.properties.className;
       });
 
@@ -107,11 +205,17 @@ export function injectUEAttributes(bodyTree, ueConfig) {
   }
 }
 
+/**
+ * Removes all Universal Editor attributes from a HAST tree
+ * @param {object} tree The HAST tree to process
+ * @returns {object} The processed HAST tree
+ */
 export function removeUEAttributes(tree) {
   visit(tree, 'element', (node) => {
     if (node.properties) {
       Object.keys(node.properties).forEach((key) => {
         if (key.startsWith('dataAue')) {
+          // eslint-disable-next-line no-param-reassign
           delete node.properties[key];
         }
       });
@@ -120,77 +224,11 @@ export function removeUEAttributes(tree) {
   return tree;
 }
 
-function addAttributes(node, attributes) {
-  Object.entries(attributes).forEach(([name, value]) => {
-    node.properties[name] = value;
-  });
-}
-
-function getComponentDefinition(ueConfig, id) {
-  const definitions = ueConfig['component-definition'];
-  if (definitions) {
-    for (const group of definitions.groups) {
-      const component = group.components.find((c) => c.id === id);
-      if (component) {
-        return component;
-      }
-    }
-  }
-  return null;
-}
-
-function getFilterDefinition(ueConfig, id) {
-  const filters = ueConfig['component-filter'];
-  if (filters) {
-    const filter = filters.find((f) => f.id === id);
-    if (filter) {
-      return filter;
-    }
-  }
-  return null;
-}
-
-function wrapParagraphs(section) {
-  const wrappedSection = removeWhitespaceTextNodes(section);
-
-  const newChildren = [];
-  let currentWrapper = null;
-  wrappedSection.children.forEach((child) => {
-    if (
-      isElement(child, 'div') ||
-      isElement(child, 'img') ||
-      isElement(child, 'picture')
-    ) {
-      // End the current wrapper if it exists
-      if (currentWrapper) {
-        newChildren.push(currentWrapper);
-        currentWrapper = null;
-      }
-      // Add the div or img directly
-      newChildren.push(child);
-    } else {
-      // Add to the current wrapper, or create a new one
-      if (!currentWrapper) {
-        currentWrapper = {
-          type: 'element',
-          tagName: 'div',
-          properties: { className: ['richtext'] },
-          children: [],
-        };
-      }
-      currentWrapper.children.push(child);
-    }
-  });
-
-  // Add the last wrapper if it exists
-  if (currentWrapper) {
-    newChildren.push(currentWrapper);
-  }
-
-  wrappedSection.children = newChildren;
-  return wrappedSection;
-}
-
+/**
+ * Unwraps richtext div elements by moving their children up to the parent level
+ * @param {object} tree The HAST tree to process
+ * @returns {object} The processed HAST tree
+ */
 export function unwrapParagraphs(tree) {
   visit(tree, 'element', (node, index, parent) => {
     // data-aue-type=\"richtext\"

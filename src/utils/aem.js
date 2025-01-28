@@ -11,14 +11,14 @@
  */
 
 export function getAemCtx(env, daCtx) {
-  const { org, site } = daCtx;
+  const { org, site, ref } = daCtx;
 
   const obj = {
-    previewHostname: `main--${site}--${org}.aem.page`,
-    previewUrl: `https://main--${site}--${org}.aem.page`,
-    liveHostname: `main--${site}--${org}.aem.live`,
-    liveUrl: `https://main--${site}--${org}.aem.live`,
-    ueUrl: env.UE_CONNECTION,
+    previewHostname: `${ref}--${site}--${org}.aem.page`,
+    previewUrl: `https://${ref}--${site}--${org}.aem.page`,
+    liveHostname: `${ref}--${site}--${org}.aem.live`,
+    liveUrl: `https://${ref}--${site}--${org}.aem.live`,
+    ueHostname: env.UE_HOST,
     ueService: env.UE_SERVICE,
   };
 

@@ -10,9 +10,9 @@
  * governing permissions and limitations under the License.
  */
 
-import { get404, getRobots } from "../responses";
+import { get404, getRobots } from '../responses/index.js';
 
-
+// eslint-disable-next-line no-unused-vars
 export default async function headHandler({ env, daCtx }) {
   const { path } = daCtx;
 
