@@ -11,7 +11,7 @@
  */
 
 import { fromHtml } from 'hast-util-from-html';
-import { createElementNode } from '../utils/hast';
+import { createElementNode } from '../utils/hast.js';
 
 export function getHtmlDoc() {
   const htmlDocStr = '<!DOCTYPE html><html><head></head><body></body></html>';
@@ -19,7 +19,12 @@ export function getHtmlDoc() {
 }
 
 export function getUEHtmlHeadEntries(daCtx, aemCtx) {
-  const { org, site, ref, path } = daCtx;
+  const {
+    org,
+    site,
+    ref,
+    path,
+  } = daCtx;
   const { ueHostname, ueService } = aemCtx;
   const children = [];
 
@@ -27,39 +32,45 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
     createElementNode('meta', {
       name: 'urn:adobe:aue:system:ab',
       content: `da:https://${ref}--${site}--${org}.${ueHostname}${path}`,
-    })
+    }),
   );
   if (ueService) {
     children.push(
       createElementNode('meta', {
         name: 'urn:adobe:aue:config:service',
         content: ueService,
-      })
+      }),
     );
   }
   children.push(
     createElementNode('script', {
       src: 'https://universal-editor-service.adobe.io/cors.js',
       async: '',
-    })
+    }),
   );
   children.push(
     createElementNode('script', {
       type: 'application/vnd.adobe.aue.component+json',
-      src: daCtx.isLocal ? `/${org}/${site}/component-definition.json` : '/component-definition.json',
-    })
+      src: daCtx.isLocal
+        ? `/${org}/${site}/component-definition.json`
+        : '/component-definition.json',
+    }),
   );
   children.push(
     createElementNode('script', {
       type: 'application/vnd.adobe.aue.model+json',
-      src: daCtx.isLocal ? `/${org}/${site}/component-models.json` : '/component-models.json',
-    })
+      src: daCtx.isLocal
+        ? `/${org}/${site}/component-models.json`
+        : '/component-models.json',
+    }),
   );
   children.push(
     createElementNode('script', {
       type: 'application/vnd.adobe.aue.filter+json',
-      src: daCtx.isLocal ? `/${org}/${site}/component-filters.json` : '/component-filters.json',
-    })
+      src: daCtx.isLocal
+        ? `/${org}/${site}/component-filters.json`
+        : '/component-filters.json',
+    }),
   );
 
   return children;
@@ -83,11 +94,13 @@ export async function getUEConfig(aemCtx) {
   ];
 
   const responses = await Promise.all(
-    jsonUrls.map(({ type, url }) =>
-      fetch(url)
-        .then((response) => response.json().then((data) => ({ type, data })).catch(() => ({ type, undefined })))
-        .catch((error) => console.log(`Error fetching ${url}: ${error}`))
-    )
+    jsonUrls.map(({ type, url }) => fetch(url)
+      .then((response) => response
+        .json()
+        .then((data) => ({ type, data }))
+        .catch(() => ({ type, undefined })))
+      // eslint-disable-next-line no-console
+      .catch((error) => console.error(`Error fetching ${url}: ${error}`))),
   );
   const ueConfig = responses.reduce((acc, { type, data }) => {
     acc[type] = data;

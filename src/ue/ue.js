@@ -14,10 +14,42 @@ import { format } from 'hast-util-format';
 import { fromHtml } from 'hast-util-from-html';
 import { select, selectAll } from 'hast-util-select';
 import { toHtml } from 'hast-util-to-html';
-import { getHtmlDoc, getUEConfig, getUEHtmlHeadEntries } from './scaffold';
-import { createElementNode } from '../utils/hast';
-import { readBlockConfig } from '../utils/hast';
-import { injectUEAttributes } from './attributes';
+import { getHtmlDoc, getUEConfig, getUEHtmlHeadEntries } from './scaffold.js';
+import { createElementNode, readBlockConfig } from '../utils/hast.js';
+import { injectUEAttributes } from './attributes.js';
+
+function extractMetaData(bodyTree) {
+  const metaBlock = select('div.metadata', bodyTree);
+  let metaConfig = {};
+  if (metaBlock) {
+    metaConfig = readBlockConfig(metaBlock);
+    // TODO hide the metadata block, maybe remove it
+    metaBlock.properties.style = 'display: none;';
+  }
+  return metaConfig;
+}
+
+function injectAEMHtmlHeadEntries(daCtx, headNode, headHtmlStr) {
+  const { org, site, isLocal } = daCtx;
+  const aemHeadHtmlTree = fromHtml(headHtmlStr, { fragment: true });
+
+  if (isLocal) {
+    const headScriptsAndLinks = selectAll(
+      'script[src], link[href]',
+      aemHeadHtmlTree,
+    );
+    headScriptsAndLinks.forEach((node) => {
+      const attrName = node.tagName === 'script' ? 'src' : 'href';
+      const url = node.properties[attrName];
+      if (!url.startsWith('http') && !url.startsWith(`/${org}/${site}`)) {
+        // eslint-disable-next-line no-param-reassign
+        node.properties[attrName] = `/${org}/${site}${url}`;
+      }
+    });
+  }
+
+  headNode.children.push(...aemHeadHtmlTree.children);
+}
 
 export async function prepareHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
   // get the HTML document tree
@@ -34,13 +66,12 @@ export async function prepareHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
   bodyNode.children = bodyTree.children;
 
   // extract metadata block from the body
-  const metaConfig = [];
   Object.entries(extractMetaData(bodyTree)).forEach(([name, value]) => {
     headNode.children.push(
       createElementNode('meta', {
         name,
         content: value,
-      })
+      }),
     );
   });
 
@@ -50,41 +81,9 @@ export async function prepareHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
 
   // output the final HTML document
   format(documentTree);
-  let htmlDocStr = toHtml(documentTree, {
+  const htmlDocStr = toHtml(documentTree, {
     allowDangerousHtml: true,
     upperDoctype: true,
   });
   return htmlDocStr;
-}
-
-function injectAEMHtmlHeadEntries(daCtx, headNode, headHtmlStr) {
-  const { org, site, isLocal } = daCtx;
-  const aemHeadHtmlTree = fromHtml(headHtmlStr, { fragment: true });
-
-  if (isLocal) {
-    const headScriptsAndLinks = selectAll(
-      'script[src], link[href]',
-      aemHeadHtmlTree
-    );
-    headScriptsAndLinks.forEach((node) => {
-      const attrName = node.tagName === 'script' ? 'src' : 'href';
-      const url = node.properties[attrName];
-      if (!url.startsWith('http') && !url.startsWith(`/${org}/${site}`)) {
-        node.properties[attrName] = `/${org}/${site}${url}`;
-      }
-    });
-  }
-
-  headNode.children.push(...aemHeadHtmlTree.children);
-}
-
-function extractMetaData(bodyTree) {
-  const metaBlock = select('div.metadata', bodyTree);
-  let metaConfig = {};
-  if (metaBlock) {
-    metaConfig = readBlockConfig(metaBlock);
-    // TODO hide the metadata block, maybe remove it
-    metaBlock.properties.style = 'display: none;';
-  }
-  return metaConfig;
 }

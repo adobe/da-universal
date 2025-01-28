@@ -9,29 +9,11 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-export function daResp({
-  body, status, contentType, contentLength,
-}) {
-  const headers = new Headers();
-  headers.append('Access-Control-Allow-Origin', '*');
 
-  if (contentType) {
-    headers.append('Content-Type', contentType);
-  }
-  if (contentLength) {
-    headers.append('Content-Length', contentLength);
-  }
-
-  return new Response(body, { status, headers });
-}
-
-export function get404() {
-  return daResp({ body: '', status: 404 });
-}
-
-export function getRobots() {
-  const body = `User-agent: *
-Disallow: /`;
-
-  return daResp({ body, status: 200 });
-}
+module.exports = {
+    root: true,
+    extends: '@adobe/helix',
+    rules: {
+      'no-await-in-loop': 0,
+    },
+  };

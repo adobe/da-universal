@@ -12,7 +12,6 @@
 import { handleAdminProxyRequest } from '../routes/admin-proxy.js';
 
 export default async function postHandler({ req, env, daCtx }) {
-  
   // for now forward all POST requests to the da-admin
   return handleAdminProxyRequest({ req, env, daCtx });
 }

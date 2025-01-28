@@ -20,8 +20,7 @@ export default async function getHandler({ req, env, daCtx }) {
   if (path.startsWith('/favicon.ico')) return get404();
   if (path.startsWith('/robots.txt')) return getRobots();
 
-  const resourceRegex =
-    /\.(css|js|png|jpg|jpeg|webp|gif|svg|ico|json|woff|woff2|plain\.html)$/i;
+  const resourceRegex = /\.(css|js|png|jpg|jpeg|webp|gif|svg|ico|json|woff|woff2|plain\.html)$/i;
   if (resourceRegex.test(path)) {
     return handleAEMProxyRequest({ req, env, daCtx });
   }

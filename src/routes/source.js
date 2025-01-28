@@ -10,33 +10,33 @@
  * governing permissions and limitations under the License.
  */
 
-import { getAemCtx, getAEMHtml } from '../utils/aem';
-import { prepareHtml } from '../ue/ue';
-import getObject from '../storage/object';
+import { getAemCtx, getAEMHtml } from '../utils/aem.js';
+import { prepareHtml } from '../ue/ue.js';
+import getObject from '../storage/object.js';
 
 export async function getSource({ env, daCtx }) {
   const aemCtx = getAemCtx(env, daCtx);
-  const headHtml = await getAEMHtml(aemCtx, "/head.html");
+  const headHtml = await getAEMHtml(aemCtx, '/head.html');
 
-  let objResp = await getObject(env, daCtx); 
+  let objResp = await getObject(env, daCtx);
   if (objResp && objResp.status === 200) {
     // enrich content with HTML header and UE attributes
     const originalBodyHtml = await objResp.body.transformToString();
 
-    const responseHtml = await prepareHtml(daCtx, aemCtx, originalBodyHtml, headHtml);      
+    const responseHtml = await prepareHtml(daCtx, aemCtx, originalBodyHtml, headHtml);
     objResp.body = responseHtml;
     objResp.contentType = 'text/html; charset=utf-8';
     objResp.contentLength = responseHtml.length;
   } else {
     // return a template for new page if no content found
-    const templateHtml = await getAEMHtml(aemCtx, "/ue-template.html");
-    const responseHtml = await prepareHtml(daCtx, aemCtx, templateHtml, headHtml);      
+    const templateHtml = await getAEMHtml(aemCtx, '/ue-template.html');
+    const responseHtml = await prepareHtml(daCtx, aemCtx, templateHtml, headHtml);
     objResp = {
       body: responseHtml,
       status: 200,
       contentType: 'text/html; charset=utf-8',
-      contentLength: responseHtml.length
-    };  
+      contentLength: responseHtml.length,
+    };
   }
-  return objResp; 
+  return objResp;
 }

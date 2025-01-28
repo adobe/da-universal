@@ -1,12 +1,42 @@
-/**
- * @typedef {Object} DaCtx
- * @property {String} api - The API being requested.
- * @property {String} org - The organization or owner of the content.
- * @property {String} site - The site context.
- * @property {String} path - The path to the resource relative to the site.
- * @property {String} name - The name of the resource being requested.
- * @property {String} ext - The name of the extension.
+/*
+ * Copyright 2024 Adobe. All rights reserved.
+ * This file is licensed to you under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License. You may obtain a copy
+ * of the License at http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTATIONS
+ * OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
  */
+
+function getRefSiteOrgPath(hostname, pathname) {
+  if (hostname === 'localhost') {
+    const [org, site, ...parts] = pathname.substring(1).split('/');
+    return {
+      ref: 'main',
+      site,
+      org,
+      path: `/${parts.join('/')}`,
+    };
+  }
+  const parts = hostname.split('.');
+  if (parts.length > 2) {
+    const subdomainParts = parts[0].split('--');
+    if (subdomainParts.length === 3) {
+      return {
+        ref: subdomainParts[0],
+        site: subdomainParts[1],
+        org: subdomainParts[2],
+        path: pathname,
+      };
+    }
+  }
+
+  return {
+    ref: undefined, site: undefined, org: undefined, path: pathname,
+  };
+}
 
 /**
  * Gets Dark Alley Context
@@ -14,10 +44,12 @@
  * @returns {DaCtx} The Dark Alley Context.
  */
 export function getDaCtx(req) {
-  let { pathname, hostname } = new URL(req.url);
+  const { pathname, hostname } = new URL(req.url);
 
   // TODO this requires some improvements to be more robust
-  const { org, site, path, ref } = getRefSiteOrgPath(hostname, pathname);
+  const {
+    org, site, path, ref,
+  } = getRefSiteOrgPath(hostname, pathname);
 
   // Santitize the string
   const lower = path.slice(1).toLowerCase();
@@ -27,7 +59,9 @@ export function getDaCtx(req) {
   const [...parts] = sanitized.split('/');
 
   // Set base details
-  const daCtx = { path, org, site, ref, isLocal: hostname === 'localhost' };
+  const daCtx = {
+    path, org, site, ref, isLocal: hostname === 'localhost',
+  };
 
   // Sanitize the remaining path parts
   const pathParts = parts.filter((part) => part !== '');
@@ -60,30 +94,4 @@ export function getDaCtx(req) {
   }
 
   return daCtx;
-}
-
-function getRefSiteOrgPath(hostname, pathname) {
-  if (hostname === 'localhost') {
-    const [org, site, ...parts] = pathname.substring(1).split('/');
-    return {
-      ref: 'main',
-      site,
-      org,
-      path: `/${parts.join('/')}`,
-    };
-  }
-  const parts = hostname.split('.');
-  if (parts.length > 2) {
-    const subdomainParts = parts[0].split('--');
-    if (subdomainParts.length === 3) {
-      return {
-        ref: subdomainParts[0],
-        site: subdomainParts[1],
-        org: subdomainParts[2],
-        path: pathname,
-      };
-    }
-  }
-
-  return undefined;
 }
