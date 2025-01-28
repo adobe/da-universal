@@ -27,7 +27,12 @@ function getTextBody(data) {
 }
 
 export async function handleAdminProxyRequest({ req, env, daCtx }) {
-  const { path, ext } = daCtx;
+  const {
+    org,
+    site,
+    path,
+    ext,
+  } = daCtx;
 
   const obj = await putHelper(req, env, daCtx);
   if (obj && obj.data) {
@@ -51,7 +56,7 @@ export async function handleAdminProxyRequest({ req, env, daCtx }) {
     const data = new Blob([bodyContent], { type: 'text/html' });
     body.set('data', data);
     const headers = { Authorization: req.headers.get('Authorization') };
-    const adminUrl = new URL(`/source${path}.${ext}`, env.DA_ADMIN);
+    const adminUrl = new URL(`/source/${org}/${site}${path}.${ext}`, env.DA_ADMIN);
     // eslint-disable-next-line no-param-reassign
     req = new Request(adminUrl, {
       method: 'POST',
