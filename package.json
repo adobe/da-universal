@@ -17,7 +17,7 @@
     "esmock": "^2.7.0",
     "mocha": "^11.1.0",
     "wrangler": "^3.0.0",
-    "eslint": "8.56.0"
+    "eslint": "8.57.1"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.726.1",
