@@ -32,7 +32,7 @@ export function toMetaName(text) {
  * @param {Element} $block The block element
  * @returns {object} The block config
  */
-// TODO taken from https://github.com/adobe/helix-html-pipeline/blob/main/src/steps/extract-metadata.js
+// from https://github.com/adobe/helix-html-pipeline/blob/main/src/steps/extract-metadata.js
 export function readBlockConfig($block) {
   const config = Object.create(null);
   selectAll(':scope>div', $block).forEach(($row) => {
