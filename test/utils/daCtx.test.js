@@ -1,8 +1,6 @@
 /* eslint-env mocha */
 import assert from 'assert';
-//import { strict as esmock } from 'esmock';
 import esmock from 'esmock';
-//import { getDaCtx } from './daCtx';
 
 import reqs from '../mocks/req.js';
 
