@@ -15,19 +15,9 @@ import { fromHtml } from 'hast-util-from-html';
 import { select, selectAll } from 'hast-util-select';
 import { toHtml } from 'hast-util-to-html';
 import { getHtmlDoc, getUEConfig, getUEHtmlHeadEntries } from './scaffold.js';
-import { createElementNode, readBlockConfig } from '../utils/hast.js';
+import { createElementNode } from '../utils/hast.js';
 import { injectUEAttributes } from './attributes.js';
-
-function extractMetaData(bodyTree) {
-  const metaBlock = select('div.metadata', bodyTree);
-  let metaConfig = {};
-  if (metaBlock) {
-    metaConfig = readBlockConfig(metaBlock);
-    // TODO hide the metadata block, maybe remove it
-    metaBlock.properties.style = 'display: none;';
-  }
-  return metaConfig;
-}
+import { extractLocalMetadata, fetchBulkMetadata } from './metadata.js';
 
 function injectAEMHtmlHeadEntries(daCtx, headNode, headHtmlStr) {
   const { org, site, isLocal } = daCtx;
@@ -65,8 +55,15 @@ export async function prepareHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
   const bodyTree = fromHtml(bodyHtmlStr, { fragment: true });
   bodyNode.children = bodyTree.children;
 
-  // extract metadata block from the body
-  Object.entries(extractMetaData(bodyTree)).forEach(([name, value]) => {
+  // fetch bulk metadata, extract metadata block from the body and merge them
+  const bulkMetadata = await fetchBulkMetadata(aemCtx);
+  const localMetaData = extractLocalMetadata(bodyTree);
+  const mergedMetaData = {
+    ...bulkMetadata.getModifiers(daCtx.path),
+    ...localMetaData,
+  };
+
+  Object.entries(mergedMetaData).forEach(([name, value]) => {
     headNode.children.push(
       createElementNode('meta', {
         name,
