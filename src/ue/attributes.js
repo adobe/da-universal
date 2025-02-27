@@ -26,27 +26,16 @@ function addAttributes(node, attributes) {
 }
 
 function getComponentDefinition(ueConfig, id) {
-  const definitions = ueConfig['component-definition'];
-  if (definitions) {
-    for (const group of definitions.groups) {
-      const component = group.components.find((c) => c.id === id);
-      if (component) {
-        return component;
-      }
-    }
-  }
-  return null;
+  const groups = ueConfig['component-definition']?.groups || [];
+  return groups.flatMap((group) => group.components).find((c) => c.id === id) || null;
 }
 
 function getFilterDefinition(ueConfig, id) {
-  const filters = ueConfig['component-filter'];
-  if (filters) {
-    const filter = filters.find((f) => f.id === id);
-    if (filter) {
-      return filter;
-    }
-  }
-  return null;
+  return ueConfig['component-filter']?.find((f) => f.id === id) || null;
+}
+
+function getModelDefinition(ueConfig, id) {
+  return ueConfig['component-model']?.find((m) => m.id === id) || null;
 }
 
 function wrapParagraphs(section) {
@@ -175,7 +164,9 @@ export function injectUEAttributes(bodyTree, ueConfig) {
                 : `${blockName} (no definition)`,
               'data-aue-model': blockName,
             });
+            addBlockFieldAttributes(ueConfig, block);
 
+            // apply block flter and child items
             const filterDef = getFilterDefinition(ueConfig, blockName);
             if (filterDef) {
               addAttributes(block, {
@@ -195,12 +186,32 @@ export function injectUEAttributes(bodyTree, ueConfig) {
                     'data-aue-label': itemCmpDef.title,
                     'data-aue-model': itemCmpDef.id,
                   });
+                  addBlockFieldAttributes(ueConfig, blockItem);
                 });
               }
             }
           }
         }
       });
+    });
+  }
+}
+
+function addBlockFieldAttributes(ueConfig, block) {
+  const blockName = block.properties['data-aue-model'];
+  const modelDef = getModelDefinition(ueConfig, blockName);
+  if (modelDef) {
+    const fields = modelDef.fields || [];
+    const fieldsWithAttributes = fields.filter((field) => field.component === 'richtext' || field.component === 'reference');
+    fieldsWithAttributes.forEach((field) => {
+      const blockFieldTag = select(field.name, block);
+      if (blockFieldTag) {
+        addAttributes(blockFieldTag, {
+          'data-aue-type': field.component === 'reference' ? 'media' : field.component,
+          'data-aue-prop': field.name,
+          'data-aue-label': field.label || field.name,
+        });
+      }
     });
   }
 }
