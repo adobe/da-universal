@@ -30,8 +30,6 @@ export async function getSource({ env, daCtx }) {
   } else {
     // return a template for new page if no content found
     const templateHtml = await getAEMHtml(aemCtx, '/ue-template.html');
-
-    
     const responseHtml = await prepareHtml(daCtx, aemCtx, templateHtml, headHtml);
     objResp = {
       body: responseHtml,
