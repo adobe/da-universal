@@ -13,7 +13,7 @@
 import { select } from 'hast-util-select';
 import { readBlockConfig } from '../utils/hast.js';
 
-export function extractMetaData(bodyTree) {
+export function extractLocalMetadata(bodyTree) {
   const metaBlock = select('div.metadata', bodyTree);
   let metaConfig = {};
   if (metaBlock) {
@@ -21,27 +21,6 @@ export function extractMetaData(bodyTree) {
     metaBlock.properties.style = 'display: none;';
   }
   return metaConfig;
-}
-
-export async function fetchBulkMetadata(aemCtx) {
-  const url = new URL('/metadata.json', aemCtx.liveUrl);
-  const response = await fetch(url);
-
-  if (response.ok) {
-    const json = await response.json();
-    const metadata = json.default ?? json;
-    if (!metadata) {
-      console.log('Metadata sheet is not valid');
-      return Modifiers.EMPTY;
-    }
-
-    if (!Array.isArray(metadata.data)) {
-      console.log('Metadata sheet is not valid');
-      return Modifiers.EMPTY;
-    }
-    return Modifiers.fromModifierSheet(metadata.data);
-  }
-  return Modifiers.EMPTY;
 }
 
 /**
@@ -117,7 +96,9 @@ export class Modifiers {
     const res = Object.create(null);
     for (let row of sheet) {
       row = toLowerKeys(row);
-      const { url, key, value, ...rest } = row;
+      const {
+        url, key, value, ...rest
+      } = row;
       if (url) {
         const put = (k, v) => {
           if (keyFilter(k)) {
@@ -171,4 +152,27 @@ export class Modifiers {
     }
     return modifiers;
   }
+}
+
+export async function fetchBulkMetadata(aemCtx) {
+  const url = new URL('/metadata.json', aemCtx.liveUrl);
+  const response = await fetch(url);
+
+  if (response.ok) {
+    const json = await response.json();
+    const metadata = json.default ?? json;
+    if (!metadata) {
+      // eslint-disable-next-line no-console
+      console.log('Metadata sheet is not valid');
+      return Modifiers.EMPTY;
+    }
+
+    if (!Array.isArray(metadata.data)) {
+      // eslint-disable-next-line no-console
+      console.log('Metadata sheet is not valid');
+      return Modifiers.EMPTY;
+    }
+    return Modifiers.fromModifierSheet(metadata.data);
+  }
+  return Modifiers.EMPTY;
 }
