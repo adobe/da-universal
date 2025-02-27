@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 
-import { getAemCtx, getAEMHtml } from '../utils/aem.js';
+import { getAemCtx, getAEMHtml } from '../utils/aemCtx.js';
 import { prepareHtml } from '../ue/ue.js';
 import getObject from '../storage/object.js';
 
