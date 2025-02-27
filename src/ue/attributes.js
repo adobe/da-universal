@@ -80,6 +80,33 @@ function wrapParagraphs(section) {
 }
 
 /**
+ * Adds Universal Editor (UE) attributes to fields within a block component.
+ * This function processes fields in a block component and adds appropriate UE attributes
+ * based on the field type (richtext, reference, text).
+ *
+ * @param {Object} ueConfig - Configuration object containing UE component models
+ * @param {Object} block - The block element to process
+ */
+function addBlockFieldAttributes(ueConfig, block) {
+  const blockName = block.properties['data-aue-model'];
+  const modelDef = getModelDefinition(ueConfig, blockName);
+  if (modelDef) {
+    const fields = modelDef.fields || [];
+    const fieldsWithAttributes = fields.filter((field) => field.component === 'richtext' || field.component === 'reference' || (field.component === 'text' && field.name.indexOf('[') === -1));
+    fieldsWithAttributes.forEach((field) => {
+      const blockFieldTag = select(field.name, block);
+      if (blockFieldTag) {
+        addAttributes(blockFieldTag, {
+          'data-aue-type': field.component === 'reference' ? 'media' : field.component,
+          'data-aue-prop': field.name,
+          'data-aue-label': field.label || field.name,
+        });
+      }
+    });
+  }
+}
+
+/**
  * Injects Universal Editor (UE) attributes into the HTML body tree.
  * This function adds data attributes to various elements in the body to enable UE functionality:
  * - Adds container attributes to the main content area
@@ -193,25 +220,6 @@ export function injectUEAttributes(bodyTree, ueConfig) {
           }
         }
       });
-    });
-  }
-}
-
-function addBlockFieldAttributes(ueConfig, block) {
-  const blockName = block.properties['data-aue-model'];
-  const modelDef = getModelDefinition(ueConfig, blockName);
-  if (modelDef) {
-    const fields = modelDef.fields || [];
-    const fieldsWithAttributes = fields.filter((field) => field.component === 'richtext' || field.component === 'reference');
-    fieldsWithAttributes.forEach((field) => {
-      const blockFieldTag = select(field.name, block);
-      if (blockFieldTag) {
-        addAttributes(blockFieldTag, {
-          'data-aue-type': field.component === 'reference' ? 'media' : field.component,
-          'data-aue-prop': field.name,
-          'data-aue-label': field.label || field.name,
-        });
-      }
     });
   }
 }
