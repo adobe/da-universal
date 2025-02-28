@@ -231,6 +231,81 @@ describe('UE attributes', () => {
       assert.equal(blockItems[1].properties['data-aue-label'], 'Card');
       assert.equal(blockItems[1].properties['data-aue-model'], 'card');
     });
+
+    it('adds UE attributes to body for page metadata', () => {
+      const bodyTree = {
+        type: 'element',
+        tagName: 'body',
+        properties: {},
+        children: [
+          {
+            type: 'element',
+            tagName: 'main',
+            properties: {},
+            children: [],
+          },
+        ],
+      };
+
+      const ueConfig = {
+        'component-model': [
+          { id: 'page-metadata', title: 'Page Metadata' }
+        ],
+        'component-definition': {
+          groups: [
+            {
+              components: [
+                { id: 'section', title: 'Section' },
+              ],
+            },
+          ],
+        },
+      };
+
+      attributes.injectUEAttributes(bodyTree, ueConfig);
+
+      // Check body attributes for page metadata
+      assert.equal(bodyTree.properties['data-aue-resource'], 'urn:ab:page');
+      assert.equal(bodyTree.properties['data-aue-label'], 'Page');
+      assert.equal(bodyTree.properties['data-aue-type'], 'component');
+      assert.equal(bodyTree.properties['data-aue-model'], 'page-metadata');
+    });
+
+    it('does not add page metadata attributes when not defined in config', () => {
+      const bodyTree = {
+        type: 'element',
+        tagName: 'body',
+        properties: {},
+        children: [
+          {
+            type: 'element',
+            tagName: 'main',
+            properties: {},
+            children: [],
+          },
+        ],
+      };
+
+      const ueConfig = {
+        'component-definition': {
+          groups: [
+            {
+              components: [
+                { id: 'section', title: 'Section' },
+              ],
+            },
+          ],
+        },
+      };
+
+      attributes.injectUEAttributes(bodyTree, ueConfig);
+
+      // Check that body doesn't have page metadata attributes
+      assert.equal(bodyTree.properties['data-aue-resource'], undefined);
+      assert.equal(bodyTree.properties['data-aue-label'], undefined);
+      assert.equal(bodyTree.properties['data-aue-type'], undefined);
+      assert.equal(bodyTree.properties['data-aue-model'], undefined);
+    });
   });
 
   describe('removeUEAttributes', () => {

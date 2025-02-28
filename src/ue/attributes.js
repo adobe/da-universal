@@ -118,6 +118,18 @@ function addBlockFieldAttributes(ueConfig, block) {
  * @param {Object} ueConfig - Configuration object containing UE component definitions and filters
  */
 export function injectUEAttributes(bodyTree, ueConfig) {
+  // handle attributes for page metadata
+  const pageMetaData = getModelDefinition(ueConfig, 'page-metadata');
+  if (pageMetaData) {
+    addAttributes(bodyTree, {
+      'data-aue-resource': 'urn:ab:page',
+      'data-aue-label': 'Page',
+      'data-aue-type': 'component',
+      'data-aue-model': 'page-metadata',
+    });
+  }
+
+  // handle attributes for main content
   const mainTree = select('main', bodyTree);
   if (mainTree) {
     addAttributes(mainTree, {
