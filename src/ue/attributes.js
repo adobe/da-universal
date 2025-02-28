@@ -11,12 +11,11 @@
  */
 import { select, selectAll } from 'hast-util-select';
 import { visit } from 'unist-util-visit';
+import { isElement } from 'hast-util-is-element';
 import {
   getBlockNameAndClasses,
   removeWhitespaceTextNodes,
 } from '../utils/hast.js';
-
-const { isElement } = require('hast-util-is-element');
 
 function addAttributes(node, attributes) {
   Object.entries(attributes).forEach(([name, value]) => {

@@ -19,13 +19,11 @@ describe('UE attributes', () => {
   let attributes;
 
   before(async () => {
-    // Use the actual module with real dependencies
     attributes = await esmock('../../src/ue/attributes.js');
   });
 
   describe('injectUEAttributes', () => {
     it('adds UE attributes to main content', () => {
-      // Create a simple body tree with a main element
       const bodyTree = {
         type: 'element',
         tagName: 'body',
@@ -52,13 +50,9 @@ describe('UE attributes', () => {
         },
       };
 
-      // Apply UE attributes
       attributes.injectUEAttributes(bodyTree, ueConfig);
 
-      // Get the main element
-      const main = select('main', bodyTree);
-      
-      // Assert that UE attributes were added
+      const main = select('main', bodyTree);      
       assert.equal(main.properties['data-aue-resource'], 'urn:ab:main');
       assert.equal(main.properties['data-aue-type'], 'container');
       assert.equal(main.properties['data-aue-label'], 'Main Content');
@@ -66,7 +60,6 @@ describe('UE attributes', () => {
     });
 
     it('adds UE attributes to sections', () => {
-      // Create a body tree with main and a section
       const bodyTree = {
         type: 'element',
         tagName: 'body',
@@ -100,13 +93,9 @@ describe('UE attributes', () => {
         },
       };
 
-      // Apply UE attributes
       attributes.injectUEAttributes(bodyTree, ueConfig);
 
-      // Get the section
       const section = select('main > div', bodyTree);
-      
-      // Assert that section attributes were added
       assert.equal(section.properties['data-aue-resource'], 'urn:ab:section-0');
       assert.equal(section.properties['data-aue-type'], 'container');
       assert.equal(section.properties['data-aue-label'], 'Section');
@@ -114,7 +103,6 @@ describe('UE attributes', () => {
     });
 
     it('adds UE attributes to blocks within sections', () => {
-      // Create a body tree with main, section, and a block
       const bodyTree = {
         type: 'element',
         tagName: 'body',
@@ -158,13 +146,9 @@ describe('UE attributes', () => {
         },
       };
 
-      // Apply UE attributes
       attributes.injectUEAttributes(bodyTree, ueConfig);
 
-      // Get the block
       const block = select('main > div > div', bodyTree);
-      
-      // Assert that block attributes were added
       assert.equal(block.properties['data-aue-resource'], 'urn:ab:section-0/block-0');
       assert.equal(block.properties['data-aue-type'], 'component');
       assert.equal(block.properties['data-aue-label'], 'Card Block');
@@ -172,7 +156,6 @@ describe('UE attributes', () => {
     });
 
     it('adds UE attributes to block items', () => {
-      // Create a body tree with main, section, block, and block items
       const bodyTree = {
         type: 'element',
         tagName: 'body',
@@ -236,18 +219,13 @@ describe('UE attributes', () => {
         ],
       };
 
-      // Apply UE attributes
       attributes.injectUEAttributes(bodyTree, ueConfig);
 
-      // Get the block items
       const blockItems = selectAll('main > div > div > div', bodyTree);
-      
-      // Assert that block item attributes were added
       assert.equal(blockItems[0].properties['data-aue-resource'], 'urn:ab:section-0/block-0/item-0');
       assert.equal(blockItems[0].properties['data-aue-type'], 'component');
       assert.equal(blockItems[0].properties['data-aue-label'], 'Card');
       assert.equal(blockItems[0].properties['data-aue-model'], 'card');
-      
       assert.equal(blockItems[1].properties['data-aue-resource'], 'urn:ab:section-0/block-0/item-1');
       assert.equal(blockItems[1].properties['data-aue-type'], 'component');
       assert.equal(blockItems[1].properties['data-aue-label'], 'Card');
@@ -257,7 +235,6 @@ describe('UE attributes', () => {
 
   describe('removeUEAttributes', () => {
     it('removes all UE attributes from a tree', () => {
-      // Create a tree with UE attributes
       const tree = {
         type: 'element',
         tagName: 'div',
@@ -282,17 +259,13 @@ describe('UE attributes', () => {
         ],
       };
 
-      // Remove UE attributes
       const result = attributes.removeUEAttributes(tree);
-
-      // Assert that UE attributes were removed
       assert.equal(result.properties.dataAueResource, undefined);
       assert.equal(result.properties.dataAueType, undefined);
       assert.equal(result.properties.dataAueLabel, undefined);
       assert.equal(result.properties.id, 'section1'); // Non-UE attribute should remain
       assert.equal(result.properties.class, 'section'); // Non-UE attribute should remain
 
-      // Check child element
       const child = result.children[0];
       assert.equal(child.properties.dataAueResource, undefined);
       assert.equal(child.properties.dataAueType, undefined);
@@ -302,7 +275,6 @@ describe('UE attributes', () => {
 
   describe('unwrapParagraphs', () => {
     it('unwraps richtext div elements', () => {
-      // Create a tree with richtext divs
       const tree = {
         type: 'element',
         tagName: 'div',
@@ -342,17 +314,67 @@ describe('UE attributes', () => {
         ],
       };
 
-      // Unwrap paragraphs
       const result = attributes.unwrapParagraphs(tree);
-
-      // Assert that richtext div was unwrapped
       assert.equal(result.children.length, 2);
       assert.equal(result.children[0].tagName, 'p');
       assert.equal(result.children[1].tagName, 'p');
-      
-      // Check text content
       assert.equal(result.children[0].children[0].value, 'Paragraph 1');
       assert.equal(result.children[1].children[0].value, 'Paragraph 2');
+    });
+
+    it('unwraps richtext div elements combined with other elements', () => {
+      const tree = {
+        type: 'element',
+        tagName: 'div',
+        properties: {},
+        children: [
+          {
+            type: 'element',
+            tagName: 'div',
+            properties: {
+              dataAueType: 'richtext',
+            },
+            children: [
+              {
+                type: 'element',
+                tagName: 'p',
+                properties: {},
+                children: [
+                  {
+                    type: 'text',
+                    value: 'Paragraph 1',
+                  },
+                ],
+              },
+              {
+                type: 'element',
+                tagName: 'picture',
+                properties: {},
+                children: [],
+              },
+              {
+                type: 'element',
+                tagName: 'p',
+                properties: {},
+                children: [
+                  {
+                    type: 'text',
+                    value: 'Paragraph 2',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = attributes.unwrapParagraphs(tree);
+      assert.equal(result.children.length, 3);
+      assert.equal(result.children[0].tagName, 'p');
+      assert.equal(result.children[1].tagName, 'picture');
+      assert.equal(result.children[2].tagName, 'p');
+      assert.equal(result.children[0].children[0].value, 'Paragraph 1');
+      assert.equal(result.children[2].children[0].value, 'Paragraph 2');
     });
   });
 }); 
