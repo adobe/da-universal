@@ -178,13 +178,13 @@ export function injectUEAttributes(bodyTree, ueConfig) {
 
       // handle blocks
       const blocks = selectAll(':scope>div', section);
-      blocks.forEach((block, bIindex) => {
+      blocks.forEach((block, bIndex) => {
         const { name: blockName } = getBlockNameAndClasses(block);
         if (blockName) {
           if (blockName !== 'metadata' && blockName !== 'section-metadata') {
             const blockCmpDef = getComponentDefinition(ueConfig, blockName);
             addAttributes(block, {
-              'data-aue-resource': `urn:ab:section-${sIndex}/block-${bIindex}`,
+              'data-aue-resource': `urn:ab:section-${sIndex}/block-${bIndex}`,
               'data-aue-type': 'component',
               'data-aue-label': blockCmpDef
                 ? blockCmpDef.title
@@ -208,7 +208,7 @@ export function injectUEAttributes(bodyTree, ueConfig) {
                 const blockItems = selectAll(':scope>div', block);
                 blockItems.forEach((blockItem, biIndex) => {
                   addAttributes(blockItem, {
-                    'data-aue-resource': `urn:ab:section-${sIndex}/block-${bIindex}/item-${biIndex}`,
+                    'data-aue-resource': `urn:ab:section-${sIndex}/block-${bIndex}/item-${biIndex}`,
                     'data-aue-type': 'component',
                     'data-aue-label': itemCmpDef.title,
                     'data-aue-model': itemCmpDef.id,
