@@ -263,7 +263,7 @@ export function unwrapParagraphs(tree) {
   visit(tree, 'element', (node, index, parent) => {
     // data-aue-type=\"richtext\"
     const properties = node.properties || {};
-    if (node.tagName === 'div' && properties.dataAueType === 'richtext') {
+    if (node.tagName === 'div' && properties.dataAueType === 'richtext' && properties.dataAueResource) {
       if (parent && Array.isArray(parent.children)) {
         const childrenToInsert = node.children || [];
         parent.children.splice(index, 1, ...childrenToInsert);

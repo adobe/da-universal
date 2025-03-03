@@ -14,6 +14,8 @@ import assert from 'assert';
 import { describe, it, before } from 'mocha';
 import esmock from 'esmock';
 import { select, selectAll } from 'hast-util-select';
+import { fromHtml } from 'hast-util-from-html';
+import { minifyWhitespace } from 'hast-util-minify-whitespace';
 
 describe('UE attributes', () => {
   let attributes;
@@ -306,6 +308,123 @@ describe('UE attributes', () => {
       assert.equal(bodyTree.properties['data-aue-type'], undefined);
       assert.equal(bodyTree.properties['data-aue-model'], undefined);
     });
+
+    it('adds UE attributes to richtext within sections', () => {
+      const bodyTree = {
+        type: 'element',
+        tagName: 'body',
+        properties: {},
+        children: [
+          {
+            type: 'element',
+            tagName: 'main',
+            properties: {},
+            children: [
+              {
+                type: 'element',
+                tagName: 'div', // section
+                properties: {},
+                children: [
+                  {
+                    type: 'element',
+                    tagName: 'h1',
+                    properties: {},
+                    children: [ { type: 'text', value: 'Heading 1' } ],
+                  },
+                  {
+                    type: 'element',
+                    tagName: 'p',
+                    properties: {},
+                    children: [ { type: 'text', value: 'Paragraph 1' } ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const ueConfig = {
+        'component-definition': {
+          groups: [
+            {
+              components: [
+                { id: 'section', title: 'Section' },
+                { id: 'text', title: 'Text' }
+              ],
+            },
+          ],
+        },
+      };
+
+      attributes.injectUEAttributes(bodyTree, ueConfig);
+
+      const richTextDiv = select('main > div > div', bodyTree);
+      assert.equal(richTextDiv.properties['data-aue-resource'], 'urn:ab:section-0/text-0');
+      assert.equal(richTextDiv.properties['data-aue-type'], 'richtext');
+      assert.equal(richTextDiv.properties['data-aue-label'], 'Text');
+      assert.equal(richTextDiv.properties['data-aue-prop'], 'text');
+    });
+
+
+    it('adds UE attributes to pictures within sections', () => {
+      const bodyTree = {
+        type: 'element',
+        tagName: 'body',
+        properties: {},
+        children: [
+          {
+            type: 'element',
+            tagName: 'main',
+            properties: {},
+            children: [
+              {
+                type: 'element',
+                tagName: 'div', // section
+                properties: {},
+                children: [
+                  {
+                    type: 'element',
+                    tagName: 'picture',
+                    properties: {},
+                    children: [
+                      {
+                        type: 'element',
+                        tagName: 'img',
+                        properties: {},
+                        children: [],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const ueConfig = {
+        'component-definition': {
+          groups: [
+            {
+              components: [
+                { id: 'section', title: 'Section' },
+                { id: 'image', title: 'Image' }
+              ],
+            },
+          ],
+        },
+      };
+
+      attributes.injectUEAttributes(bodyTree, ueConfig);
+
+      const image = select('main > div > picture', bodyTree);
+      assert.equal(image.properties['data-aue-resource'], 'urn:ab:section-0/asset-0');
+      assert.equal(image.properties['data-aue-type'], 'media');
+      assert.equal(image.properties['data-aue-label'], 'Image');
+      assert.equal(image.properties['data-aue-model'], 'image');
+    });
+
   });
 
   describe('removeUEAttributes', () => {
@@ -349,107 +468,114 @@ describe('UE attributes', () => {
   });
 
   describe('unwrapParagraphs', () => {
-    it('unwraps richtext div elements', () => {
-      const tree = {
-        type: 'element',
-        tagName: 'div',
-        properties: {},
-        children: [
-          {
-            type: 'element',
-            tagName: 'div',
-            properties: {
-              dataAueType: 'richtext',
-            },
-            children: [
-              {
-                type: 'element',
-                tagName: 'p',
-                properties: {},
-                children: [
-                  {
-                    type: 'text',
-                    value: 'Paragraph 1',
-                  },
-                ],
-              },
-              {
-                type: 'element',
-                tagName: 'p',
-                properties: {},
-                children: [
-                  {
-                    type: 'text',
-                    value: 'Paragraph 2',
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      };
+    it('unwraps richtext div elements in main content', () => {
 
+      let html = `
+      <body>
+        <header></header>
+        <main>
+          <div>
+            <div data-aue-resource="urn:ab:section-0/text-0" data-aue-type="richtext" data-aue-label="Text" data-aue-prop="text" data-aue-behavior="component">
+              <h1>Heading 1</h1>
+              <p>Paragraph 1</p>
+            </div>
+            <div data-aue-resource="urn:ab:section-0/text-1" data-aue-type="richtext" data-aue-label="Text" data-aue-prop="text" data-aue-behavior="component">
+              <p>Paragraph 2</p>
+            </div>
+          </div>  
+        </main>
+        <footer></footer>
+      </body>
+      `;
+
+      const tree = fromHtml(html);
+      minifyWhitespace(tree);
       const result = attributes.unwrapParagraphs(tree);
-      assert.equal(result.children.length, 2);
-      assert.equal(result.children[0].tagName, 'p');
-      assert.equal(result.children[1].tagName, 'p');
-      assert.equal(result.children[0].children[0].value, 'Paragraph 1');
-      assert.equal(result.children[1].children[0].value, 'Paragraph 2');
+      const section = select('main > div', result);
+
+      assert.equal(section.children.length, 3);
+      assert.equal(section.children[0].tagName, 'h1');
+      assert.equal(section.children[1].tagName, 'p');
+      assert.equal(section.children[2].tagName, 'p');
+      assert.equal(section.children[0].children[0].value, 'Heading 1');
+      assert.equal(section.children[1].children[0].value, 'Paragraph 1');
+      assert.equal(section.children[2].children[0].value, 'Paragraph 2');
     });
 
     it('unwraps richtext div elements combined with other elements', () => {
-      const tree = {
-        type: 'element',
-        tagName: 'div',
-        properties: {},
-        children: [
-          {
-            type: 'element',
-            tagName: 'div',
-            properties: {
-              dataAueType: 'richtext',
-            },
-            children: [
-              {
-                type: 'element',
-                tagName: 'p',
-                properties: {},
-                children: [
-                  {
-                    type: 'text',
-                    value: 'Paragraph 1',
-                  },
-                ],
-              },
-              {
-                type: 'element',
-                tagName: 'picture',
-                properties: {},
-                children: [],
-              },
-              {
-                type: 'element',
-                tagName: 'p',
-                properties: {},
-                children: [
-                  {
-                    type: 'text',
-                    value: 'Paragraph 2',
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      };
+      let html = `
+      <body>
+        <header></header>
+        <main>
+          <div>
+            <div data-aue-resource="urn:ab:section-0/text-0" data-aue-type="richtext" data-aue-label="Text" data-aue-prop="text" data-aue-behavior="component">
+              <h1>Heading 1</h1>
+              <p>Paragraph 1</p>
+            </div>            
+            <img src="https://placehold.co/600x400" />
+            <div data-aue-resource="urn:ab:section-0/text-1" data-aue-type="richtext" data-aue-label="Text" data-aue-prop="text" data-aue-behavior="component">
+              <p>Paragraph 2</p>
+            </div>
+          </div>  
+        </main>
+        <footer></footer>
+      </body>
+      `;
 
+      const tree = fromHtml(html);
+      minifyWhitespace(tree);
       const result = attributes.unwrapParagraphs(tree);
-      assert.equal(result.children.length, 3);
-      assert.equal(result.children[0].tagName, 'p');
-      assert.equal(result.children[1].tagName, 'picture');
-      assert.equal(result.children[2].tagName, 'p');
-      assert.equal(result.children[0].children[0].value, 'Paragraph 1');
-      assert.equal(result.children[2].children[0].value, 'Paragraph 2');
+      
+      const section = select('main > div', result);
+
+      assert.equal(section.children.length, 4);
+      assert.equal(section.children[0].tagName, 'h1');
+      assert.equal(section.children[1].tagName, 'p');
+      assert.equal(section.children[2].tagName, 'img');
+      assert.equal(section.children[3].tagName, 'p');
+    });
+
+    it('does not unwrap richtext div elements within a block', () => {
+      let html = `
+      <body>
+        <header></header>
+        <main>
+          <div>
+            <div class="hero" data-aue-resource="urn:ab:section-0/block-0" data-aue-type="component" data-aue-label="Hero" data-aue-model="hero">
+              <div>
+                <div data-aue-type="richtext" data-aue-prop="1234" data-aue-label="Hero Text">
+                  <h1>Heading 1</h1>
+                  <p>Paragraph 1</p>
+                  <p><a href="/adobe" title="Adobe"><em>Adobe</em></a></p>
+                </div>            
+              </div>
+              <div>
+                <div>
+                  <img src="https://placehold.co/600x400" data-aue-type="media" data-aue-prop="1234" data-aue-label="Hero Image"/>
+                </div>
+              </div>
+            </div>
+          </div>  
+        </main>
+        <footer></footer>
+      </body>
+      `;
+
+      const tree = fromHtml(html);
+      minifyWhitespace(tree);
+      const result = attributes.unwrapParagraphs(tree);
+      
+      const section = select('main > div', result);
+      const block = section.children[0];
+      assert.equal(block.children.length, 2);
+
+      const cell1 = select('div > div:first-child > div', block);
+      assert.equal(cell1.children.length, 3);
+      assert.equal(cell1.tagName, 'div');
+
+      const cell2 = select('div > div:last-child > div', block);
+      assert.equal(cell2.children.length, 1);
+      assert.equal(cell2.tagName, 'div');
     });
   });
 }); 
