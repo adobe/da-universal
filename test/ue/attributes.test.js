@@ -366,7 +366,6 @@ describe('UE attributes', () => {
       assert.equal(richTextDiv.properties['data-aue-prop'], 'text');
     });
 
-
     it('adds UE attributes to pictures within sections', () => {
       const bodyTree = {
         type: 'element',
@@ -423,6 +422,253 @@ describe('UE attributes', () => {
       assert.equal(image.properties['data-aue-type'], 'media');
       assert.equal(image.properties['data-aue-label'], 'Image');
       assert.equal(image.properties['data-aue-model'], 'image');
+    });
+
+    it('adds UE attributes to block fields based on model definition', () => {
+      const bodyTree = {
+        type: 'element',
+        tagName: 'body',
+        properties: {},
+        children: [
+          {
+            type: 'element',
+            tagName: 'main',
+            properties: {},
+            children: [
+              {
+                type: 'element',
+                tagName: 'div', // section
+                properties: {},
+                children: [
+                  {
+                    type: 'element',
+                    tagName: 'div', // block
+                    properties: {
+                      className: ['hero-block'],
+                    },
+                    children: [
+                      {
+                        type: 'element',
+                        tagName: 'div',
+                        properties: {},
+                        children: [{ type: 'text', value: 'Hero Text' }],
+                      },
+                      {
+                        type: 'element',
+                        tagName: 'picture',
+                        properties: {},
+                        children: [
+                          {
+                            type: 'element',
+                            tagName: 'img',
+                            properties: {},
+                            children: [],
+                          },
+                        ],
+                      },
+                      {
+                        type: 'element',
+                        tagName: 'div',
+                        properties: {},
+                        children: [{ type: 'text', value: 'Array Field' }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const ueConfig = {
+        'component-definition': {
+          groups: [
+            {
+              components: [
+                { id: 'section', title: 'Section' },
+                { id: 'hero-block', title: 'Hero Block' },
+              ],
+            },
+          ],
+        },
+        'component-model': [
+          {
+            id: 'hero-block',
+            title: 'Hero Block',
+            fields: [
+              {
+                name: 'div:first-child',
+                label: 'Hero Text',
+                component: 'richtext',
+              },
+              {
+                name: 'picture',
+                label: 'Hero Image',
+                component: 'reference',
+              },
+              {
+                name: 'div:last-child',
+                label: 'Array Field',
+                component: 'text',
+                name: 'array[0]',
+              },
+            ],
+          },
+        ],
+      };
+
+      attributes.injectUEAttributes(bodyTree, ueConfig);
+
+      const textField = select('main > div > div > div:first-child', bodyTree);
+      assert.equal(textField.properties['data-aue-type'], 'richtext');
+      assert.equal(textField.properties['data-aue-prop'], 'div:first-child');
+      assert.equal(textField.properties['data-aue-label'], 'Hero Text');
+
+      const imageField = select('main > div > div > picture', bodyTree);
+      assert.equal(imageField.properties['data-aue-type'], 'media');
+      assert.equal(imageField.properties['data-aue-prop'], 'picture');
+      assert.equal(imageField.properties['data-aue-label'], 'Hero Image');
+
+      const arrayField = select('main > div > div > div:last-child', bodyTree);
+      assert.equal(arrayField.properties['data-aue-type'], undefined);
+      assert.equal(arrayField.properties['data-aue-prop'], undefined);
+      assert.equal(arrayField.properties['data-aue-label'], undefined);
+    });
+
+    it('handles whitespace text nodes in wrapParagraphs', () => {
+      const bodyTree = {
+        type: 'element',
+        tagName: 'body',
+        properties: {},
+        children: [
+          {
+            type: 'element',
+            tagName: 'main',
+            properties: {},
+            children: [
+              {
+                type: 'element',
+                tagName: 'div', // section
+                properties: {},
+                children: [
+                  {
+                    type: 'element',
+                    tagName: 'h1',
+                    properties: {},
+                    children: [{ type: 'text', value: 'Heading 1' }],
+                  },
+                  {
+                    type: 'element',
+                    tagName: 'p',
+                    properties: {},
+                    children: [{ type: 'text', value: 'Paragraph 1' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const ueConfig = {
+        'component-definition': {
+          groups: [
+            {
+              components: [
+                { id: 'section', title: 'Section' },
+                { id: 'text', title: 'Text' },
+              ],
+            },
+          ],
+        },
+      };
+
+      attributes.injectUEAttributes(bodyTree, ueConfig);
+
+      const section = select('main > div', bodyTree);
+      assert.equal(section.children.length, 1);
+      assert.equal(section.children[0].tagName, 'div');
+      assert.equal(section.children[0].properties['data-aue-resource'], 'urn:ab:section-0/text-0');
+      assert.equal(section.children[0].properties['data-aue-type'], 'richtext');
+      assert.equal(section.children[0].properties['data-aue-label'], 'Text');
+      assert.equal(section.children[0].children.length, 2);
+      assert.equal(section.children[0].children[0].tagName, 'h1');
+      assert.equal(section.children[0].children[1].tagName, 'p');
+    });
+
+    it('handles multiple consecutive richtext wrappers', () => {
+      const bodyTree = {
+        type: 'element',
+        tagName: 'body',
+        properties: {},
+        children: [
+          {
+            type: 'element',
+            tagName: 'main',
+            properties: {},
+            children: [
+              {
+                type: 'element',
+                tagName: 'div', // section
+                properties: {},
+                children: [
+                  {
+                    type: 'element',
+                    tagName: 'h1',
+                    properties: {},
+                    children: [{ type: 'text', value: 'Heading 1' }],
+                  },
+                  {
+                    type: 'element',
+                    tagName: 'img',
+                    properties: {},
+                    children: [],
+                  },
+                  {
+                    type: 'element',
+                    tagName: 'p',
+                    properties: {},
+                    children: [{ type: 'text', value: 'Paragraph 1' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const ueConfig = {
+        'component-definition': {
+          groups: [
+            {
+              components: [
+                { id: 'section', title: 'Section' },
+                { id: 'text', title: 'Text' },
+                { id: 'image', title: 'Image' },
+              ],
+            },
+          ],
+        },
+      };
+
+      attributes.injectUEAttributes(bodyTree, ueConfig);
+
+      const section = select('main > div', bodyTree);
+      assert.equal(section.children.length, 3);
+      assert.equal(section.children[0].tagName, 'div');
+      assert.equal(section.children[0].properties['data-aue-resource'], 'urn:ab:section-0/text-0');
+      assert.equal(section.children[0].properties['data-aue-type'], 'richtext');
+      assert.equal(section.children[0].properties['data-aue-label'], 'Text');
+      assert.equal(section.children[0].children.length, 1);
+      assert.equal(section.children[0].children[0].tagName, 'h1');
+      assert.equal(section.children[1].tagName, 'img');
+      assert.equal(section.children[2].tagName, 'div');
+      assert.equal(section.children[2].properties['data-aue-resource'], 'urn:ab:section-0/text-1');
+      assert.equal(section.children[2].properties['data-aue-type'], 'richtext');
+      assert.equal(section.children[2].properties['data-aue-label'], 'Text');
+      assert.equal(section.children[2].children.length, 1);
+      assert.equal(section.children[2].children[0].tagName, 'p');
     });
 
   });
