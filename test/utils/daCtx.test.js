@@ -66,7 +66,7 @@ describe('DA context', () => {
     });
   });
 
-  describe('Index content URL context from localhost', async () => {
+  describe('Index page URL context from localhost', async () => {
     beforeEach(async () => {
       daCtx = getDaCtx(reqs.localhostIndex);
     });
@@ -77,7 +77,7 @@ describe('DA context', () => {
     });
   });
 
-  describe('Index content URL context', async () => {
+  describe('Index page URL context', async () => {
     beforeEach(async () => {
       daCtx = getDaCtx(reqs.contentIndex);
     });
@@ -87,6 +87,33 @@ describe('DA context', () => {
       assert.strictEqual(daCtx.aemPathname, '/');
     });
   });
+
+  describe('File with non-html extension', async () => {
+    beforeEach(async () => {
+      daCtx = getDaCtx(reqs.nonHtmlFile);
+    });
+
+    it('should return the correct pathname with extension', () => {
+      assert.strictEqual(daCtx.pathname, '/folder/content.json');
+      assert.strictEqual(daCtx.aemPathname, '/folder/content.json');
+      assert.strictEqual(daCtx.ext, 'json');
+      assert.strictEqual(daCtx.name, 'content');
+    });
+  });
+
+  describe('File with plain in name', async () => {
+    beforeEach(async () => {
+      daCtx = getDaCtx(reqs.plainFile);
+    });
+
+    it('should return the correct pathname with extension', () => {
+      assert.strictEqual(daCtx.pathname, '/folder/content.plain.html');
+      assert.strictEqual(daCtx.aemPathname, '/folder/content.plain.html');
+      assert.strictEqual(daCtx.ext, 'html');
+      assert.strictEqual(daCtx.name, 'content.plain');
+    });
+  });
+
 
   describe('Invalid URL context', async () => {
     beforeEach(async () => {

@@ -15,7 +15,9 @@ const reqs = {
   localhostIndex: new Request('https://localhost:4712/org/site/'),
   content: new Request('https://main--site--org.ue.da.live/folder/content'),
   contentIndex: new Request('https://main--site--org.ue.da.live/'),
-  invalid: new Request('https://xyz.ue.da.live/')
+  invalid: new Request('https://xyz.ue.da.live/'),
+  nonHtmlFile: new Request('https://main--site--org.ue.da.live/folder/content.json'),
+  plainFile: new Request('https://main--site--org.ue.da.live/folder/content.plain.html')
 };
 
 export default reqs;

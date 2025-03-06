@@ -12,7 +12,7 @@
 import { fromHtml } from 'hast-util-from-html';
 import { select } from 'hast-util-select';
 import { toHtml } from 'hast-util-to-html';
-import { format } from 'hast-util-format';
+import { minifyWhitespace } from 'hast-util-minify-whitespace';
 import putHelper from '../helpers/source.js';
 import { removeUEAttributes, unwrapParagraphs } from '../ue/attributes.js';
 
@@ -48,7 +48,7 @@ export async function handleAdminProxyRequest({ req, env, daCtx }) {
     bodyNode = unwrapParagraphs(bodyNode);
     bodyNode = removeUEAttributes(bodyNode);
 
-    format(bodyNode);
+    minifyWhitespace(bodyNode);
 
     // create new POST request with the body content
     const body = new FormData();

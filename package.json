@@ -14,10 +14,10 @@
   "devDependencies": {
     "@adobe/eslint-config-helix": "2.0.9",
     "c8": "^10.1.3",
+    "eslint": "8.57.1",
     "esmock": "^2.7.0",
     "mocha": "^11.1.0",
-    "wrangler": "^3.0.0",
-    "eslint": "8.57.1"
+    "wrangler": "^3.0.0"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.726.1",
@@ -25,9 +25,11 @@
     "hast-util-format": "^1.1.0",
     "hast-util-from-html": "^2.0.3",
     "hast-util-is-element": "^3.0.0",
+    "hast-util-minify-whitespace": "^1.0.1",
     "hast-util-select": "^6.0.3",
     "hast-util-to-html": "^9.0.4",
     "hast-util-to-string": "^3.0.1",
+    "hastscript": "^9.0.1",
     "unist-util-visit": "^5.0.0"
   }
 }

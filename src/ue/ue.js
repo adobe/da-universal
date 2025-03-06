@@ -19,6 +19,15 @@ import { createElementNode } from '../utils/hast.js';
 import { injectUEAttributes } from './attributes.js';
 import { extractLocalMetadata, fetchBulkMetadata } from './metadata.js';
 
+/**
+ * Injects AEM HTML head entries into the head node of an HTML document.
+ *
+ * @param {Object} daCtx - The Dark Alley context object containing org, site,
+ * and isLocal properties.
+ * @param {Object} headNode - The head node of the HTML document where AEM head entries
+ * will be injected.
+ * @param {string} headHtmlStr - The HTML string containing head entries from AEM.
+ */
 function injectAEMHtmlHeadEntries(daCtx, headNode, headHtmlStr) {
   const { org, site, isLocal } = daCtx;
   const aemHeadHtmlTree = fromHtml(headHtmlStr, { fragment: true });
@@ -41,14 +50,35 @@ function injectAEMHtmlHeadEntries(daCtx, headNode, headHtmlStr) {
   headNode.children.push(...aemHeadHtmlTree.children);
 }
 
+/**
+ * Injects metadata into the head node of an HTML document.
+ *
+ * @param {Object} metadata - An object containing metadata key-value pairs to inject.
+ * @param {Object} headNode - The head node of the HTML document where metadata will be injected.
+ */
+function injectMetadata(metadata, headNode) {
+  Object.entries(metadata).forEach(([name, value]) => {
+    if (name === 'title') {
+      headNode.children.push(
+        createElementNode('title', {}, [{ type: 'text', value }]),
+      );
+    } else {
+      headNode.children.push(
+        createElementNode('meta', {
+          name,
+          content: value,
+        }),
+      );
+    }
+  });
+}
+
 export async function prepareHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
   // get the HTML document tree
   const documentTree = getHtmlDoc();
 
   // prepare the additional head HTML script and meta tags
   const headNode = select('head', documentTree);
-  injectAEMHtmlHeadEntries(daCtx, headNode, headHtmlStr);
-  headNode.children.push(...getUEHtmlHeadEntries(daCtx, aemCtx));
 
   // parse and inject the body HTML
   const bodyNode = select('body', documentTree);
@@ -59,18 +89,16 @@ export async function prepareHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
   const bulkMetadata = await fetchBulkMetadata(aemCtx);
   const localMetaData = extractLocalMetadata(bodyTree);
   const mergedMetaData = {
-    ...bulkMetadata.getModifiers(daCtx.path),
     ...localMetaData,
+    ...bulkMetadata.getModifiers(daCtx.path),
   };
+  injectMetadata(mergedMetaData, headNode);
 
-  Object.entries(mergedMetaData).forEach(([name, value]) => {
-    headNode.children.push(
-      createElementNode('meta', {
-        name,
-        content: value,
-      }),
-    );
-  });
+  // inject AEM head script and meta tags
+  injectAEMHtmlHeadEntries(daCtx, headNode, headHtmlStr);
+
+  // add UE head script and meta tags
+  headNode.children.push(...getUEHtmlHeadEntries(daCtx, aemCtx));
 
   // add data attributes for UE to the body
   const ueConfig = await getUEConfig(aemCtx);

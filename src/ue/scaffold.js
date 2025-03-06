@@ -102,8 +102,18 @@ export async function getUEConfig(aemCtx) {
       // eslint-disable-next-line no-console
       .catch((error) => console.error(`Error fetching ${url}: ${error}`))),
   );
-  const ueConfig = responses.reduce((acc, { type, data }) => {
-    acc[type] = data;
+  const ueConfig = responses.reduce((acc, response) => {
+    if (response) {
+      const { type, data } = response;
+      acc[type] = data;
+    } else {
+      // if response is undefined, ensure we have default values
+      jsonUrls.forEach(({ type }) => {
+        if (!acc[type]) {
+          acc[type] = undefined;
+        }
+      });
+    }
     return acc;
   }, {});
 
