@@ -240,7 +240,7 @@ describe('UE attributes', () => {
       assert.equal(richTextDiv.properties['data-aue-resource'], 'urn:ab:section-0/text-0');
       assert.equal(richTextDiv.properties['data-aue-type'], 'richtext');
       assert.equal(richTextDiv.properties['data-aue-label'], 'Text');
-      assert.equal(richTextDiv.properties['data-aue-prop'], 'text');
+      assert.equal(richTextDiv.properties['data-aue-prop'], 'root');
     });
 
     it('adds UE attributes to pictures within sections', () => {
@@ -466,7 +466,7 @@ describe('UE attributes', () => {
               'data-aue-resource': 'urn:ab:section-0/text-0',
               'data-aue-type': 'richtext',
               'data-aue-label': 'Text',
-              'data-aue-prop': 'text',
+              'data-aue-prop': 'root',
               'data-aue-behavior': 'component'
             }, [
               h('h1', {}, 'Heading 1'),
@@ -476,7 +476,7 @@ describe('UE attributes', () => {
               'data-aue-resource': 'urn:ab:section-0/text-1',
               'data-aue-type': 'richtext',
               'data-aue-label': 'Text',
-              'data-aue-prop': 'text',
+              'data-aue-prop': 'root',
               'data-aue-behavior': 'component'
             }, [
               h('p', {}, 'Paragraph 2')
