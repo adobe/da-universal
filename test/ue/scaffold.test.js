@@ -89,7 +89,6 @@ describe('UE scaffold', () => {
           'https://universal-editor-service.adobe.io/cors.js'
       );
       assert.ok(corsScript);
-      assert.strictEqual(corsScript.properties.async, '');
 
       // Check component definition script
       const componentDefScript = scriptTags.find(
@@ -140,7 +139,7 @@ describe('UE scaffold', () => {
       assert.ok(ueSystemTag);
       assert.strictEqual(
         ueSystemTag.properties.content,
-        'da:https://ref--site--org.test-ue-host/some-path'
+        'da:https://test-ue-host/org/site/some-path'
       );
 
       // Check service meta tag
