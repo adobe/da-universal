@@ -16,6 +16,7 @@ import esmock from 'esmock';
 import { select, selectAll } from 'hast-util-select';
 import { fromHtml } from 'hast-util-from-html';
 import { minifyWhitespace } from 'hast-util-minify-whitespace';
+import { h } from 'hastscript';
 
 describe('UE attributes', () => {
   let attributes;
@@ -26,19 +27,9 @@ describe('UE attributes', () => {
 
   describe('injectUEAttributes', () => {
     it('adds UE attributes to main content', () => {
-      const bodyTree = {
-        type: 'element',
-        tagName: 'body',
-        properties: {},
-        children: [
-          {
-            type: 'element',
-            tagName: 'main',
-            properties: {},
-            children: [],
-          },
-        ],
-      };
+      const bodyTree = h('body', {}, [
+        h('main', {}, [])
+      ]);
 
       const ueConfig = {
         'component-definition': {
@@ -62,26 +53,11 @@ describe('UE attributes', () => {
     });
 
     it('adds UE attributes to sections', () => {
-      const bodyTree = {
-        type: 'element',
-        tagName: 'body',
-        properties: {},
-        children: [
-          {
-            type: 'element',
-            tagName: 'main',
-            properties: {},
-            children: [
-              {
-                type: 'element',
-                tagName: 'div',
-                properties: {},
-                children: [],
-              },
-            ],
-          },
-        ],
-      };
+      const bodyTree = h('body', {}, [
+        h('main', {}, [
+          h('div', {}, [])
+        ])
+      ]);
 
       const ueConfig = {
         'component-definition': {
@@ -105,35 +81,13 @@ describe('UE attributes', () => {
     });
 
     it('adds UE attributes to blocks within sections', () => {
-      const bodyTree = {
-        type: 'element',
-        tagName: 'body',
-        properties: {},
-        children: [
-          {
-            type: 'element',
-            tagName: 'main',
-            properties: {},
-            children: [
-              {
-                type: 'element',
-                tagName: 'div', // section
-                properties: {},
-                children: [
-                  {
-                    type: 'element',
-                    tagName: 'div', // block
-                    properties: {
-                      className: ['card-block'],
-                    },
-                    children: [],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      };
+      const bodyTree = h('body', {}, [
+        h('main', {}, [
+          h('div', {}, [
+            h('div', { className: ['card-block'] }, [])
+          ])
+        ])
+      ]);
 
       const ueConfig = {
         'component-definition': {
@@ -158,48 +112,16 @@ describe('UE attributes', () => {
     });
 
     it('adds UE attributes to block items', () => {
-      const bodyTree = {
-        type: 'element',
-        tagName: 'body',
-        properties: {},
-        children: [
-          {
-            type: 'element',
-            tagName: 'main',
-            properties: {},
-            children: [
-              {
-                type: 'element',
-                tagName: 'div', // section
-                properties: {},
-                children: [
-                  {
-                    type: 'element',
-                    tagName: 'div', // block
-                    properties: {
-                      className: ['cards'],
-                    },
-                    children: [
-                      {
-                        type: 'element',
-                        tagName: 'div', // block item
-                        properties: {},
-                        children: [],
-                      },
-                      {
-                        type: 'element',
-                        tagName: 'div', // block item
-                        properties: {},
-                        children: [],
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      };
+      const bodyTree = h('body', {}, [
+        h('main', {}, [
+          h('div', {}, [
+            h('div', { className: ['cards'] }, [
+              h('div', {}, []),
+              h('div', {}, [])
+            ])
+          ])
+        ])
+      ]);
 
       const ueConfig = {
         'component-definition': {
@@ -235,19 +157,9 @@ describe('UE attributes', () => {
     });
 
     it('adds UE attributes to body for page metadata', () => {
-      const bodyTree = {
-        type: 'element',
-        tagName: 'body',
-        properties: {},
-        children: [
-          {
-            type: 'element',
-            tagName: 'main',
-            properties: {},
-            children: [],
-          },
-        ],
-      };
+      const bodyTree = h('body', {}, [
+        h('main', {}, [])
+      ]);
 
       const ueConfig = {
         'component-model': [
@@ -274,19 +186,9 @@ describe('UE attributes', () => {
     });
 
     it('does not add page metadata attributes when not defined in config', () => {
-      const bodyTree = {
-        type: 'element',
-        tagName: 'body',
-        properties: {},
-        children: [
-          {
-            type: 'element',
-            tagName: 'main',
-            properties: {},
-            children: [],
-          },
-        ],
-      };
+      const bodyTree = h('body', {}, [
+        h('main', {}, [])
+      ]);
 
       const ueConfig = {
         'component-definition': {
@@ -310,39 +212,14 @@ describe('UE attributes', () => {
     });
 
     it('adds UE attributes to richtext within sections', () => {
-      const bodyTree = {
-        type: 'element',
-        tagName: 'body',
-        properties: {},
-        children: [
-          {
-            type: 'element',
-            tagName: 'main',
-            properties: {},
-            children: [
-              {
-                type: 'element',
-                tagName: 'div', // section
-                properties: {},
-                children: [
-                  {
-                    type: 'element',
-                    tagName: 'h1',
-                    properties: {},
-                    children: [ { type: 'text', value: 'Heading 1' } ],
-                  },
-                  {
-                    type: 'element',
-                    tagName: 'p',
-                    properties: {},
-                    children: [ { type: 'text', value: 'Paragraph 1' } ],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      };
+      const bodyTree = h('body', {}, [
+        h('main', {}, [
+          h('div', {}, [
+            h('h1', {}, [{ type: 'text', value: 'Heading 1' }]),
+            h('p', {}, [{ type: 'text', value: 'Paragraph 1' }])
+          ])
+        ])
+      ]);
 
       const ueConfig = {
         'component-definition': {
@@ -367,40 +244,15 @@ describe('UE attributes', () => {
     });
 
     it('adds UE attributes to pictures within sections', () => {
-      const bodyTree = {
-        type: 'element',
-        tagName: 'body',
-        properties: {},
-        children: [
-          {
-            type: 'element',
-            tagName: 'main',
-            properties: {},
-            children: [
-              {
-                type: 'element',
-                tagName: 'div', // section
-                properties: {},
-                children: [
-                  {
-                    type: 'element',
-                    tagName: 'picture',
-                    properties: {},
-                    children: [
-                      {
-                        type: 'element',
-                        tagName: 'img',
-                        properties: {},
-                        children: [],
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      };
+      const bodyTree = h('body', {}, [
+        h('main', {}, [
+          h('div', {}, [
+            h('picture', {}, [
+              h('img', {}, [])
+            ])
+          ])
+        ])
+      ]);
 
       const ueConfig = {
         'component-definition': {
@@ -425,61 +277,19 @@ describe('UE attributes', () => {
     });
 
     it('adds UE attributes to block fields based on model definition', () => {
-      const bodyTree = {
-        type: 'element',
-        tagName: 'body',
-        properties: {},
-        children: [
-          {
-            type: 'element',
-            tagName: 'main',
-            properties: {},
-            children: [
-              {
-                type: 'element',
-                tagName: 'div', // section
-                properties: {},
-                children: [
-                  {
-                    type: 'element',
-                    tagName: 'div', // block
-                    properties: {
-                      className: ['hero-block'],
-                    },
-                    children: [
-                      {
-                        type: 'element',
-                        tagName: 'div',
-                        properties: {},
-                        children: [{ type: 'text', value: 'Hero Text' }],
-                      },
-                      {
-                        type: 'element',
-                        tagName: 'picture',
-                        properties: {},
-                        children: [
-                          {
-                            type: 'element',
-                            tagName: 'img',
-                            properties: {},
-                            children: [],
-                          },
-                        ],
-                      },
-                      {
-                        type: 'element',
-                        tagName: 'div',
-                        properties: {},
-                        children: [{ type: 'text', value: 'Array Field' }],
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      };
+      const bodyTree = h('body', {}, [
+        h('main', {}, [
+          h('div', {}, [
+            h('div', { className: ['hero-block'] }, [
+              h('div', {}, [{ type: 'text', value: 'Hero Text' }]),
+              h('picture', {}, [
+                h('img', {}, [])
+              ]),
+              h('div', {}, [{ type: 'text', value: 'Array Field' }])
+            ])
+          ])
+        ])
+      ]);
 
       const ueConfig = {
         'component-definition': {
@@ -537,39 +347,14 @@ describe('UE attributes', () => {
     });
 
     it('handles whitespace text nodes in wrapParagraphs', () => {
-      const bodyTree = {
-        type: 'element',
-        tagName: 'body',
-        properties: {},
-        children: [
-          {
-            type: 'element',
-            tagName: 'main',
-            properties: {},
-            children: [
-              {
-                type: 'element',
-                tagName: 'div', // section
-                properties: {},
-                children: [
-                  {
-                    type: 'element',
-                    tagName: 'h1',
-                    properties: {},
-                    children: [{ type: 'text', value: 'Heading 1' }],
-                  },
-                  {
-                    type: 'element',
-                    tagName: 'p',
-                    properties: {},
-                    children: [{ type: 'text', value: 'Paragraph 1' }],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      };
+      const bodyTree = h('body', {}, [
+        h('main', {}, [
+          h('div', {}, [
+            h('h1', {}, [{ type: 'text', value: 'Heading 1' }]),
+            h('p', {}, [{ type: 'text', value: 'Paragraph 1' }])
+          ])
+        ])
+      ]);
 
       const ueConfig = {
         'component-definition': {
@@ -598,45 +383,15 @@ describe('UE attributes', () => {
     });
 
     it('handles multiple consecutive richtext wrappers', () => {
-      const bodyTree = {
-        type: 'element',
-        tagName: 'body',
-        properties: {},
-        children: [
-          {
-            type: 'element',
-            tagName: 'main',
-            properties: {},
-            children: [
-              {
-                type: 'element',
-                tagName: 'div', // section
-                properties: {},
-                children: [
-                  {
-                    type: 'element',
-                    tagName: 'h1',
-                    properties: {},
-                    children: [{ type: 'text', value: 'Heading 1' }],
-                  },
-                  {
-                    type: 'element',
-                    tagName: 'img',
-                    properties: {},
-                    children: [],
-                  },
-                  {
-                    type: 'element',
-                    tagName: 'p',
-                    properties: {},
-                    children: [{ type: 'text', value: 'Paragraph 1' }],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      };
+      const bodyTree = h('body', {}, [
+        h('main', {}, [
+          h('div', {}, [
+            h('h1', {}, 'Heading 1'),
+            h('img', {}),
+            h('p', {}, 'Paragraph 1')
+          ])
+        ])
+      ]);
 
       const ueConfig = {
         'component-definition': {
@@ -675,67 +430,62 @@ describe('UE attributes', () => {
 
   describe('removeUEAttributes', () => {
     it('removes all UE attributes from a tree', () => {
-      const tree = {
-        type: 'element',
-        tagName: 'div',
-        properties: {
-          dataAueResource: 'urn:ab:section-0',
-          dataAueType: 'container',
-          dataAueLabel: 'Section',
-          id: 'section1',
-          class: 'section',
-        },
-        children: [
-          {
-            type: 'element',
-            tagName: 'div',
-            properties: {
-              dataAueResource: 'urn:ab:section-0/block-0',
-              dataAueType: 'component',
-              class: 'block',
-            },
-            children: [],
-          },
-        ],
-      };
+      const tree = h('div', {
+        'data-aue-resource': 'urn:ab:section-0',
+        'data-aue-type': 'container',
+        'data-aue-label': 'Section',
+        className: 'section',
+      }, [
+        h('div', {
+          'data-aue-resource': 'urn:ab:section-0/block-0',
+          'data-aue-type': 'component',
+          className: 'block',
+        }, [])
+      ]);
 
       const result = attributes.removeUEAttributes(tree);
       assert.equal(result.properties.dataAueResource, undefined);
       assert.equal(result.properties.dataAueType, undefined);
-      assert.equal(result.properties.dataAueLabel, undefined);
-      assert.equal(result.properties.id, 'section1'); // Non-UE attribute should remain
-      assert.equal(result.properties.class, 'section'); // Non-UE attribute should remain
+      assert.equal(result.properties.dataAueLabel, undefined);// Non-UE attribute should remain
+      assert.equal(result.properties.className, 'section'); // Non-UE attribute should remain
 
       const child = result.children[0];
       assert.equal(child.properties.dataAueResource, undefined);
       assert.equal(child.properties.dataAueType, undefined);
-      assert.equal(child.properties.class, 'block'); // Non-UE attribute should remain
+      assert.equal(child.properties.className, 'block'); // Non-UE attribute should remain
     });
   });
 
   describe('unwrapParagraphs', () => {
     it('unwraps richtext div elements in main content', () => {
+      const tree = h('body', {}, [
+        h('header', {}, []),
+        h('main', {}, [
+          h('div', {}, [
+            h('div', {
+              'data-aue-resource': 'urn:ab:section-0/text-0',
+              'data-aue-type': 'richtext',
+              'data-aue-label': 'Text',
+              'data-aue-prop': 'text',
+              'data-aue-behavior': 'component'
+            }, [
+              h('h1', {}, 'Heading 1'),
+              h('p', {}, 'Paragraph 1')
+            ]),
+            h('div', {
+              'data-aue-resource': 'urn:ab:section-0/text-1',
+              'data-aue-type': 'richtext',
+              'data-aue-label': 'Text',
+              'data-aue-prop': 'text',
+              'data-aue-behavior': 'component'
+            }, [
+              h('p', {}, 'Paragraph 2')
+            ])
+          ])
+        ]),
+        h('footer', {}, [])
+      ]);
 
-      let html = `
-      <body>
-        <header></header>
-        <main>
-          <div>
-            <div data-aue-resource="urn:ab:section-0/text-0" data-aue-type="richtext" data-aue-label="Text" data-aue-prop="text" data-aue-behavior="component">
-              <h1>Heading 1</h1>
-              <p>Paragraph 1</p>
-            </div>
-            <div data-aue-resource="urn:ab:section-0/text-1" data-aue-type="richtext" data-aue-label="Text" data-aue-prop="text" data-aue-behavior="component">
-              <p>Paragraph 2</p>
-            </div>
-          </div>  
-        </main>
-        <footer></footer>
-      </body>
-      `;
-
-      const tree = fromHtml(html);
-      minifyWhitespace(tree);
       const result = attributes.unwrapParagraphs(tree);
       const section = select('main > div', result);
 
@@ -749,29 +499,36 @@ describe('UE attributes', () => {
     });
 
     it('unwraps richtext div elements combined with other elements', () => {
-      let html = `
-      <body>
-        <header></header>
-        <main>
-          <div>
-            <div data-aue-resource="urn:ab:section-0/text-0" data-aue-type="richtext" data-aue-label="Text" data-aue-prop="text" data-aue-behavior="component">
-              <h1>Heading 1</h1>
-              <p>Paragraph 1</p>
-            </div>            
-            <img src="https://placehold.co/600x400" />
-            <div data-aue-resource="urn:ab:section-0/text-1" data-aue-type="richtext" data-aue-label="Text" data-aue-prop="text" data-aue-behavior="component">
-              <p>Paragraph 2</p>
-            </div>
-          </div>  
-        </main>
-        <footer></footer>
-      </body>
-      `;
+      const tree = h('body', {}, [
+        h('header', {}, []),
+        h('main', {}, [
+          h('div', {}, [
+            h('div', {
+              'data-aue-resource': 'urn:ab:section-0/text-0',
+              'data-aue-type': 'richtext',
+              'data-aue-label': 'Text',
+              'data-aue-prop': 'text',
+              'data-aue-behavior': 'component'
+            }, [
+              h('h1', {}, 'Heading 1'),
+              h('p', {}, 'Paragraph 1')
+            ]),
+            h('img', { src: 'https://placehold.co/600x400' }, []),
+            h('div', {
+              'data-aue-resource': 'urn:ab:section-0/text-1',
+              'data-aue-type': 'richtext',
+              'data-aue-label': 'Text',
+              'data-aue-prop': 'text',
+              'data-aue-behavior': 'component'
+            }, [
+              h('p', {}, 'Paragraph 2')
+            ])
+          ])
+        ]),
+        h('footer', {}, [])
+      ]);
 
-      const tree = fromHtml(html);
-      minifyWhitespace(tree);
       const result = attributes.unwrapParagraphs(tree);
-      
       const section = select('main > div', result);
 
       assert.equal(section.children.length, 4);
@@ -782,35 +539,49 @@ describe('UE attributes', () => {
     });
 
     it('does not unwrap richtext div elements within a block', () => {
-      let html = `
-      <body>
-        <header></header>
-        <main>
-          <div>
-            <div class="hero" data-aue-resource="urn:ab:section-0/block-0" data-aue-type="component" data-aue-label="Hero" data-aue-model="hero">
-              <div>
-                <div data-aue-type="richtext" data-aue-prop="1234" data-aue-label="Hero Text">
-                  <h1>Heading 1</h1>
-                  <p>Paragraph 1</p>
-                  <p><a href="/adobe" title="Adobe"><em>Adobe</em></a></p>
-                </div>            
-              </div>
-              <div>
-                <div>
-                  <img src="https://placehold.co/600x400" data-aue-type="media" data-aue-prop="1234" data-aue-label="Hero Image"/>
-                </div>
-              </div>
-            </div>
-          </div>  
-        </main>
-        <footer></footer>
-      </body>
-      `;
+      const tree = h('body', {}, [
+        h('header', {}, []),
+        h('main', {}, [
+          h('div', {}, [
+            h('div', {
+              className: ['hero'],
+              'data-aue-resource': 'urn:ab:section-0/block-0',
+              'data-aue-type': 'component',
+              'data-aue-label': 'Hero',
+              'data-aue-model': 'hero'
+            }, [
+              h('div', {}, [
+                h('div', {
+                  'data-aue-type': 'richtext',
+                  'data-aue-prop': '1234',
+                  'data-aue-label': 'Hero Text'
+                }, [
+                  h('h1', {}, 'Heading 1'),
+                  h('p', {}, 'Paragraph 1'),
+                  h('p', {}, [
+                    h('a', { href: '/adobe', title: 'Adobe' }, [
+                      h('em', {}, 'Adobe')
+                    ])
+                  ])
+                ])
+              ]),
+              h('div', {}, [
+                h('div', {}, [
+                  h('img', {
+                    src: 'https://placehold.co/600x400',
+                    'data-aue-type': 'media',
+                    'data-aue-prop': '1234',
+                    'data-aue-label': 'Hero Image'
+                  }, [])
+                ])
+              ])
+            ])
+          ])
+        ]),
+        h('footer', {}, [])
+      ]);
 
-      const tree = fromHtml(html);
-      minifyWhitespace(tree);
       const result = attributes.unwrapParagraphs(tree);
-      
       const section = select('main > div', result);
       const block = section.children[0];
       assert.equal(block.children.length, 2);

@@ -29,6 +29,7 @@
     "hast-util-select": "^6.0.3",
     "hast-util-to-html": "^9.0.4",
     "hast-util-to-string": "^3.0.1",
+    "hastscript": "^9.0.1",
     "unist-util-visit": "^5.0.0"
   }
 }

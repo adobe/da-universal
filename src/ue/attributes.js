@@ -12,6 +12,7 @@
 import { select, selectAll } from 'hast-util-select';
 import { visit } from 'unist-util-visit';
 import { isElement } from 'hast-util-is-element';
+import { h } from 'hastscript';
 import {
   getBlockNameAndClasses,
   removeWhitespaceTextNodes,
@@ -58,12 +59,7 @@ function wrapParagraphs(section) {
     } else {
       // Add to the current wrapper, or create a new one
       if (!currentWrapper) {
-        currentWrapper = {
-          type: 'element',
-          tagName: 'div',
-          properties: { className: ['richtext'] },
-          children: [],
-        };
+        currentWrapper = h('div', { className: ['richtext'] });
       }
       currentWrapper.children.push(child);
     }
