@@ -92,23 +92,6 @@ export function readBlockConfig($block) {
   return config;
 }
 
-/**
- * Creates an element node with the specified tag name, properties, and children.
- *
- * @param {string} tagName - The name of the HTML tag for the element.
- * @param {Object} properties - An object representing the properties/attributes of the element.
- * @param {Array} [children=[]] - An array of child nodes for the element.
- * @returns {Object} The created element node.
- */
-export function createElementNode(tagName, properties, children = []) {
-  return {
-    type: 'element',
-    tagName,
-    properties,
-    children,
-  };
-}
-
 export function removeWhitespaceTextNodes(tree) {
   visit(tree, 'text', (node, index, parent) => {
     if (parent && typeof node.value === 'string' && /^\s*$/.test(node.value)) {

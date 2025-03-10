@@ -14,8 +14,8 @@ import { format } from 'hast-util-format';
 import { fromHtml } from 'hast-util-from-html';
 import { select, selectAll } from 'hast-util-select';
 import { toHtml } from 'hast-util-to-html';
+import { h } from 'hastscript';
 import { getHtmlDoc, getUEConfig, getUEHtmlHeadEntries } from './scaffold.js';
-import { createElementNode } from '../utils/hast.js';
 import { injectUEAttributes } from './attributes.js';
 import { extractLocalMetadata, fetchBulkMetadata } from './metadata.js';
 import rewriteIcons from './rewrite-icons.js';
@@ -61,11 +61,11 @@ function injectMetadata(metadata, headNode) {
   Object.entries(metadata).forEach(([name, value]) => {
     if (name === 'title') {
       headNode.children.push(
-        createElementNode('title', {}, [{ type: 'text', value }]),
+        h('title', {}, [{ type: 'text', value }]),
       );
     } else {
       headNode.children.push(
-        createElementNode('meta', {
+        h('meta', {
           name,
           content: value,
         }),

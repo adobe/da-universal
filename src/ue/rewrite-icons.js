@@ -80,4 +80,3 @@ export default function rewrite(bodyTree) {
     return idx + 1;
   });
 }
- 

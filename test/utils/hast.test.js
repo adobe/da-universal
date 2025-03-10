@@ -44,32 +44,6 @@ describe('hast utilities', () => {
     });
   });
 
-  describe('createElementNode', () => {
-    it('creates element node with given properties', () => {
-      const element = utils.createElementNode('div', { class: 'test' }, [
-        { type: 'text', value: 'content' },
-      ]);
-      
-      assert.deepEqual(element, {
-        type: 'element',
-        tagName: 'div',
-        properties: { class: 'test' },
-        children: [{ type: 'text', value: 'content' }],
-      });
-    });
-
-    it('creates element node with default empty children', () => {
-      const element = utils.createElementNode('span', { id: 'test' });
-      
-      assert.deepEqual(element, {
-        type: 'element',
-        tagName: 'span',
-        properties: { id: 'test' },
-        children: [],
-      });
-    });
-  });
-
   describe('removeWhitespaceTextNodes', () => {
     it('removes whitespace text nodes', () => {
       const tree = {
