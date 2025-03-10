@@ -11,7 +11,7 @@
  */
 
 import { fromHtml } from 'hast-util-from-html';
-import { createElementNode } from '../utils/hast.js';
+import { h } from 'hastscript';
 
 export function getHtmlDoc() {
   const htmlDocStr = '<!DOCTYPE html><html><head></head><body></body></html>';
@@ -24,50 +24,50 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
     site,
     ref,
     path,
+    isLocal,
   } = daCtx;
   const { ueHostname, ueService } = aemCtx;
   const children = [];
 
-  children.push(
-    createElementNode('meta', {
-      name: 'urn:adobe:aue:system:ab',
-      content: `da:https://${ref}--${site}--${org}.${ueHostname}${path}`,
-    }),
-  );
+  children.push(h('meta', {
+    name: 'urn:adobe:aue:system:ab',
+    content: isLocal ? `da:https://${ueHostname}/${org}/${site}${path}` : `da:https://${ref}--${site}--${org}.${ueHostname}${path}`,
+  }));
+
   if (ueService) {
     children.push(
-      createElementNode('meta', {
+      h('meta', {
         name: 'urn:adobe:aue:config:service',
         content: ueService,
       }),
     );
   }
   children.push(
-    createElementNode('script', {
+    h('script', {
       src: 'https://universal-editor-service.adobe.io/cors.js',
       async: '',
     }),
   );
   children.push(
-    createElementNode('script', {
+    h('script', {
       type: 'application/vnd.adobe.aue.component+json',
-      src: daCtx.isLocal
+      src: isLocal
         ? `/${org}/${site}/component-definition.json`
         : '/component-definition.json',
     }),
   );
   children.push(
-    createElementNode('script', {
+    h('script', {
       type: 'application/vnd.adobe.aue.model+json',
-      src: daCtx.isLocal
+      src: isLocal
         ? `/${org}/${site}/component-models.json`
         : '/component-models.json',
     }),
   );
   children.push(
-    createElementNode('script', {
+    h('script', {
       type: 'application/vnd.adobe.aue.filter+json',
-      src: daCtx.isLocal
+      src: isLocal
         ? `/${org}/${site}/component-filters.json`
         : '/component-filters.json',
     }),

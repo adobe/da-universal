@@ -157,7 +157,7 @@ export function injectUEAttributes(bodyTree, ueConfig) {
           'data-aue-resource': `urn:ab:section-${sIndex}/text-${wIndex}`,
           'data-aue-type': 'richtext',
           'data-aue-label': 'Text',
-          'data-aue-prop': 'text',
+          'data-aue-prop': 'root',
           'data-aue-behavior': 'component',
         });
         // eslint-disable-next-line no-param-reassign
