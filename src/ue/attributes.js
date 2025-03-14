@@ -59,7 +59,7 @@ function wrapParagraphs(section) {
     } else {
       // Add to the current wrapper, or create a new one
       if (!currentWrapper) {
-        currentWrapper = h('div', { className: ['richtext'] });
+        currentWrapper = h('div', { className: ['default-content-wrapper'] });
       }
       currentWrapper.children.push(child);
     }
@@ -148,22 +148,6 @@ export function injectUEAttributes(bodyTree, ueConfig) {
         'data-aue-filter': 'section',
       });
 
-      // handle rich text
-      // eslint-disable-next-line no-param-reassign
-      section = wrapParagraphs(section);
-      const richTextWrappers = selectAll(':scope>div.richtext', section);
-      richTextWrappers.forEach((wrapper, wIndex) => {
-        addAttributes(wrapper, {
-          'data-aue-resource': `urn:ab:section-${sIndex}/text-${wIndex}`,
-          'data-aue-type': 'richtext',
-          'data-aue-label': 'Text',
-          'data-aue-prop': 'root',
-          'data-aue-behavior': 'component',
-        });
-        // eslint-disable-next-line no-param-reassign
-        delete wrapper.properties.className;
-      });
-
       // handle images
       const images = selectAll(':scope>picture', section);
       images.forEach((picture, iIndex) => {
@@ -226,6 +210,20 @@ export function injectUEAttributes(bodyTree, ueConfig) {
             }
           }
         }
+      });
+
+      // handle rich text, this must be done after blocks are processed
+      // eslint-disable-next-line no-param-reassign
+      section = wrapParagraphs(section);
+      const richTextWrappers = selectAll(':scope>div.default-content-wrapper', section);
+      richTextWrappers.forEach((wrapper, wIndex) => {
+        addAttributes(wrapper, {
+          'data-aue-resource': `urn:ab:section-${sIndex}/text-${wIndex}`,
+          'data-aue-type': 'richtext',
+          'data-aue-label': 'Text',
+          'data-aue-prop': 'root',
+          'data-aue-behavior': 'component',
+        });
       });
     });
   }
