@@ -241,6 +241,7 @@ describe('UE attributes', () => {
       assert.equal(richTextDiv.properties['data-aue-type'], 'richtext');
       assert.equal(richTextDiv.properties['data-aue-label'], 'Text');
       assert.equal(richTextDiv.properties['data-aue-prop'], 'root');
+      assert.equal(richTextDiv.properties['className'], 'richtext');
     });
 
     it('adds UE attributes to pictures within sections', () => {
