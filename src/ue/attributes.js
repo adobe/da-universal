@@ -160,8 +160,6 @@ export function injectUEAttributes(bodyTree, ueConfig) {
           'data-aue-prop': 'root',
           'data-aue-behavior': 'component',
         });
-        // eslint-disable-next-line no-param-reassign
-        delete wrapper.properties.className;
       });
 
       // handle images
@@ -188,7 +186,7 @@ export function injectUEAttributes(bodyTree, ueConfig) {
       blocks.forEach((block, bIndex) => {
         const { name: blockName } = getBlockNameAndClasses(block);
         if (blockName) {
-          if (blockName !== 'metadata' && blockName !== 'section-metadata') {
+          if (blockName !== 'metadata' && blockName !== 'section-metadata' && blockName !== 'richtext') {
             const blockCmpDef = getComponentDefinition(ueConfig, blockName);
             addAttributes(block, {
               'data-aue-resource': `urn:ab:section-${sIndex}/block-${bIndex}`,
