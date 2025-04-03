@@ -25,6 +25,7 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
     ref,
     path,
     isLocal,
+    orgSiteInPath,
   } = daCtx;
   const { ueHostname, ueService } = aemCtx;
   const children = [];
@@ -51,7 +52,7 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
   children.push(
     h('script', {
       type: 'application/vnd.adobe.aue.component+json',
-      src: isLocal
+      src: orgSiteInPath
         ? `/${org}/${site}/component-definition.json`
         : '/component-definition.json',
     }),
@@ -59,7 +60,7 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
   children.push(
     h('script', {
       type: 'application/vnd.adobe.aue.model+json',
-      src: isLocal
+      src: orgSiteInPath
         ? `/${org}/${site}/component-models.json`
         : '/component-models.json',
     }),
@@ -67,7 +68,7 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
   children.push(
     h('script', {
       type: 'application/vnd.adobe.aue.filter+json',
-      src: isLocal
+      src: orgSiteInPath
         ? `/${org}/${site}/component-filters.json`
         : '/component-filters.json',
     }),

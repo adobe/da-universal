@@ -125,7 +125,8 @@ describe('UE scaffold', () => {
     it('generates correct head entries for local environment', () => {
       daCtx.isLocal = true;
       daCtx.hostname = 'localhost';
-      
+      daCtx.orgSiteInPath = true;
+
       const entries = scaffold.getUEHtmlHeadEntries(daCtx, aemCtx);
 
       // Check meta tags
@@ -180,6 +181,58 @@ describe('UE scaffold', () => {
       assert.strictEqual(
         componentFiltersScript.properties.src,
         '/org/site/component-filters.json'
+      );
+    });
+
+    it('doesn\'t set paths in head if using a subdomain on localhost', () => {
+      daCtx.isLocal = true;
+      daCtx.hostname = 'main--site--org.da.localhost';
+      daCtx.orgSiteInPath = false;
+
+      const entries = scaffold.getUEHtmlHeadEntries(daCtx, aemCtx);
+      const metaTags = entries.filter((entry) => entry.tagName === 'meta');
+
+      // Check system:ab meta tag
+      const ueSystemTag = metaTags.find(
+        (tag) => tag.properties.name === 'urn:adobe:aue:system:ab'
+      );
+      assert.ok(ueSystemTag);
+      assert.strictEqual(
+        ueSystemTag.properties.content,
+        'da:https://test-ue-host/org/site/some-path'
+      );
+
+      const scriptTags = entries.filter((entry) => entry.tagName === 'script');
+
+      // Check component definition script
+      const componentDefScript = scriptTags.find(
+        (tag) =>
+          tag.properties.type === 'application/vnd.adobe.aue.component+json'
+      );
+      assert.ok(componentDefScript);
+      assert.strictEqual(
+        componentDefScript.properties.src,
+        '/component-definition.json'
+      );
+
+      // Check component models script
+      const componentModelsScript = scriptTags.find(
+        (tag) => tag.properties.type === 'application/vnd.adobe.aue.model+json'
+      );
+      assert.ok(componentModelsScript);
+      assert.strictEqual(
+        componentModelsScript.properties.src,
+        '/component-models.json'
+      );
+
+      // Check component filters script
+      const componentFiltersScript = scriptTags.find(
+        (tag) => tag.properties.type === 'application/vnd.adobe.aue.filter+json'
+      );
+      assert.ok(componentFiltersScript);
+      assert.strictEqual(
+        componentFiltersScript.properties.src,
+        '/component-filters.json'
       );
     });
   });
