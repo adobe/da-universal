@@ -18,6 +18,7 @@ function getRefSiteOrgPath(hostname, pathname) {
       site,
       org,
       path: `/${parts.join('/')}`,
+      orgSiteInPath: true,
     };
   }
   const parts = hostname.split('.');
@@ -29,12 +30,13 @@ function getRefSiteOrgPath(hostname, pathname) {
         site: subdomainParts[1],
         org: subdomainParts[2],
         path: pathname,
+        orgSiteInPath: false,
       };
     }
   }
 
   return {
-    ref: undefined, site: undefined, org: undefined, path: pathname,
+    ref: undefined, site: undefined, org: undefined, path: pathname, orgSiteInPath: false,
   };
 }
 
@@ -48,7 +50,7 @@ export function getDaCtx(req) {
 
   // TODO this requires some improvements to be more robust
   const {
-    org, site, path, ref,
+    org, site, path, ref, orgSiteInPath,
   } = getRefSiteOrgPath(hostname, pathname);
 
   // Santitize the string
@@ -60,7 +62,7 @@ export function getDaCtx(req) {
 
   // Set base details
   const daCtx = {
-    path, org, site, ref, isLocal: hostname === 'localhost',
+    path, org, site, ref, isLocal: hostname.endsWith('localhost'), orgSiteInPath,
   };
 
   // Sanitize the remaining path parts

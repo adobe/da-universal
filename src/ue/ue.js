@@ -23,17 +23,16 @@ import rewriteIcons from './rewrite-icons.js';
 /**
  * Injects AEM HTML head entries into the head node of an HTML document.
  *
- * @param {Object} daCtx - The Dark Alley context object containing org, site,
- * and isLocal properties.
+ * @param {Object} daCtx - The Dark Alley context object containing org and site
  * @param {Object} headNode - The head node of the HTML document where AEM head entries
  * will be injected.
  * @param {string} headHtmlStr - The HTML string containing head entries from AEM.
  */
 function injectAEMHtmlHeadEntries(daCtx, headNode, headHtmlStr) {
-  const { org, site, isLocal } = daCtx;
+  const { org, site, orgSiteInPath } = daCtx;
   const aemHeadHtmlTree = fromHtml(headHtmlStr, { fragment: true });
 
-  if (isLocal) {
+  if (orgSiteInPath) {
     const headScriptsAndLinks = selectAll(
       'script[src], link[href]',
       aemHeadHtmlTree,
