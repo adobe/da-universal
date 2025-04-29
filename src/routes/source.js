@@ -15,8 +15,18 @@ import { prepareHtml } from '../ue/ue.js';
 import getObject from '../storage/object.js';
 
 export async function getSource({ env, daCtx }) {
+  // get the AEM parts (head.html)
   const aemCtx = getAemCtx(env, daCtx);
   const headHtml = await getAEMHtml(aemCtx, '/head.html');
+  if (!headHtml) {
+    const message = 'Not found: Unable to retrieve AEM branch';
+    return {
+      body: message,
+      status: 404,
+      contentType: 'text/html; charset=utf-8',
+      contentLength: message.length,
+    };
+  }
 
   let objResp = await getObject(env, daCtx);
   if (objResp && objResp.status === 200) {
