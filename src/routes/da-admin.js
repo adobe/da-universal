@@ -29,6 +29,20 @@ function getTextBody(data) {
   return { body: data, type: 'text/html' };
 }
 
+function getAuthToken(req, headers) {
+  if (req.headers.get('Authorization')) {
+    headers.set('Authorization', req.headers.get('Authorization'));
+  } else {
+    const cookies = req.headers.get('Cookie');
+    if (cookies) {
+      const authTokenMatch = cookies.match(/auth_token=([^;]+)/);
+      if (authTokenMatch && authTokenMatch[1]) {
+        headers.set('Authorization', `Bearer ${authTokenMatch[1]}`);
+      }
+    }
+  }
+}
+
 export async function daSourceGet({ req, env, daCtx }) {
   const {
     org, site, path, ext,
@@ -36,32 +50,29 @@ export async function daSourceGet({ req, env, daCtx }) {
 
   // get auth token from cookie or Authorization header
   const headers = new Headers();
-  if (req.headers.get('Authorization')) {
-    headers.set('Authorization', req.headers.get('Authorization'));
-  }
-  const cookies = req.headers.get('Cookie');
-  if (cookies) {
-    const authTokenMatch = cookies.match(/auth_token=([^;]+)/);
-    if (authTokenMatch && authTokenMatch[1]) {
-      headers.set('Authorization', `Bearer ${authTokenMatch[1]}`);
-    }
-  }
-
+  getAuthToken(req, headers);
   // check if Authorization header is present
   if (!headers.has('Authorization')) {
-    const message = '<html><body></body></html>';
-    return new Response(message, {
+    return new Response('401 Unauthorized', {
       status: 401,
       headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Content-Length': message.length,
+        'Content-Type': 'text/plain',
       },
     });
   }
 
-  // get the AEM parts (head.html, ue-template.html)
+  // get the AEM parts (head.html)
   const aemCtx = getAemCtx(env, daCtx);
   const headHtml = await getAEMHtml(aemCtx, '/head.html');
+  if (!headHtml) {
+    const message = '<html><body><h1>Not found: Unable to retrieve AEM branch</h1></body></html>';
+    return daResp({
+      body: message,
+      status: 404,
+      contentType: 'text/html; charset=utf-8',
+      contentLength: message.length,
+    });
+  }
 
   // get the content from DA admin
   const adminUrl = new URL(
@@ -82,13 +93,23 @@ export async function daSourceGet({ req, env, daCtx }) {
     // enrich content with HTML header and UE attributes
     const originalBodyHtml = await daAdminResp.text();
 
-    const responseHtml = await prepareHtml(daCtx, aemCtx, originalBodyHtml, headHtml);
+    const responseHtml = await prepareHtml(
+      daCtx,
+      aemCtx,
+      originalBodyHtml,
+      headHtml,
+    );
     response.body = responseHtml;
     response.contentLength = responseHtml.length;
   } else {
     // return a template for new page if no content found
     const templateHtml = await getAEMHtml(aemCtx, '/ue-template.html');
-    const responseHtml = await prepareHtml(daCtx, aemCtx, templateHtml, headHtml);
+    const responseHtml = await prepareHtml(
+      daCtx,
+      aemCtx,
+      templateHtml,
+      headHtml,
+    );
     response.body = responseHtml;
     response.contentLength = responseHtml.length;
   }
