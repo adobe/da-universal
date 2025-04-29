@@ -53,10 +53,12 @@ export async function daSourceGet({ req, env, daCtx }) {
   getAuthToken(req, headers);
   // check if Authorization header is present
   if (!headers.has('Authorization')) {
-    return new Response('401 Unauthorized', {
+    const message = '<html><body></body></html>';
+    return new Response(message, {
       status: 401,
       headers: {
-        'Content-Type': 'text/plain',
+        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Length': message.length,
       },
     });
   }
