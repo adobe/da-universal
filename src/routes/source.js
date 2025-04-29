@@ -19,7 +19,7 @@ export async function getSource({ env, daCtx }) {
   const aemCtx = getAemCtx(env, daCtx);
   const headHtml = await getAEMHtml(aemCtx, '/head.html');
   if (!headHtml) {
-    const message = 'Not found: Unable to retrieve AEM branch';
+    const message = '<html><body><h1>Not found: Unable to retrieve AEM branch</h1></body></html>';
     return {
       body: message,
       status: 404,
