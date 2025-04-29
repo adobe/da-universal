@@ -19,6 +19,12 @@ export function getCookie({ req }) {
 
     if (cookieValue) {
       const respHeaders = new Headers();
+
+      const origin = req.headers.get('Origin');
+      respHeaders.append('Access-Control-Allow-Origin', origin);
+      respHeaders.append('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS');
+      respHeaders.append('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+      respHeaders.append('Access-Control-Allow-Credentials', 'true');
       respHeaders.append('Content-Type', 'text/plain');
       respHeaders.append('Set-Cookie', `auth_token=${cookieValue}; Secure; Path=/; HttpOnly; SameSite=None; Partitioned; Max-Age=84600`);
       return new Response('cookie set', { headers: respHeaders });
