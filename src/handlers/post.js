@@ -9,9 +9,9 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { handleAdminProxyRequest } from '../routes/admin-proxy.js';
+import { daSourcePost } from '../routes/da-admin.js';
 
 export default async function postHandler({ req, env, daCtx }) {
   // for now forward all POST requests to the da-admin
-  return handleAdminProxyRequest({ req, env, daCtx });
+  return daSourcePost({ req, env, daCtx });
 }
