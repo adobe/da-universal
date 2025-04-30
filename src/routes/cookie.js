@@ -19,9 +19,7 @@ export function getCookie({ req }) {
 
     if (cookieValue) {
       const respHeaders = new Headers();
-
-      const origin = req.headers.get('Origin');
-      respHeaders.append('Access-Control-Allow-Origin', origin);
+      respHeaders.append('Access-Control-Allow-Origin', 'experience.adobe.com');
       respHeaders.append('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS');
       respHeaders.append('Access-Control-Allow-Headers', 'Authorization, Content-Type');
       respHeaders.append('Access-Control-Allow-Credentials', 'true');

@@ -16,9 +16,8 @@ export default async function optionsHandler({ req }) {
     && req.headers.get('Access-Control-Request-Method') !== null
     && req.headers.get('Access-Control-Request-Headers') !== null
   ) {
-    const origin = req.headers.get('Origin');
     const corsHeaders = {
-      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Origin': 'experience.adobe.com',
       'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Authorization, Content-Type',
       'Access-Control-Allow-Credentials': 'true',
