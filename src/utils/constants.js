@@ -10,22 +10,11 @@
  * governing permissions and limitations under the License.
  */
 
-import { DEFAULT_CORS_HEADERS } from '../utils/constants.js';
+export const TRUSTED_ORIGINS = ['https://experience.adobe.com'];
 
-export default async function optionsHandler({ req }) {
-  if (
-    req.headers.get('Origin') !== null
-    && req.headers.get('Access-Control-Request-Method') !== null
-    && req.headers.get('Access-Control-Request-Headers') !== null
-  ) {
-    return new Response(null, {
-      headers: { ...DEFAULT_CORS_HEADERS },
-    });
-  } else {
-    return new Response(null, {
-      headers: {
-        Allow: 'GET, HEAD, POST, OPTIONS',
-      },
-    });
-  }
-}
+export const DEFAULT_CORS_HEADERS = {
+  'Access-Control-Allow-Origin': 'https://experience.adobe.com',
+  'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+  'Access-Control-Allow-Credentials': 'true',
+};

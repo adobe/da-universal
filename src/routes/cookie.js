@@ -10,23 +10,23 @@
  * governing permissions and limitations under the License.
  */
 import { daResp } from '../responses/index.js';
+import { DEFAULT_CORS_HEADERS, TRUSTED_ORIGINS } from '../utils/constants.js';
 
 export function getCookie({ req }) {
   const { headers } = req;
+
+  if (!TRUSTED_ORIGINS.includes(headers.get('Origin'))) return daResp({ body: '403 Forbidden', status: 403, contentType: 'text/plain' });
+
   const authToken = headers.get('Authorization');
   if (authToken) {
     const cookieValue = authToken.split(' ')[1];
 
     if (cookieValue) {
-      const respHeaders = new Headers();
-      respHeaders.append('Access-Control-Allow-Origin', 'experience.adobe.com');
-      respHeaders.append('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS');
-      respHeaders.append('Access-Control-Allow-Headers', 'Authorization, Content-Type');
-      respHeaders.append('Access-Control-Allow-Credentials', 'true');
-      respHeaders.append('Content-Type', 'text/plain');
-      respHeaders.append('Set-Cookie', `auth_token=${cookieValue}; Secure; Path=/; HttpOnly; SameSite=None; Partitioned; Max-Age=84600`);
+      const respHeaders = { ...DEFAULT_CORS_HEADERS };
+      respHeaders['Content-Type'] = 'text/plain';
+      respHeaders['Set-Cookie'] = `auth_token=${cookieValue}; Secure; Path=/; HttpOnly; SameSite=None; Partitioned; Max-Age=84600`;
       return new Response('cookie set', { headers: respHeaders });
     }
   }
-  return daResp({ body: '401 Unauthorized', status: 401 });
+  return daResp({ body: '401 Unauthorized', status: 401, contentType: 'text/plain' });
 }
