@@ -96,6 +96,7 @@ export function getDaCtx(req) {
   }
 
   // Set the AEM token
+  // TODO set aem token from auth cookie on GET requests
   daCtx.aemToken = req.headers.get('Authorization');
 
   return daCtx;

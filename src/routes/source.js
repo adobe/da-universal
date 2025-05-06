@@ -28,7 +28,12 @@ async function getDefaultSource(daCtx, aemCtx, headHtml) {
 }
 
 async function getPageTemplate(daCtx, aemCtx, headHtml) {
-  const config = await getSiteConfig(daCtx);
+  let config;
+  try {
+    config = await getSiteConfig(daCtx);
+  } catch (e) {
+    return getDefaultSource(daCtx, aemCtx, headHtml);
+  }
 
   // Search whether a template is configured for this path
   const matchingTemplates = config
