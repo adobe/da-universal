@@ -1,0 +1,53 @@
+/*
+ * Copyright 2025 Adobe. All rights reserved.
+ * This file is licensed to you under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License. You may obtain a copy
+ * of the License at http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTATIONS
+ * OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ */
+
+async function fetchConfig(path, daCtx) {
+  const base = 'https://admin.da.live';
+
+  const headers = new Headers();
+  if (daCtx.aemToken) {
+    headers.set('authorization', daCtx.aemToken);
+  }
+  const opts = { headers };
+
+  const res = await fetch(`${base}${path}`, opts);
+  if (!res.ok) {
+    return null;
+  }
+  const json = await res.json();
+  return json?.data;
+}
+
+export async function getConfig(daCtx) {
+  const orgConfigPath = `/config/${daCtx.org}`;
+  const siteConfigPath = `/config/${daCtx.org}/${daCtx.site}`;
+
+  const fetchPath = (path) => fetchConfig(path, daCtx);
+  const promises = [orgConfigPath, siteConfigPath].map(fetchPath);
+
+  const [orgConfig, siteConfig] = await Promise.allSettled(promises);
+
+  const result = {};
+
+  function arrayToObject(array) {
+    return array.reduce((obj, item) => ({ ...obj, [item.key]: item.value }), {});
+  }
+
+  if (orgConfig.status === 'fulfilled' && orgConfig.value) {
+    result.orgConfig = orgConfig.value;
+  }
+  if (siteConfig.status === 'fulfilled' && siteConfig.value) {
+    result.siteConfig = siteConfig.value;
+  }
+
+  return result;
+}

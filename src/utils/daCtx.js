@@ -95,5 +95,8 @@ export function getDaCtx(req) {
     daCtx.pathname = `/${daPathBase}.${daCtx.ext}`;
   }
 
+  // Set the AEM token
+  daCtx.aemToken = req.headers.get('Authorization');
+
   return daCtx;
 }
