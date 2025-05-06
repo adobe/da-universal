@@ -38,10 +38,6 @@ export async function getConfig(daCtx) {
 
   const result = {};
 
-  function arrayToObject(array) {
-    return array.reduce((obj, item) => ({ ...obj, [item.key]: item.value }), {});
-  }
-
   if (orgConfig.status === 'fulfilled' && orgConfig.value) {
     result.orgConfig = orgConfig.value;
   }
