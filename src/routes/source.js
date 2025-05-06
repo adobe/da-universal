@@ -13,7 +13,7 @@
 import { getAemCtx, getAEMHtml } from '../utils/aemCtx.js';
 import { prepareHtml } from '../ue/ue.js';
 import getObject from '../storage/object.js';
-import { getConfig } from '../storage/config.js';
+import { getSiteConfig } from '../storage/config.js';
 
 async function getDefaultSource(daCtx, aemCtx, headHtml) {
   const defaultSource = '<body><header></header><main><div></div></main><footer></footer></body>';
@@ -28,10 +28,10 @@ async function getDefaultSource(daCtx, aemCtx, headHtml) {
 }
 
 async function getPageTemplate(daCtx, aemCtx, headHtml) {
-  const config = await getConfig(daCtx);
+  const config = await getSiteConfig(daCtx);
 
   // Search whether a template is configured for this path
-  const matchingTemplates = config.siteConfig
+  const matchingTemplates = config
     ?.filter((conf) => conf.key === 'editor.ue.template')
     .map((conf) => {
       const [prefix, template] = conf.value.split('=');

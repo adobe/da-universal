@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 
-async function fetchConfig(path, daCtx) {
+async function fetchConfig(daCtx, path) {
   const base = 'https://admin.da.live';
 
   const headers = new Headers();
@@ -27,23 +27,10 @@ async function fetchConfig(path, daCtx) {
   return json?.data;
 }
 
-export async function getConfig(daCtx) {
-  const orgConfigPath = `/config/${daCtx.org}`;
-  const siteConfigPath = `/config/${daCtx.org}/${daCtx.site}`;
+export async function getSiteConfig(daCtx) {
+  return fetchConfig(daCtx, `/config/${daCtx.org}/${daCtx.site}`);
+}
 
-  const fetchPath = (path) => fetchConfig(path, daCtx);
-  const promises = [orgConfigPath, siteConfigPath].map(fetchPath);
-
-  const [orgConfig, siteConfig] = await Promise.allSettled(promises);
-
-  const result = {};
-
-  if (orgConfig.status === 'fulfilled' && orgConfig.value) {
-    result.orgConfig = orgConfig.value;
-  }
-  if (siteConfig.status === 'fulfilled' && siteConfig.value) {
-    result.siteConfig = siteConfig.value;
-  }
-
-  return result;
+export async function getOrgConfig(daCtx) {
+  return fetchConfig(daCtx, `/config/${daCtx.org}`);
 }
