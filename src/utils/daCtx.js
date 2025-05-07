@@ -86,7 +86,7 @@ export function getDaCtx(req) {
   daCtx.propsKey = `${daCtx.key}.props`;
 
   // Set paths for API consumption
-  daCtx.aemPathname = path;
+  daCtx.aemPathname = path.endsWith('/index') ? path.substring(0, path.length - 5) : path;
   const daPathBase = [...pathParts, daCtx.name].join('/');
 
   if (!daCtx.ext || (!daCtx.name.includes('plain') && daCtx.ext === 'html')) {

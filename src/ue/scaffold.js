@@ -24,6 +24,7 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
     site,
     ref,
     path,
+    aemPathname,
     isLocal,
     orgSiteInPath,
   } = daCtx;
@@ -77,7 +78,7 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
   children.push(
     h('meta', {
       name: 'urn:adobe:aue:config:preview',
-      content: `https://${ref}--${site}--${org}.aem.page`,
+      content: `https://${ref}--${site}--${org}.aem.page${aemPathname}`,
     }),
   );
 
