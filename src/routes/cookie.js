@@ -22,9 +22,14 @@ export function getCookie({ req }) {
     const cookieValue = authToken.split(' ')[1];
 
     if (cookieValue) {
-      const respHeaders = { ...DEFAULT_CORS_HEADERS };
-      respHeaders['Content-Type'] = 'text/plain';
-      respHeaders['Set-Cookie'] = `auth_token=${cookieValue}; Secure; Path=/; HttpOnly; SameSite=None; Partitioned; Max-Age=84600`;
+      const respHeaders = new Headers();
+      respHeaders.append('Content-Type', 'text/plain');
+      respHeaders.append('Set-Cookie', `auth_token=${cookieValue}; Secure; Path=/; HttpOnly; SameSite=None; Partitioned; Max-Age=84600`);
+      respHeaders.append('Access-Control-Allow-Origin', req.headers.get('Origin'));
+      Object.entries(DEFAULT_CORS_HEADERS).forEach(([key, value]) => {
+        respHeaders.append(key, value);
+      });
+
       return new Response('cookie set', { headers: respHeaders });
     }
   }

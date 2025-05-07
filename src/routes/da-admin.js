@@ -58,7 +58,7 @@ export async function daSourceGet({ req, env, daCtx }) {
   getAuthToken(req, headers);
   // check if Authorization header is present
   if (!headers.has('Authorization')) {
-    const message = '<html><body></body></html>';
+    const message = '<html><head><meta name="urn:adobe:aue:system:ab" content="da:401"><script src="https://universal-editor-service.adobe.io/cors.js" async></script></head><body></body></html>';
     response.body = message;
     response.status = 401;
     response.contentLength = message.length;

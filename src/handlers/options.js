@@ -10,21 +10,30 @@
  * governing permissions and limitations under the License.
  */
 
-import { DEFAULT_CORS_HEADERS } from '../utils/constants.js';
+import { daResp } from '../responses/index.js';
+import { DEFAULT_CORS_HEADERS, TRUSTED_ORIGINS } from '../utils/constants.js';
 
 export default async function optionsHandler({ req }) {
+  const { headers } = req;
+
+  if (!TRUSTED_ORIGINS.includes(headers.get('Origin'))) return daResp({ body: '403 Forbidden', status: 403, contentType: 'text/plain' });
+
   if (
-    req.headers.get('Origin') !== null
-    && req.headers.get('Access-Control-Request-Method') !== null
-    && req.headers.get('Access-Control-Request-Headers') !== null
+    headers.get('Origin') !== null
+    && headers.get('Access-Control-Request-Method') !== null
+    && headers.get('Access-Control-Request-Headers') !== null
   ) {
+    const respHeaders = { ...DEFAULT_CORS_HEADERS };
+    respHeaders['Access-Control-Allow-Origin'] = req.headers.get('Origin');
+
     return new Response(null, {
-      headers: { ...DEFAULT_CORS_HEADERS },
+      status: 204,
+      headers: respHeaders,
     });
   } else {
     return new Response(null, {
       headers: {
-        Allow: 'GET, HEAD, POST, OPTIONS',
+        'Access-Control-Request-Method': 'GET, HEAD, POST, OPTIONS',
       },
     });
   }
