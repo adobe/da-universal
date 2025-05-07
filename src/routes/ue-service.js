@@ -13,10 +13,12 @@
 import { fromHtml } from 'hast-util-from-html';
 import { select } from 'hast-util-select';
 import { toHtml } from 'hast-util-to-html';
+import { minifyWhitespace } from 'hast-util-minify-whitespace';
 import { daResp } from '../responses/index.js';
 import { prepareHtml } from '../ue/ue.js';
 import { getAemCtx, getAEMHtml } from '../utils/aemCtx.js';
 import { getDaCtx } from '../utils/daCtx.js';
+import { removeUEAttributes, unwrapParagraphs } from '../ue/attributes.js';
 
 function setHeaders(req, res) {
   const headerNames = req.headers.get('access-control-request-headers');
@@ -28,23 +30,6 @@ function setHeaders(req, res) {
 function handleHead(req) {
   return setHeaders(req, daResp({ status: 200 }));
 }
-
-// function selectFromTree(hast, currentPath, propertyName, propertyValue) {
-//   if (hast.properties?.[propertyName] === propertyValue) {
-//     return { el: hast, path: currentPath };
-//   }
-//
-//   const elementChildren = hast.children.filter((child) => child.type === 'element');
-//
-//   for (let i = 0; i < elementChildren.length; i += 1) {
-//     const child = elementChildren[i];
-//     const selection = selectFromTree(child, `${currentPath} > ${child.tagName}:nth-child(${i + 1})`, propertyName, propertyValue);
-//     if (selection) {
-//       return selection;
-//     }
-//   }
-//   return null;
-// }
 
 function findEditable(hast, editable) {
   const selector = `[data-aue-resource='${editable.resource}']`;
@@ -104,61 +89,158 @@ function addClassNamesToObj(block, obj) {
   return obj;
 }
 
+async function getSource(path, env) {
+  // TODO use the normal get source method once that uses admin api call
+  // TODO handle owner/repo/ref in subdomain instead of path
+  const adminUrl = new URL(`/source${path}.html`, env.DA_ADMIN);
+  const adminReq = new Request(adminUrl, { method: 'GET' });
+  const res = await env.daadmin.fetch(adminReq);
+
+  if (!res.ok) {
+    throw new Error('failed to fetch source');
+  }
+
+  return res;
+}
+
+async function writeSource(path, data, env) {
+  const adminUrl = new URL(`/source${path}.html`, env.DA_ADMIN);
+
+  const blob = new Blob([data], { type: 'text/html' });
+  const body = new FormData();
+  body.append('data', blob);
+
+  const adminReq = new Request(adminUrl, { method: 'POST', body });
+  const res = await env.daadmin.fetch(adminReq);
+
+  if (!res.ok) {
+    throw new Error('failed to fetch source');
+  }
+
+  return res;
+}
+
+function getContext(uri, env) {
+  // TODO generate da context correctly
+  const fakeReq = new Request(new URL(uri));
+  const daCtx = getDaCtx(fakeReq);
+  const aemCtx = getAemCtx(env, daCtx);
+
+  return { daCtx, aemCtx };
+}
+
+async function getUeContext(body, env) {
+  // resource, type, prop
+  const editable = body.target;
+
+  const { uri } = body.connections[0];
+  const fetchPath = new URL(uri).pathname;
+
+  // load the source
+  const sourceRes = await getSource(fetchPath, env);
+
+  const pageHtml = await sourceRes.text();
+
+  const { daCtx, aemCtx } = getContext(uri, env);
+
+  const headHtml = await getAEMHtml(aemCtx, '/head.html');
+  const instrumentedHtml = await prepareHtml(daCtx, aemCtx, pageHtml, headHtml);
+
+  const hast = fromHtml(instrumentedHtml);
+  const el = findEditable(hast, editable);
+
+  return {
+    el, fetchPath, editable, page: hast,
+  };
+}
+
+async function handleDetails(req, env) {
+  const body = await req.json();
+  const { el } = await getUeContext(body, env);
+
+  const json = {};
+  getAttributes(el, json);
+  addClassNamesToObj(el, json);
+
+  return setHeaders(req, daResp({
+    status: 200,
+    body: JSON.stringify({ data: json }),
+    contentType: 'application/json',
+  }));
+}
+
+async function refetch(body, env) {
+  const { el } = await getUeContext(body, env);
+  if (el) {
+    return innerHtml(el);
+  }
+  return undefined;
+}
+
+async function handlePatch(req, env) {
+  const body = await req.json();
+  const {
+    el: blockEl, fetchPath, editable, page,
+  } = await getUeContext(body, env);
+  const operation = body.patch[0];
+
+  const path = operation.path.substring(1);
+  const selector = path.indexOf('[') > 0 ? path.substring(0, path.indexOf('[')) : path;
+  const attribute = path.indexOf('[') > 0 ? path.substring(path.indexOf('[') + 1, path.indexOf(']')) : undefined;
+
+  if (operation.op === 'replace') {
+    const el = select(selector, blockEl);
+
+    if (attribute) {
+      // TODO properties camel case/kebab case?
+      el.properties[attribute] = operation.value;
+    } else {
+      el.children = select('body', fromHtml(operation.value)).children;
+    }
+  }
+
+  let bodyNode = select('body', page);
+  bodyNode = unwrapParagraphs(bodyNode);
+  bodyNode = removeUEAttributes(bodyNode);
+  minifyWhitespace(bodyNode);
+  const html = toHtml(bodyNode);
+  await writeSource(fetchPath, html, env);
+
+  const responseBody = JSON.stringify({
+    updates: [
+      {
+        resource: editable.resource,
+        content: await refetch(body, env),
+        raw: innerHtml(blockEl),
+      },
+    ],
+  });
+
+  return setHeaders(req, daResp({
+    body: responseBody,
+    contentLength: responseBody.length,
+    status: 200,
+    contentType: 'application/json',
+  }));
+}
+
 async function handlePost(req, env) {
   const url = new URL(req.url);
   const path = url.pathname;
 
+  // TODO assuming it's a block for now. Need to handle sections too.
+
   if (path === '/details') {
-    const body = await req.json();
-
-    console.log(body);
-    // resource, type, prop
-    const editable = body.target;
-
-    const { uri } = body.connections[0];
-    const fetchPath = new URL(uri).pathname;
-
-    // load the source
-    // TODO use the normal get source method once that uses admin api call
-    // TODO handle owner/repo/ref in subdomain instead of path
-    const adminUrl = new URL(`/source${fetchPath}.html`, env.DA_ADMIN);
-    const adminReq = new Request(adminUrl, { method: 'GET' });
-    const res = await env.daadmin.fetch(adminReq);
-
-    if (!res.ok) {
-      console.log(res.status);
-      throw new Error('failed to fetch source');
-    }
-
-    const pageHtml = await res.text();
-
-    // TODO generate da context correctly
-    const fakeReq = new Request(new URL(uri));
-    const daCtx = getDaCtx(fakeReq);
-    const aemCtx = getAemCtx(env, daCtx);
-
-    const headHtml = await getAEMHtml(aemCtx, '/head.html');
-    const instrumentedHtml = await prepareHtml(daCtx, aemCtx, pageHtml, headHtml);
-
-    const hast = fromHtml(instrumentedHtml);
-    const el = findEditable(hast, editable);
-
-    const json = {};
-    getAttributes(el, json);
-    addClassNamesToObj(el, json);
-
-    return setHeaders(req, daResp({
-      status: 200,
-      body: JSON.stringify({ data: json }),
-      contentType: 'application/json',
-    }));
+    return handleDetails(req, env);
+  }
+  if (path === '/patch') {
+    return handlePatch(req, env);
   }
 
   throw new Error('not implemented');
 }
 
 export default async function handleRequest(req, env) {
-  console.log(req.method);
   switch (req.method) {
     case 'OPTIONS':
       return handleHead(req, env);
