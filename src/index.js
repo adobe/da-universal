@@ -16,6 +16,7 @@ import { get404, getRobots } from './responses/index.js';
 import headHandler from './handlers/head.js';
 import postHandlers from './handlers/post.js';
 import unknownHandler from './handlers/unknown.js';
+import handleUeServiceReq from './routes/ue-service.js';
 
 export default {
   async fetch(req, env) {
@@ -23,6 +24,10 @@ export default {
 
     if (url.pathname === '/favicon.ico') return get404();
     if (url.pathname === '/robots.txt') return getRobots();
+
+    if (url.hostname.startsWith('ue-service.')) {
+      return handleUeServiceReq(req, env);
+    }
 
     const daCtx = getDaCtx(req);
 

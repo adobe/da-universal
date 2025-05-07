@@ -55,13 +55,13 @@ export async function handleAdminProxyRequest({ req, env, daCtx }) {
     const bodyContent = toHtml(bodyNode);
     const data = new Blob([bodyContent], { type: 'text/html' });
     body.set('data', data);
-    const headers = { Authorization: req.headers.get('Authorization') };
+    // const headers = { Authorization: req.headers.get('Authorization') };
     const adminUrl = new URL(`/source/${org}/${site}${path}.${ext}`, env.DA_ADMIN);
     // eslint-disable-next-line no-param-reassign
     req = new Request(adminUrl, {
       method: 'POST',
       body,
-      headers,
+      // headers,
     });
     const response = await env.daadmin.fetch(req);
     return response;

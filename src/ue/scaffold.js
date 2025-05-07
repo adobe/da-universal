@@ -39,7 +39,7 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
     children.push(
       h('meta', {
         name: 'urn:adobe:aue:config:service',
-        content: ueService,
+        content: 'https://ue-service.stage-ue.localhost:4712',
       }),
     );
   }
