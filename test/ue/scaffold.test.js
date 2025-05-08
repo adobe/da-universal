@@ -59,7 +59,7 @@ describe('UE scaffold', () => {
 
       // Check meta tags
       const metaTags = entries.filter((entry) => entry.tagName === 'meta');
-      assert.strictEqual(metaTags.length, 2);
+      assert.strictEqual(metaTags.length, 3);
 
       // Check system:ab meta tag
       const ueSystemTag = metaTags.find(
@@ -131,7 +131,7 @@ describe('UE scaffold', () => {
 
       // Check meta tags
       const metaTags = entries.filter((entry) => entry.tagName === 'meta');
-      assert.strictEqual(metaTags.length, 2);
+      assert.strictEqual(metaTags.length, 3);
 
       // Check system:ab meta tag
       const ueSystemTag = metaTags.find(

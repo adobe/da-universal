@@ -9,9 +9,10 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { daResp, get404, getRobots } from '../responses/index.js';
+import { get404, getRobots } from '../responses/index.js';
 import { handleAEMProxyRequest } from '../routes/aem-proxy.js';
-import { getSource } from '../routes/source.js';
+import { getCookie } from '../routes/cookie.js';
+import { daSourceGet } from '../routes/da-admin.js';
 
 export default async function getHandler({ req, env, daCtx }) {
   const { path } = daCtx;
@@ -20,10 +21,13 @@ export default async function getHandler({ req, env, daCtx }) {
   if (path.startsWith('/favicon.ico')) return get404();
   if (path.startsWith('/robots.txt')) return getRobots();
 
-  const resourceRegex = /\.(css|js|png|jpg|jpeg|webp|gif|svg|ico|json|woff|woff2|plain\.html)$/i;
+  if (path.startsWith('/gimme_cookie')) return getCookie({ req });
+
+  const resourceRegex = /\.(css|js|png|jpg|jpeg|webp|gif|svg|ico|json|xml|woff|woff2|plain\.html)$/i;
   if (resourceRegex.test(path)) {
     return handleAEMProxyRequest({ req, env, daCtx });
   }
 
-  return daResp(await getSource({ env, daCtx }));
+  // default route to DA admin for all the content requests
+  return daSourceGet({ req, env, daCtx });
 }

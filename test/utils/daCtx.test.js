@@ -88,6 +88,17 @@ describe('DA context', () => {
     });
   });
 
+  describe('Index page URL context with sub folder', async () => {
+    beforeEach(async () => {
+      daCtx = getDaCtx(reqs.contentSubFolderIndex);
+    });
+
+    it('should return the correct path names', () => {
+      assert.strictEqual(daCtx.pathname, '/sub-folder/index');
+      assert.strictEqual(daCtx.aemPathname, '/sub-folder/');
+    });
+  });
+
   describe('File with non-html extension', async () => {
     beforeEach(async () => {
       daCtx = getDaCtx(reqs.nonHtmlFile);

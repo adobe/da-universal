@@ -20,8 +20,6 @@
     "wrangler": "^3.0.0"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.726.1",
-    "@aws-sdk/util-stream": "^3.374.0",
     "hast-util-format": "^1.1.0",
     "hast-util-from-html": "^2.0.3",
     "hast-util-is-element": "^3.0.0",
