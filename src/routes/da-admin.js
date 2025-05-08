@@ -18,6 +18,7 @@ import { removeUEAttributes, unwrapParagraphs } from '../ue/attributes.js';
 import { prepareHtml } from '../ue/ue.js';
 import { getAemCtx, getAEMHtml } from '../utils/aemCtx.js';
 import { daResp } from '../responses/index.js';
+import { UNAUTHORIZED_HTML_MESSAGE } from '../utils/constants.js';
 
 async function getFileBody(data) {
   const text = await data.text();
@@ -58,10 +59,9 @@ export async function daSourceGet({ req, env, daCtx }) {
   getAuthToken(req, headers);
   // check if Authorization header is present
   if (!headers.has('Authorization')) {
-    const message = '<html><head><meta name="urn:adobe:aue:system:ab" content="da:401"><script src="https://universal-editor-service.adobe.io/cors.js" async></script></head><body></body></html>';
-    response.body = message;
+    response.body = UNAUTHORIZED_HTML_MESSAGE;
     response.status = 401;
-    response.contentLength = message.length;
+    response.contentLength = response.body.length;
     return daResp(response);
   }
 

@@ -17,3 +17,13 @@ export const DEFAULT_CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Authorization, Content-Type',
   'Access-Control-Allow-Credentials': 'true',
 };
+
+export const UNAUTHORIZED_HTML_MESSAGE = `
+<html>
+<head>
+  <meta name="urn:adobe:aue:system:ab" content="da:401">
+  <meta name="urn:adobe:aue:config:extensions" content="https://experience.adobe.com/solutions/CQ-universal-editor-extensions/static-assets/resources/authorbus-handler.html"/>
+  <script src="https://universal-editor-service.adobe.io/cors.js" async></script>
+</head>
+<body></body>
+</html>`;
