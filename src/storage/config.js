@@ -14,8 +14,8 @@ async function fetchConfig(daCtx, path) {
   const base = 'https://admin.da.live';
 
   const headers = new Headers();
-  if (daCtx.aemToken) {
-    headers.set('authorization', daCtx.aemToken);
+  if (daCtx.authToken) {
+    headers.set('authorization', daCtx.authToken);
   }
   const opts = { headers };
 

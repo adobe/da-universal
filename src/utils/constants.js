@@ -27,3 +27,5 @@ export const UNAUTHORIZED_HTML_MESSAGE = `
 </head>
 <body></body>
 </html>`;
+
+export const DEFAULT_HTML_TEMPLATE = '<body><header></header><main><div></div></main><footer></footer></body>';

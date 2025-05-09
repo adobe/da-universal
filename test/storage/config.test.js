@@ -42,7 +42,7 @@ describe('Config Module', () => {
   const mockDaCtx = {
     org: 'test-org',
     site: 'test-site',
-    aemToken: 'test-token'
+    authToken: 'test-token',
   };
 
   const setMockResponse = (data) => {
@@ -124,7 +124,7 @@ describe('Config Module', () => {
   });
 
   describe('Authorization handling', () => {
-    it('should not include authorization header when aemToken is not provided', async () => {
+    it('should not include authorization header when authToken is not provided', async () => {
       const ctxWithoutToken = { org: 'test-org', site: 'test-site' };
       setMockResponse([
         { key: 'editor.ue.template', value: '/content=/templates' }
