@@ -18,7 +18,7 @@ import { removeUEAttributes, unwrapParagraphs } from '../ue/attributes.js';
 import { prepareHtml } from '../ue/ue.js';
 import { getAemCtx, getAEMHtml } from '../utils/aemCtx.js';
 import { daResp } from '../responses/index.js';
-import { DEFAULT_HTML_TEMPLATE, UNAUTHORIZED_HTML_MESSAGE } from '../utils/constants.js';
+import { BRANCH_NOT_FOUND_HTML_MESSAGE, DEFAULT_HTML_TEMPLATE, UNAUTHORIZED_HTML_MESSAGE } from '../utils/constants.js';
 import { getSiteConfig } from '../storage/config.js';
 
 async function getFileBody(data) {
@@ -76,7 +76,6 @@ export async function daSourceGet({ req, env, daCtx }) {
   if (!authToken) {
     response.body = UNAUTHORIZED_HTML_MESSAGE;
     response.status = 401;
-    response.contentLength = response.body.length;
     return daResp(response);
   }
 
@@ -84,10 +83,8 @@ export async function daSourceGet({ req, env, daCtx }) {
   const aemCtx = getAemCtx(env, daCtx);
   const headHtml = await getAEMHtml(aemCtx, '/head.html');
   if (!headHtml) {
-    const message = '<html><body><h1>Not found: Unable to retrieve AEM branch</h1></body></html>';
-    response.body = message;
+    response.body = BRANCH_NOT_FOUND_HTML_MESSAGE;
     response.status = 404;
-    response.contentLength = message.length;
     return daResp(response);
   }
 
