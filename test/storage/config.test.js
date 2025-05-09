@@ -11,17 +11,17 @@
  */
 
 import assert from 'assert';
-import esmock from 'esmock';
 
 describe('Config Module', () => {
   let mockFetch;
+  let mockEnv;
   let configModule;
   let originalFetch;
 
   beforeEach(async () => {
     originalFetch = globalThis.fetch;
     mockFetch = async (url, opts) => {
-      mockFetch.lastCall = { url, opts };
+      mockFetch.lastCall = { url: url.href, opts };
       return mockFetch.nextResponse;
     };
     // Initialize mock properties
@@ -30,6 +30,13 @@ describe('Config Module', () => {
     
     // Replace global fetch
     globalThis.fetch = mockFetch;
+
+    mockEnv = {
+      DA_ADMIN: 'https://admin.da.live',
+      daadmin: {
+        fetch: mockFetch
+      }
+    };
 
     // Import module after mocking
     configModule = await import('../../src/storage/config.js');
@@ -60,7 +67,7 @@ describe('Config Module', () => {
       ];
       setMockResponse(mockData);
 
-      const result = await configModule.getSiteConfig(mockDaCtx);
+      const result = await configModule.getSiteConfig(mockEnv, mockDaCtx);
 
       const expectedCall = {
         url: 'https://admin.da.live/config/test-org/test-site',
@@ -81,7 +88,7 @@ describe('Config Module', () => {
     it('should return null when fetch fails', async () => {
       mockFetch.nextResponse = { ok: false };
 
-      const result = await configModule.getSiteConfig(mockDaCtx);
+      const result = await configModule.getSiteConfig(mockEnv, mockDaCtx);
 
       assert.strictEqual(result, null);
     });
@@ -96,7 +103,7 @@ describe('Config Module', () => {
       ];
       setMockResponse(mockData);
 
-      const result = await configModule.getOrgConfig(mockDaCtx);
+      const result = await configModule.getOrgConfig(mockEnv, mockDaCtx);
 
       const expectedCall = {
         url: 'https://admin.da.live/config/test-org',
@@ -117,7 +124,7 @@ describe('Config Module', () => {
     it('should return null when fetch fails', async () => {
       mockFetch.nextResponse = { ok: false };
 
-      const result = await configModule.getOrgConfig(mockDaCtx);
+      const result = await configModule.getOrgConfig(mockEnv, mockDaCtx);
 
       assert.strictEqual(result, null);
     });
@@ -130,7 +137,7 @@ describe('Config Module', () => {
         { key: 'editor.ue.template', value: '/content=/templates' }
       ]);
 
-      await configModule.getSiteConfig(ctxWithoutToken);
+      await configModule.getSiteConfig(mockEnv, ctxWithoutToken);
 
       const expectedCall = {
         url: 'https://admin.da.live/config/test-org/test-site',
