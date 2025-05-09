@@ -27,3 +27,7 @@ export const UNAUTHORIZED_HTML_MESSAGE = `
 </head>
 <body></body>
 </html>`;
+
+export const DEFAULT_HTML_TEMPLATE = '<body><header></header><main><div></div></main><footer></footer></body>';
+
+export const BRANCH_NOT_FOUND_HTML_MESSAGE = '<html><body><h1>Not found: Unable to retrieve AEM branch</h1></body></html>';

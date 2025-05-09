@@ -40,6 +40,21 @@ function getRefSiteOrgPath(hostname, pathname) {
   };
 }
 
+function getAuthToken(req) {
+  if (req.headers.get('Authorization')) {
+    return req.headers.get('Authorization');
+  }
+
+  const cookies = req.headers.get('Cookie');
+  if (cookies) {
+    const authTokenMatch = cookies.match(/auth_token=([^;]+)/);
+    if (authTokenMatch && authTokenMatch[1]) {
+      return `Bearer ${authTokenMatch[1]}`;
+    }
+  }
+  return undefined;
+}
+
 /**
  * Gets Dark Alley Context
  * @param {pathname} pathname
@@ -95,5 +110,6 @@ export function getDaCtx(req) {
     daCtx.pathname = `/${daPathBase}.${daCtx.ext}`;
   }
 
+  daCtx.authToken = getAuthToken(req);
   return daCtx;
 }

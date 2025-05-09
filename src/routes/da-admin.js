@@ -18,7 +18,8 @@ import { removeUEAttributes, unwrapParagraphs } from '../ue/attributes.js';
 import { prepareHtml } from '../ue/ue.js';
 import { getAemCtx, getAEMHtml } from '../utils/aemCtx.js';
 import { daResp } from '../responses/index.js';
-import { UNAUTHORIZED_HTML_MESSAGE } from '../utils/constants.js';
+import { BRANCH_NOT_FOUND_HTML_MESSAGE, DEFAULT_HTML_TEMPLATE, UNAUTHORIZED_HTML_MESSAGE } from '../utils/constants.js';
+import { getSiteConfig } from '../storage/config.js';
 
 async function getFileBody(data) {
   const text = await data.text();
@@ -30,23 +31,40 @@ function getTextBody(data) {
   return { body: data, type: 'text/html' };
 }
 
-function getAuthToken(req, headers) {
-  if (req.headers.get('Authorization')) {
-    headers.set('Authorization', req.headers.get('Authorization'));
-  } else {
-    const cookies = req.headers.get('Cookie');
-    if (cookies) {
-      const authTokenMatch = cookies.match(/auth_token=([^;]+)/);
-      if (authTokenMatch && authTokenMatch[1]) {
-        headers.set('Authorization', `Bearer ${authTokenMatch[1]}`);
-      }
-    }
+async function getPageTemplate(env, daCtx, aemCtx) {
+  let config;
+  try {
+    config = await getSiteConfig(env, daCtx);
+  } catch (e) {
+    return DEFAULT_HTML_TEMPLATE;
   }
+
+  // Search whether a template is configured for this path
+  const matchingTemplates = config
+    ?.filter((conf) => conf.key === 'editor.ue.template')
+    .map((conf) => {
+      const [prefix, template] = conf.value.split('=');
+      return { prefix, template };
+    })
+    .filter(({ prefix, template }) => prefix && template && daCtx.path.startsWith(prefix))
+    .sort((a, b) => b.prefix.length - a.prefix.length);
+
+  if (matchingTemplates?.length <= 0) {
+    return DEFAULT_HTML_TEMPLATE;
+  }
+
+  const templatePath = matchingTemplates[0].template;
+  const templateHtml = await getAEMHtml(aemCtx, templatePath);
+  if (templateHtml) {
+    return templateHtml;
+  }
+
+  return DEFAULT_HTML_TEMPLATE;
 }
 
 export async function daSourceGet({ req, env, daCtx }) {
   const {
-    org, site, path, ext,
+    org, site, path, ext, authToken,
   } = daCtx;
 
   const response = {
@@ -54,14 +72,10 @@ export async function daSourceGet({ req, env, daCtx }) {
     contentType: 'text/html; charset=utf-8',
   };
 
-  // get auth token from cookie or Authorization header
-  const headers = new Headers();
-  getAuthToken(req, headers);
   // check if Authorization header is present
-  if (!headers.has('Authorization')) {
+  if (!authToken) {
     response.body = UNAUTHORIZED_HTML_MESSAGE;
     response.status = 401;
-    response.contentLength = response.body.length;
     return daResp(response);
   }
 
@@ -69,10 +83,8 @@ export async function daSourceGet({ req, env, daCtx }) {
   const aemCtx = getAemCtx(env, daCtx);
   const headHtml = await getAEMHtml(aemCtx, '/head.html');
   if (!headHtml) {
-    const message = '<html><body><h1>Not found: Unable to retrieve AEM branch</h1></body></html>';
-    response.body = message;
+    response.body = BRANCH_NOT_FOUND_HTML_MESSAGE;
     response.status = 404;
-    response.contentLength = message.length;
     return daResp(response);
   }
 
@@ -81,6 +93,10 @@ export async function daSourceGet({ req, env, daCtx }) {
     `/source/${org}/${site}${path}.${ext}`,
     env.DA_ADMIN,
   );
+
+  const headers = new Headers();
+  headers.set('Authorization', authToken);
+
   // eslint-disable-next-line no-param-reassign
   req = new Request(adminUrl, {
     method: 'GET',
@@ -88,35 +104,24 @@ export async function daSourceGet({ req, env, daCtx }) {
   });
   const daAdminResp = await env.daadmin.fetch(req);
   if (daAdminResp && daAdminResp.status === 200) {
-    // enrich content with HTML header and UE attributes
+    // enrich stored content with HTML header and UE attributes
     const originalBodyHtml = await daAdminResp.text();
-
-    const responseHtml = await prepareHtml(
-      daCtx,
-      aemCtx,
-      originalBodyHtml,
-      headHtml,
-    );
+    const responseHtml = await prepareHtml(daCtx, aemCtx, originalBodyHtml, headHtml);
     response.body = responseHtml;
-    response.contentLength = responseHtml.length;
   } else {
-    // return a template for new page if no content found
-    const templateHtml = await getAEMHtml(aemCtx, '/ue-template.html');
-    const responseHtml = await prepareHtml(
-      daCtx,
-      aemCtx,
-      templateHtml,
-      headHtml,
-    );
+    // enrich default template with HTML header and UE attributes
+    const templateHtml = await getPageTemplate(env, daCtx, aemCtx, headHtml);
+    const responseHtml = await prepareHtml(daCtx, aemCtx, templateHtml, headHtml);
     response.body = responseHtml;
-    response.contentLength = responseHtml.length;
   }
+
+  response.contentLength = response.body.length;
   return daResp(response);
 }
 
 export async function daSourcePost({ req, env, daCtx }) {
   const {
-    org, site, path, ext,
+    org, site, path, ext, authToken,
   } = daCtx;
 
   const obj = await putHelper(req, env, daCtx);
@@ -140,7 +145,7 @@ export async function daSourcePost({ req, env, daCtx }) {
     const bodyContent = toHtml(bodyNode);
     const data = new Blob([bodyContent], { type: 'text/html' });
     body.set('data', data);
-    const headers = { Authorization: req.headers.get('Authorization') };
+    const headers = { Authorization: authToken };
     const adminUrl = new URL(
       `/source/${org}/${site}${path}.${ext}`,
       env.DA_ADMIN,

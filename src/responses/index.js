@@ -20,6 +20,8 @@ export function daResp({
   }
   if (contentLength) {
     headers.append('Content-Length', contentLength);
+  } else if (body) {
+    headers.append('Content-Length', body.length);
   }
 
   return new Response(body, { status, headers });
