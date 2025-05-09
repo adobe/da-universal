@@ -16,6 +16,7 @@ import { get404, getRobots } from './responses/index.js';
 import headHandler from './handlers/head.js';
 import postHandlers from './handlers/post.js';
 import unknownHandler from './handlers/unknown.js';
+import optionsHandler from './handlers/options.js';
 
 export default {
   async fetch(req, env) {
@@ -28,6 +29,9 @@ export default {
 
     let resp;
     switch (req.method) {
+      case 'OPTIONS':
+        resp = await optionsHandler({ req });
+        break;
       case 'HEAD':
         resp = await headHandler({ env, daCtx });
         break;
