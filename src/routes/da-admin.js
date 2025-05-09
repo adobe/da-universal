@@ -31,10 +31,10 @@ function getTextBody(data) {
   return { body: data, type: 'text/html' };
 }
 
-async function getPageTemplate(daCtx, aemCtx) {
+async function getPageTemplate(env, daCtx, aemCtx) {
   let config;
   try {
-    config = await getSiteConfig(daCtx);
+    config = await getSiteConfig(env, daCtx);
   } catch (e) {
     return DEFAULT_HTML_TEMPLATE;
   }
@@ -113,7 +113,7 @@ export async function daSourceGet({ req, env, daCtx }) {
     response.body = responseHtml;
   } else {
     // enrich default template with HTML header and UE attributes
-    const templateHtml = await getPageTemplate(daCtx, aemCtx, headHtml);
+    const templateHtml = await getPageTemplate(env, daCtx, aemCtx, headHtml);
     const responseHtml = await prepareHtml(daCtx, aemCtx, templateHtml, headHtml);
     response.body = responseHtml;
   }

@@ -10,16 +10,15 @@
  * governing permissions and limitations under the License.
  */
 
-async function fetchConfig(daCtx, path) {
-  const base = 'https://admin.da.live';
-
+async function fetchConfig(env, daCtx, path) {
   const headers = new Headers();
   if (daCtx.authToken) {
-    headers.set('authorization', daCtx.authToken);
+    headers.set('Authorization', daCtx.authToken);
   }
   const opts = { headers };
+  const configUrl = new URL(path, env.DA_ADMIN);
 
-  const res = await fetch(`${base}${path}`, opts);
+  const res = await env.daadmin.fetch(configUrl, opts);
   if (!res.ok) {
     return null;
   }
@@ -27,10 +26,10 @@ async function fetchConfig(daCtx, path) {
   return json?.data;
 }
 
-export async function getSiteConfig(daCtx) {
-  return fetchConfig(daCtx, `/config/${daCtx.org}/${daCtx.site}`);
+export async function getSiteConfig(env, daCtx) {
+  return fetchConfig(env, daCtx, `/config/${daCtx.org}/${daCtx.site}`);
 }
 
-export async function getOrgConfig(daCtx) {
-  return fetchConfig(daCtx, `/config/${daCtx.org}`);
+export async function getOrgConfig(env, daCtx) {
+  return fetchConfig(env, daCtx, `/config/${daCtx.org}`);
 }

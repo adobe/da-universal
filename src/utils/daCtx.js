@@ -52,7 +52,6 @@ function getAuthToken(req) {
       return `Bearer ${authTokenMatch[1]}`;
     }
   }
-
   return undefined;
 }
 
@@ -112,6 +111,5 @@ export function getDaCtx(req) {
   }
 
   daCtx.authToken = getAuthToken(req);
-
   return daCtx;
 }
