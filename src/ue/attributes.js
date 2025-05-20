@@ -181,12 +181,52 @@ export function injectUEAttributes(bodyTree, ueConfig) {
         // });
       });
 
+      // handle columns
+      const columnsBlocks = selectAll(':scope>div.columns', section);
+      columnsBlocks.forEach((block, bIndex) => {
+        addAttributes(block, {
+          'data-aue-resource': `urn:ab:section-${sIndex}/columns-${bIndex}`,
+          'data-aue-label': 'Columns',
+          'data-aue-prop': 'columns',
+          'data-aue-model': 'columns',
+          'data-aue-filter': 'columns',
+          'data-aue-type': 'container',
+          'data-aue-behavior': 'component',
+        });
+
+        const rows = selectAll(':scope>div', block);
+        rows.forEach((row, rIndex) => {
+          addAttributes(row, {
+            'data-aue-resource': `urn:ab:section-${sIndex}/columns-${bIndex}/row-${rIndex}`,
+            'data-aue-label': 'Columns Row',
+            'data-aue-prop': 'columns-row',
+            'data-aue-model': 'columns-row',
+            'data-aue-filter': 'columns-row',
+            'data-aue-type': 'container',
+            'data-aue-behavior': 'component',
+          });
+
+          const cells = selectAll(':scope>div', row);
+          cells.forEach((cell, cIndex) => {
+            addAttributes(cell, {
+              'data-aue-resource': `urn:ab:section-${sIndex}/columns-${bIndex}/row-${rIndex}/cell-${cIndex}`,
+              'data-aue-label': 'Columns Cell',
+              'data-aue-prop': 'columns-cell',
+              'data-aue-model': 'columns-cell',
+              'data-aue-filter': 'columns-cell',
+              'data-aue-type': 'richtext',
+              'data-aue-behavior': 'component',
+            });
+          });
+        });
+      });
+
       // handle blocks
       const blocks = selectAll(':scope>div', section);
       blocks.forEach((block, bIndex) => {
         const { name: blockName } = getBlockNameAndClasses(block);
         if (blockName) {
-          if (blockName !== 'metadata' && blockName !== 'section-metadata' && blockName !== 'richtext') {
+          if (blockName !== 'columns' && blockName !== 'metadata' && blockName !== 'section-metadata' && blockName !== 'richtext') {
             const blockCmpDef = getComponentDefinition(ueConfig, blockName);
             addAttributes(block, {
               'data-aue-resource': `urn:ab:section-${sIndex}/block-${bIndex}`,
@@ -257,7 +297,7 @@ export function unwrapParagraphs(tree) {
   visit(tree, 'element', (node, index, parent) => {
     // data-aue-type=\"richtext\"
     const properties = node.properties || {};
-    if (node.tagName === 'div' && properties.dataAueType === 'richtext' && properties.dataAueResource) {
+    if (node.tagName === 'div' && properties.dataAueType === 'richtext' && properties.dataAueResource && properties.dataAueProp !== 'columns-cell') {
       if (parent && Array.isArray(parent.children)) {
         const childrenToInsert = node.children || [];
         parent.children.splice(index, 1, ...childrenToInsert);
