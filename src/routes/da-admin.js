@@ -49,7 +49,7 @@ async function getPageTemplate(env, daCtx, aemCtx) {
     .filter(({ prefix, template }) => prefix && template && daCtx.path.startsWith(prefix))
     .sort((a, b) => b.prefix.length - a.prefix.length);
 
-  if (matchingTemplates?.length <= 0) {
+  if (!matchingTemplates || matchingTemplates.length <= 0) {
     return DEFAULT_HTML_TEMPLATE;
   }
 
