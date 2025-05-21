@@ -184,10 +184,11 @@ export function injectUEAttributes(bodyTree, ueConfig) {
       // handle columns
       const columnsBlocks = selectAll(':scope>div.columns', section);
       columnsBlocks.forEach((block, bIndex) => {
+        const { name: blockName } = getBlockNameAndClasses(block);
+
         addAttributes(block, {
-          'data-aue-resource': `urn:ab:section-${sIndex}/columns-${bIndex}`,
+          'data-aue-resource': `urn:ab:section-${sIndex}/columns-${blockName}-${bIndex}`,
           'data-aue-label': 'Columns',
-          'data-aue-prop': 'columns',
           'data-aue-model': 'columns',
           'data-aue-filter': 'columns',
           'data-aue-type': 'container',
@@ -197,9 +198,8 @@ export function injectUEAttributes(bodyTree, ueConfig) {
         const rows = selectAll(':scope>div', block);
         rows.forEach((row, rIndex) => {
           addAttributes(row, {
-            'data-aue-resource': `urn:ab:section-${sIndex}/columns-${bIndex}/row-${rIndex}`,
+            'data-aue-resource': `urn:ab:section-${sIndex}/columns-${blockName}-${bIndex}/row-${rIndex}`,
             'data-aue-label': 'Columns Row',
-            'data-aue-prop': 'columns-row',
             'data-aue-model': 'columns-row',
             'data-aue-filter': 'columns-row',
             'data-aue-type': 'container',
@@ -209,12 +209,11 @@ export function injectUEAttributes(bodyTree, ueConfig) {
           const cells = selectAll(':scope>div', row);
           cells.forEach((cell, cIndex) => {
             addAttributes(cell, {
-              'data-aue-resource': `urn:ab:section-${sIndex}/columns-${bIndex}/row-${rIndex}/cell-${cIndex}`,
+              'data-aue-resource': `urn:ab:section-${sIndex}/columns-${blockName}-${bIndex}/row-${rIndex}/cell-${cIndex}`,
               'data-aue-label': 'Columns Cell',
-              'data-aue-prop': 'columns-cell',
               'data-aue-model': 'columns-cell',
               'data-aue-filter': 'columns-cell',
-              'data-aue-type': 'richtext',
+              'data-aue-type': 'container',
               'data-aue-behavior': 'component',
             });
           });
@@ -297,7 +296,7 @@ export function unwrapParagraphs(tree) {
   visit(tree, 'element', (node, index, parent) => {
     // data-aue-type=\"richtext\"
     const properties = node.properties || {};
-    if (node.tagName === 'div' && properties.dataAueType === 'richtext' && properties.dataAueResource && properties.dataAueProp !== 'columns-cell') {
+    if (node.tagName === 'div' && properties.dataAueType === 'richtext' && properties.dataAueResource) {
       if (parent && Array.isArray(parent.children)) {
         const childrenToInsert = node.children || [];
         parent.children.splice(index, 1, ...childrenToInsert);
