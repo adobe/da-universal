@@ -229,7 +229,7 @@ export function injectUEAttributes(bodyTree, ueConfig) {
 
         const blockCmpDef = getComponentDefinition(ueConfig, blockName);
 
-        if (blockCmpDef.plugins?.da?.behaviour === 'columns') {
+        if (blockCmpDef?.plugins?.da?.behaviour === 'columns') {
           addColumnBehaviourInstrumentation(section, sIndex, block, bIndex, blockCmpDef);
           return;
         }
