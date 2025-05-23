@@ -101,8 +101,9 @@ function addBlockFieldAttributes(ueConfig, block) {
   }
 }
 
-function addColumnBehaviourInstrumentation(section, sIndex, block, bIndex, blockCmpDef) {
+function addColumnBehaviourInstrumentation(section, sIndex, block, bIndex, blockCmpDef, ueConfig) {
   const { name: blockName } = getBlockNameAndClasses(block);
+  const cellFilterDef = getFilterDefinition(ueConfig, `${blockName}-cell`);
 
   // handle columns
   addAttributes(block, {
@@ -135,6 +136,34 @@ function addColumnBehaviourInstrumentation(section, sIndex, block, bIndex, block
         'data-aue-type': 'container',
         'data-aue-behavior': 'component',
       });
+
+      if (cellFilterDef?.components?.length > 0) {
+        // TODO add different instrumentation de[ending on filter def?
+        // add instrumentation to children of cell
+        // handle images
+        const images = selectAll(':scope>picture', cell);
+        images.forEach((picture, iIndex) => {
+          addAttributes(picture, {
+            'data-aue-resource': `urn:ab:section-${sIndex}/columns-${bIndex}/row-${rIndex}/cell-${cIndex}/image-${iIndex}`,
+            'data-aue-label': 'Image',
+            'data-aue-behavior': 'component',
+            'data-aue-prop': 'image',
+            'data-aue-type': 'container',
+            'data-aue-model': 'image',
+          });
+        });
+
+        const textEls = selectAll(':scope>p', cell);
+        textEls.forEach((text, tIndex) => {
+          addAttributes(text, {
+            'data-aue-resource': `urn:ab:section-${sIndex}/columns-${bIndex}/row-${rIndex}/cell-${cIndex}/text-${tIndex}`,
+            'data-aue-label': 'Text',
+            'data-aue-behavior': 'component',
+            'data-aue-type': 'richtext',
+            'data-aue-prop': 'text',
+          });
+        });
+      }
     });
   });
 }
@@ -228,9 +257,10 @@ export function injectUEAttributes(bodyTree, ueConfig) {
         if (blockName === 'metadata' && blockName === 'section-metadata' && blockName === 'richtext') return;
 
         const blockCmpDef = getComponentDefinition(ueConfig, blockName);
+        const filterDef = getFilterDefinition(ueConfig, blockName);
 
         if (blockCmpDef?.plugins?.da?.behaviour === 'columns') {
-          addColumnBehaviourInstrumentation(section, sIndex, block, bIndex, blockCmpDef);
+          addColumnBehaviourInstrumentation(section, sIndex, block, bIndex, blockCmpDef, ueConfig);
           return;
         }
 
@@ -245,7 +275,6 @@ export function injectUEAttributes(bodyTree, ueConfig) {
         addBlockFieldAttributes(ueConfig, block);
 
         // apply block flter and child items
-        const filterDef = getFilterDefinition(ueConfig, blockName);
         if (filterDef) {
           addAttributes(block, {
             'data-aue-filter': blockName,
