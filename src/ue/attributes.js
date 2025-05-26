@@ -254,7 +254,7 @@ export function injectUEAttributes(bodyTree, ueConfig) {
         const { name: blockName } = getBlockNameAndClasses(block);
 
         if (!blockName) return;
-        if (blockName === 'metadata' && blockName === 'section-metadata' && blockName === 'richtext') return;
+        if (blockName === 'metadata' || blockName === 'section-metadata' || blockName === 'richtext') return;
 
         const blockCmpDef = getComponentDefinition(ueConfig, blockName);
         const filterDef = getFilterDefinition(ueConfig, blockName);
