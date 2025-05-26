@@ -137,9 +137,8 @@ function addColumnBehaviourInstrumentation(section, sIndex, block, bIndex, block
         'data-aue-behavior': 'component',
       });
 
+      // add instrumentation to children of cell
       if (cellFilterDef?.components?.length > 0) {
-        // TODO add different instrumentation de[ending on filter def?
-        // add instrumentation to children of cell
         // handle images
         const images = selectAll(':scope>picture', cell);
         images.forEach((picture, iIndex) => {
@@ -153,14 +152,15 @@ function addColumnBehaviourInstrumentation(section, sIndex, block, bIndex, block
           });
         });
 
-        const textEls = selectAll(':scope>p', cell);
-        textEls.forEach((text, tIndex) => {
-          addAttributes(text, {
-            'data-aue-resource': `urn:ab:section-${sIndex}/columns-${bIndex}/row-${rIndex}/cell-${cIndex}/text-${tIndex}`,
-            'data-aue-label': 'Text',
-            'data-aue-behavior': 'component',
+        const wrappedCell = wrapParagraphs(cell);
+        const richTextWrappers = selectAll(':scope>div.richtext', wrappedCell);
+        richTextWrappers.forEach((wrapper, wIndex) => {
+          addAttributes(wrapper, {
+            'data-aue-resource': `urn:ab:section-${sIndex}/columns-${bIndex}/row-${rIndex}/cell-${cIndex}/text-${wIndex}`,
             'data-aue-type': 'richtext',
-            'data-aue-prop': 'text',
+            'data-aue-label': 'Text',
+            'data-aue-prop': 'root',
+            'data-aue-behavior': 'component',
           });
         });
       }
