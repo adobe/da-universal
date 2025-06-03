@@ -427,6 +427,165 @@ describe('UE attributes', () => {
       assert.equal(section.children[2].children[0].tagName, 'p');
     });
 
+    it('adds UE attributes to column structure with proper hierarchy', () => {
+      const bodyTree = h('body', {}, [
+        h('main', {}, [
+          h('div', {}, [
+            h('div', { className: ['custom-columns'] }, [
+              h('div', {}, [
+                h('div', {}, [h('p', {}, 'Cell 1')]),
+                h('div', {}, [h('p', {}, 'Cell 2')])
+              ]),
+              h('div', {}, [
+                h('div', {}, [h('p', {}, 'Cell 3')]),
+                h('div', {}, [h('p', {}, 'Cell 4')])
+              ])
+            ])
+          ])
+        ])
+      ]);
+
+      const ueConfig = {
+        'component-definition': {
+          groups: [
+            {
+              components: [
+                { id: 'section', title: 'Section' },
+                { 
+                  id: 'custom-columns', 
+                  title: 'Custom Columns',
+                  plugins: {
+                    da: {
+                      behaviour: 'columns'
+                    }
+                  }
+                },
+              ],
+            },
+          ],
+        },
+        'component-filter': [
+          {
+            id: 'custom-columns-cell',
+            components: ['text', 'image'],
+          },
+        ],
+      };
+
+      attributes.injectUEAttributes(bodyTree, ueConfig);
+
+      // Test column block attributes
+      const columnBlock = select('main > div > div', bodyTree);
+      assert.equal(columnBlock.properties['data-aue-resource'], 'urn:ab:section-0/columns-0');
+      assert.equal(columnBlock.properties['data-aue-label'], 'Custom Columns');
+      assert.equal(columnBlock.properties['data-aue-model'], 'custom-columns');
+      assert.equal(columnBlock.properties['data-aue-filter'], 'custom-columns');
+      assert.equal(columnBlock.properties['data-aue-type'], 'container');
+      assert.equal(columnBlock.properties['data-aue-behavior'], 'component');
+
+      // Test first row attributes
+      const firstRow = select('main > div > div > div:first-child', bodyTree);
+      assert.equal(firstRow.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-0');
+      assert.equal(firstRow.properties['data-aue-label'], 'Custom Columns Row');
+      assert.equal(firstRow.properties['data-aue-model'], 'custom-columns-row');
+      assert.equal(firstRow.properties['data-aue-filter'], 'custom-columns-row');
+      assert.equal(firstRow.properties['data-aue-type'], 'container');
+      assert.equal(firstRow.properties['data-aue-behavior'], 'component');
+
+      // Test first cell attributes
+      const firstCell = select('main > div > div > div:first-child > div:first-child', bodyTree);
+      assert.equal(firstCell.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-0/cell-0');
+      assert.equal(firstCell.properties['data-aue-label'], 'Custom Columns Cell');
+      assert.equal(firstCell.properties['data-aue-model'], 'custom-columns-cell');
+      assert.equal(firstCell.properties['data-aue-filter'], 'custom-columns-cell');
+      assert.equal(firstCell.properties['data-aue-type'], 'container');
+      assert.equal(firstCell.properties['data-aue-behavior'], 'component');
+
+      // Test second row attributes
+      const secondRow = select('main > div > div > div:last-child', bodyTree);
+      assert.equal(secondRow.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-1');
+      assert.equal(secondRow.properties['data-aue-label'], 'Custom Columns Row');
+      assert.equal(secondRow.properties['data-aue-model'], 'custom-columns-row');
+      assert.equal(secondRow.properties['data-aue-filter'], 'custom-columns-row');
+      assert.equal(secondRow.properties['data-aue-type'], 'container');
+      assert.equal(secondRow.properties['data-aue-behavior'], 'component');
+
+      // Test second row first cell attributes
+      const secondRowFirstCell = select('main > div > div > div:last-child > div:first-child', bodyTree);
+      assert.equal(secondRowFirstCell.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-1/cell-0');
+      assert.equal(secondRowFirstCell.properties['data-aue-label'], 'Custom Columns Cell');
+      assert.equal(secondRowFirstCell.properties['data-aue-model'], 'custom-columns-cell');
+      assert.equal(secondRowFirstCell.properties['data-aue-filter'], 'custom-columns-cell');
+      assert.equal(secondRowFirstCell.properties['data-aue-type'], 'container');
+      assert.equal(secondRowFirstCell.properties['data-aue-behavior'], 'component');
+    });
+
+    it('instruments picture and richtext inside column cells', () => {
+      const bodyTree = h('body', {}, [
+        h('main', {}, [
+          h('div', {}, [
+            h('div', { className: ['custom-columns'] }, [
+              h('div', {}, [
+                h('div', {}, [
+                  h('picture', {}, [h('img', { src: 'img.jpg' })]),
+                  { type: 'text', value: 'Some text' }
+                ])
+              ])
+            ])
+          ])
+        ])
+      ]);
+
+      const ueConfig = {
+        'component-definition': {
+          groups: [
+            {
+              components: [
+                { 
+                  id: 'custom-columns', 
+                  title: 'Custom Columns',
+                  plugins: {
+                    da: {
+                      behaviour: 'columns'
+                    }
+                  }
+                },
+              ],
+            },
+          ],
+        },
+        'component-filter': [
+          {
+            id: 'custom-columns-cell',
+            components: ['text', 'image'], // triggers instrumentation
+          },
+        ],
+      };
+
+      attributes.injectUEAttributes(bodyTree, ueConfig);
+
+      // Find the cell
+      const cell = select('main > div > div > div > div', bodyTree);
+      // Picture instrumentation
+      const picture = select('picture', cell);
+      assert.ok(picture, 'Picture element exists');
+      assert.equal(picture.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-0/cell-0/image-0');
+      assert.equal(picture.properties['data-aue-label'], 'Image');
+      assert.equal(picture.properties['data-aue-behavior'], 'component');
+      assert.equal(picture.properties['data-aue-prop'], 'image');
+      assert.equal(picture.properties['data-aue-type'], 'container');
+      assert.equal(picture.properties['data-aue-model'], 'image');
+
+      // Richtext instrumentation
+      const richtext = select('div.richtext', cell);
+      assert.ok(richtext, 'Richtext wrapper exists');
+      assert.equal(richtext.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-0/cell-0/text-0');
+      assert.equal(richtext.properties['data-aue-type'], 'richtext');
+      assert.equal(richtext.properties['data-aue-label'], 'Text');
+      assert.equal(richtext.properties['data-aue-prop'], 'root');
+      assert.equal(richtext.properties['data-aue-behavior'], 'component');
+    });
+
   });
 
   describe('removeUEAttributes', () => {
