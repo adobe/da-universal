@@ -12,21 +12,12 @@
 import { selectAll, select } from 'hast-util-select';
 import { toString } from 'hast-util-to-string';
 import { visit } from 'unist-util-visit';
+import { toMetaName } from './strings.js';
 
 export function childNodes(node) {
   return node.children.filter((n) => n.type === 'element');
 }
-/**
- * Converts all non-valid characters to `-`.
- * @param {string} text input text
- * @returns {string} the meta name
- */
 
-export function toMetaName(text) {
-  return text
-    .toLowerCase()
-    .replace(/[^0-9a-z:_]/gi, '-');
-}
 /**
  * Returns the config from a block element as object with key/value pairs.
  * @param {Element} $block The block element

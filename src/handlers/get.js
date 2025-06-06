@@ -13,6 +13,7 @@ import { get404, getRobots } from '../responses/index.js';
 import { handleAEMProxyRequest } from '../routes/aem-proxy.js';
 import { getCookie } from '../routes/cookie.js';
 import { daSourceGet } from '../routes/da-admin.js';
+import { handleUEJsonRequest } from '../routes/ue-definitions.js';
 
 export default async function getHandler({ req, env, daCtx }) {
   const { path } = daCtx;
@@ -20,8 +21,8 @@ export default async function getHandler({ req, env, daCtx }) {
   if (!daCtx.site) return get404();
   if (path.startsWith('/favicon.ico')) return get404();
   if (path.startsWith('/robots.txt')) return getRobots();
-
   if (path.startsWith('/gimme_cookie')) return getCookie({ req });
+  if (path.startsWith('/.da-ue')) return handleUEJsonRequest({ req, env, daCtx });
 
   const resourceRegex = /\.(css|js|png|jpg|jpeg|webp|gif|svg|ico|json|xml|woff|woff2|plain\.html)$/i;
   if (resourceRegex.test(path)) {

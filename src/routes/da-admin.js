@@ -106,12 +106,12 @@ export async function daSourceGet({ req, env, daCtx }) {
   if (daAdminResp && daAdminResp.status === 200) {
     // enrich stored content with HTML header and UE attributes
     const originalBodyHtml = await daAdminResp.text();
-    const responseHtml = await prepareHtml(daCtx, aemCtx, originalBodyHtml, headHtml);
+    const responseHtml = await prepareHtml(env, daCtx, aemCtx, originalBodyHtml, headHtml);
     response.body = responseHtml;
   } else {
     // enrich default template with HTML header and UE attributes
     const templateHtml = await getPageTemplate(env, daCtx, aemCtx, headHtml);
-    const responseHtml = await prepareHtml(daCtx, aemCtx, templateHtml, headHtml);
+    const responseHtml = await prepareHtml(env, daCtx, aemCtx, templateHtml, headHtml);
     response.body = responseHtml;
   }
 
