@@ -103,14 +103,15 @@ async function getBlockVariants(env, daCtx, path) {
       const blockConfig = getBlockNameAndClasses(element);
       if (blockConfig.name !== 'library-metadata') {
         const block = {
-          id: toClassName(blockConfig.name),
           model: blockConfig.name,
           classes: blockConfig.classes.filter((cls) => cls !== blockConfig.name),
           name: blockConfig.name,
           hast: element,
         };
 
-        if (elements[index - 1] && heading(elements[index - 1])) {
+        if (elements[index - 1]
+          && heading(elements[index - 1])
+          && elements[index - 1].children.length > 0) {
           block.name = toString(elements[index - 1]);
         }
 
@@ -125,6 +126,7 @@ async function getBlockVariants(env, daCtx, path) {
           }
         }
 
+        block.id = toClassName(block.name);
         variants.push(block);
       }
     }
@@ -160,44 +162,46 @@ export function getComponentDefinitions(blocks) {
   const definitions = structuredClone(DEFAULT_COMPONENT_DEFINITIONS);
   const defaultBlocksDefinition = definitions.groups.find((definition) => definition.id === 'blocks');
 
-  blocks.forEach((block) => {
-    let blockDefinition = defaultBlocksDefinition;
-    if (block.group !== 'blocks') {
-      blockDefinition = {
-        title: block.name,
-        id: toClassName(block.group),
-        components: [],
-      };
-      definitions.groups.push(blockDefinition);
-    }
-
-    // add the "core" block definition
-    blockDefinition.components.push({
-      title: block.name,
-      id: toClassName(block.name),
-      model: toClassName(block.name),
-    });
-
-    // add the block variants
-    block.variants.reduce((acc, variant) => {
-      const isDuplicate = acc.some((v) => v.id === variant.id && v.name === variant.name);
-      if (!isDuplicate) {
-        acc.push(variant);
+  blocks
+    .filter((block) => !block.name.toLowerCase().includes('metadata'))
+    .forEach((block) => {
+      let blockDefinition = defaultBlocksDefinition;
+      if (block.group !== 'blocks') {
+        blockDefinition = {
+          title: block.name,
+          id: toClassName(block.group),
+          components: [],
+        };
+        definitions.groups.push(blockDefinition);
       }
-      return acc;
-    }, []).forEach((variant) => {
-      const blockVariant = {
-        title: variant.name,
-        id: variant.id,
-        plugins: {
-          da: {
-            unsafeHTML: toHtml(variant.hast),
+
+      // add the "core" block definition
+      blockDefinition.components.push({
+        title: block.name,
+        id: toClassName(block.name),
+        model: toClassName(block.name),
+      });
+
+      // add the block variants
+      block.variants.reduce((acc, variant) => {
+        const isDuplicate = acc.some((v) => v.id === variant.id && v.name === variant.name);
+        if (!isDuplicate) {
+          acc.push(variant);
+        }
+        return acc;
+      }, []).forEach((variant) => {
+        const blockVariant = {
+          title: variant.name,
+          id: variant.id,
+          plugins: {
+            da: {
+              unsafeHTML: toHtml(variant.hast),
+            },
           },
-        },
-      };
-      blockDefinition.components.push(blockVariant);
+        };
+        blockDefinition.components.push(blockVariant);
+      });
     });
-  });
   return definitions;
 }
 
@@ -205,6 +209,7 @@ export function getComponentModels(blocks) {
   const models = structuredClone(DEFAULT_COMPONENT_MODELS);
 
   blocks.forEach((block) => {
+    // for each block which has different classes we need to add a model
     const variantClasses = block.variants
       .filter((variant) => variant.classes)
       .flatMap((variant) => variant.classes);
@@ -235,7 +240,7 @@ export function getComponentFilters(blocks) {
   const sectionFilter = filters.find((filter) => filter.id === 'section');
   if (sectionFilter) {
     sectionFilter.components.push(
-      ...blocks
+      ...blocks.filter((block) => !block.name.includes('metadata'))
         .flatMap((block) => block.variants)
         .map((variant) => variant.id),
     );
