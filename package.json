@@ -17,7 +17,7 @@
     "eslint": "8.57.1",
     "esmock": "^2.7.0",
     "mocha": "^11.1.0",
-    "wrangler": "^3.0.0"
+    "wrangler": "^4.0.0"
   },
   "dependencies": {
     "hast-util-format": "^1.1.0",
