@@ -11,7 +11,7 @@
  */
 
 import { fromHtml } from 'hast-util-from-html';
-import { selectAll } from 'hast-util-select';
+import { select, selectAll } from 'hast-util-select';
 import { heading } from 'hast-util-heading';
 import { toString } from 'hast-util-to-string';
 import { isElement } from 'hast-util-is-element';
@@ -20,7 +20,6 @@ import { getFirstSheet } from '../utils/sheet.js';
 import { getBlockNameAndClasses } from '../utils/hast.js';
 import { toClassName } from '../utils/strings.js';
 import { AEM_ORIGINS, DEFAULT_COMPONENT_DEFINITIONS, DEFAULT_COMPONENT_FILTERS, DEFAULT_COMPONENT_MODELS } from '../utils/constants.js';
-import { h } from 'hastscript';
 
 // URL for the DA block collection
 // const BLOCK_LIBRARY_URL =
@@ -146,6 +145,7 @@ export async function fetchBlockLibrary(env, daCtx) {
           name: block.name,
           path: block.path,
           group: block.group || 'blocks',
+          items: block.items || null,
           variants: blockVariants,
         };
       } catch (e) {
@@ -165,43 +165,80 @@ export function getComponentDefinitions(blocks) {
   blocks
     .filter((block) => !block.name.toLowerCase().includes('metadata'))
     .forEach((block) => {
-      let blockDefinition = defaultBlocksDefinition;
+      let blockGroup = defaultBlocksDefinition;
       if (block.group !== 'blocks') {
-        blockDefinition = {
+        blockGroup = {
           title: block.name,
           id: toClassName(block.group),
           components: [],
         };
-        definitions.groups.push(blockDefinition);
+        definitions.groups.push(blockGroup);
       }
 
-      // add the "core" block definition
-      blockDefinition.components.push({
-        title: block.name,
-        id: toClassName(block.name),
-        model: toClassName(block.name),
-      });
+      const blockId = toClassName(block.name);
 
-      // add the block variants
-      block.variants.reduce((acc, variant) => {
-        const isDuplicate = acc.some((v) => v.id === variant.id && v.name === variant.name);
+      let uniqueBlockVariants = block.variants.reduce((acc, variant) => {
+        const isDuplicate = acc.some(
+          (v) => v.id === variant.id && v.name === variant.name,
+        );
         if (!isDuplicate) {
           acc.push(variant);
         }
         return acc;
-      }, []).forEach((variant) => {
+      }, []);
+
+      // if there are multiple variants, we need to add the core block definition and
+      // the variants with individual sample content and unique id
+      // only the "core" block definition get the model from the block name
+      // otherise add the variants with the model from the block name
+      if (uniqueBlockVariants.length > 1) {
+        const baseBlockVariant = {
+          name: block.name,
+          id: blockId,
+          model: toClassName(block.name),
+        };
+        uniqueBlockVariants = [baseBlockVariant, ...uniqueBlockVariants];
+      }
+
+      // map block variants to component definitions
+      uniqueBlockVariants.forEach((variant, index) => {
         const blockVariant = {
           title: variant.name,
-          id: variant.id,
-          plugins: {
+          id: index === 0 ? variant.id : `${variant.id}-${index}`,
+          model: variant.model || null,
+        };
+        if (variant.hast) {
+          blockVariant.plugins = {
             da: {
               unsafeHTML: toHtml(variant.hast),
             },
-          },
-        };
-        blockDefinition.components.push(blockVariant);
+          };
+        }
+        blockGroup.components.push(blockVariant);
+
+        // for container blocks, get the first and add the item block with the sample content
+        if (block.items && index === 0) {
+          const item = {
+            title: block.items,
+            id: `${blockId}-item`,
+          };
+
+          const firstVariant = uniqueBlockVariants.length > 1
+            ? uniqueBlockVariants[1]
+            : uniqueBlockVariants[0];
+          if (firstVariant.hast) {
+            const itemHast = select('div > div', firstVariant.hast);
+            item.plugins = {
+              da: {
+                unsafeHTML: toHtml(itemHast),
+              },
+            };
+          }
+          blockGroup.components.push(item);
+        }
       });
     });
+
   return definitions;
 }
 
