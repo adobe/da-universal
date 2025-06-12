@@ -283,32 +283,47 @@ export function getComponentModels(blocks) {
       ? uniqueBlockVariants[1]
       : uniqueBlockVariants[0];
     if (firstVariant.hast) {
-      if (!block.items) {
-        // a) for simple blocks
-        const cells = select(':scope > div', firstVariant.hast).children;
-        cells.forEach((cell, index) => {
-          const field = {
+      const cells = select(':scope > div', firstVariant.hast).children;
+
+      const createFields = (cell, index) => {
+        if (select('picture', cell) && cell.children.length < 2) {
+          return [
+            {
+              component: 'reference',
+              name: `div:nth-child(${
+                index + 1
+              })>picture:nth-child(1)>img:nth-child(3)[src]`,
+              label: 'Image',
+            },
+            {
+              component: 'text',
+              name: `div:nth-child(${
+                index + 1
+              })>picture:nth-child(1)>img:nth-child(3)[alt]`,
+              label: 'Image Alt Text',
+            },
+          ];
+        }
+        return [
+          {
             component: 'richtext',
             name: `div:nth-child(${index + 1})`,
-            label: `${block.name} Text ${index + 1}`,
-          };
-          model.fields.push(field);
+            label: 'Text',
+          },
+        ];
+      };
+
+      if (!block.items) {
+        // Simple blocks
+        cells.forEach((cell, index) => {
+          model.fields.push(...createFields(cell, index));
         });
       } else {
-        // b) for container blocks
+        // Container blocks
         const itemModel = {
           id: `${blockId}-item`,
-          fields: [],
+          fields: cells.flatMap((cell, index) => createFields(cell, index)).flat(),
         };
-        const cells = select(':scope > div', firstVariant.hast).children;
-        cells.forEach((cell, index) => {
-          const field = {
-            component: 'richtext',
-            name: `div:nth-child(${index + 1})`,
-            label: `${block.name} Text ${index + 1}`,
-          };
-          itemModel.fields.push(field);
-        });
         models.push(itemModel);
       }
     }
