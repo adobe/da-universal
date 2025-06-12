@@ -133,6 +133,35 @@ async function getBlockVariants(env, daCtx, path) {
   return variants;
 }
 
+function getUniqueBlockVariants(block) {
+  const blockId = toClassName(block.name);
+
+  let uniqueBlockVariants = block.variants.reduce((acc, variant) => {
+    const isDuplicate = acc.some(
+      (v) => v.id === variant.id && v.name === variant.name,
+    );
+    if (!isDuplicate) {
+      acc.push(variant);
+    }
+    return acc;
+  }, []);
+
+  // if there are multiple variants, we need to add the core block definition and
+  // the variants with individual sample content and unique id
+  // only the "core" block definition get the model from the block name
+  // otherise add the variants with the model from the block name
+  if (uniqueBlockVariants.length > 1) {
+    const baseBlockVariant = {
+      name: block.name,
+      id: blockId,
+      model: toClassName(block.name),
+    };
+    uniqueBlockVariants = [baseBlockVariant, ...uniqueBlockVariants];
+  }
+
+  return uniqueBlockVariants;
+}
+
 export async function fetchBlockLibrary(env, daCtx) {
   const blockList = await getBlocks(env, daCtx, [BLOCK_LIBRARY_URL]);
 
@@ -150,6 +179,7 @@ export async function fetchBlockLibrary(env, daCtx) {
         };
       } catch (e) {
         console.error('Error fetching block details:', e);
+        return { error: 'no blocks found' };
       }
     }),
   );
@@ -176,29 +206,7 @@ export function getComponentDefinitions(blocks) {
       }
 
       const blockId = toClassName(block.name);
-
-      let uniqueBlockVariants = block.variants.reduce((acc, variant) => {
-        const isDuplicate = acc.some(
-          (v) => v.id === variant.id && v.name === variant.name,
-        );
-        if (!isDuplicate) {
-          acc.push(variant);
-        }
-        return acc;
-      }, []);
-
-      // if there are multiple variants, we need to add the core block definition and
-      // the variants with individual sample content and unique id
-      // only the "core" block definition get the model from the block name
-      // otherise add the variants with the model from the block name
-      if (uniqueBlockVariants.length > 1) {
-        const baseBlockVariant = {
-          name: block.name,
-          id: blockId,
-          model: toClassName(block.name),
-        };
-        uniqueBlockVariants = [baseBlockVariant, ...uniqueBlockVariants];
-      }
+      const uniqueBlockVariants = getUniqueBlockVariants(block);
 
       // map block variants to component definitions
       uniqueBlockVariants.forEach((variant, index) => {
@@ -245,7 +253,12 @@ export function getComponentDefinitions(blocks) {
 export function getComponentModels(blocks) {
   const models = structuredClone(DEFAULT_COMPONENT_MODELS);
 
-  blocks.forEach((block) => {
+  blocks.filter((block) => !block.name.toLowerCase().includes('metadata')).forEach((block) => {
+    const blockId = toClassName(block.name);
+    const model = {
+      id: blockId,
+      fields: [],
+    };
     // for each block which has different classes we need to add a model
     const variantClasses = block.variants
       .filter((variant) => variant.classes)
@@ -261,10 +274,46 @@ export function getComponentModels(blocks) {
         })),
       };
 
-      const model = {
-        id: toClassName(block.name),
-        fields: [field],
-      };
+      model.fields.push(field);
+    }
+
+    // add model fields based on block structure
+    const uniqueBlockVariants = getUniqueBlockVariants(block);
+    const firstVariant = uniqueBlockVariants.length > 1
+      ? uniqueBlockVariants[1]
+      : uniqueBlockVariants[0];
+    if (firstVariant.hast) {
+      if (!block.items) {
+        // a) for simple blocks
+        const cells = select(':scope > div', firstVariant.hast).children;
+        cells.forEach((cell, index) => {
+          const field = {
+            component: 'richtext',
+            name: `div:nth-child(${index + 1})`,
+            label: `${block.name} Text ${index + 1}`,
+          };
+          model.fields.push(field);
+        });
+      } else {
+        // b) for container blocks
+        const itemModel = {
+          id: `${blockId}-item`,
+          fields: [],
+        };
+        const cells = select(':scope > div', firstVariant.hast).children;
+        cells.forEach((cell, index) => {
+          const field = {
+            component: 'richtext',
+            name: `div:nth-child(${index + 1})`,
+            label: `${block.name} Text ${index + 1}`,
+          };
+          itemModel.fields.push(field);
+        });
+        models.push(itemModel);
+      }
+    }
+
+    if (model.fields.length > 0) {
       models.push(model);
     }
   });
@@ -276,11 +325,24 @@ export function getComponentFilters(blocks) {
   const filters = structuredClone(DEFAULT_COMPONENT_FILTERS);
   const sectionFilter = filters.find((filter) => filter.id === 'section');
   if (sectionFilter) {
-    sectionFilter.components.push(
-      ...blocks.filter((block) => !block.name.includes('metadata'))
-        .flatMap((block) => block.variants)
-        .map((variant) => variant.id),
-    );
+    blocks.filter((block) => !block.name.toLowerCase().includes('metadata'))
+      .forEach((block) => {
+        const blockId = toClassName(block.name);
+        const uniqueBlockVariants = getUniqueBlockVariants(block);
+        uniqueBlockVariants.forEach((variant) => {
+          sectionFilter.components.push(variant.id);
+        });
+
+        if (block.items) {
+          const filter = {
+            id: blockId,
+            components: [
+              `${blockId}-item`,
+            ],
+          };
+          filters.push(filter);
+        }
+      });
   }
 
   return filters;
