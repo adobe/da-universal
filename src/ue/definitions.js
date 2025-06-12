@@ -279,11 +279,11 @@ export function getComponentModels(blocks) {
 
     // add model fields based on block structure
     const uniqueBlockVariants = getUniqueBlockVariants(block);
-    const firstVariant = uniqueBlockVariants.length > 1
+    const blockVariant = uniqueBlockVariants.length > 1
       ? uniqueBlockVariants[1]
       : uniqueBlockVariants[0];
-    if (firstVariant.hast) {
-      const cells = select(':scope > div', firstVariant.hast).children;
+    if (blockVariant.hast) {
+      const cells = select(':scope > div', blockVariant.hast).children;
 
       const createFields = (cell, index) => {
         if (select('picture', cell) && cell.children.length < 2) {
