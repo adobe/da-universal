@@ -12,6 +12,7 @@
 
 import { select } from 'hast-util-select';
 import { readBlockConfig } from '../utils/hast.js';
+import { toMetaName } from '../utils/strings.js';
 
 export function extractLocalMetadata(bodyTree) {
   const metaBlock = select('div.metadata', bodyTree);
@@ -21,15 +22,6 @@ export function extractLocalMetadata(bodyTree) {
     metaBlock.properties.style = 'display: none;';
   }
   return metaConfig;
-}
-
-/**
- * Converts all non-valid characters to `-`.
- * @param {string} text input text
- * @returns {string} the meta name
- */
-export function toMetaName(text) {
-  return text.toLowerCase().replace(/[^0-9a-z:_]/gi, '-');
 }
 
 export function globToRegExp(glob) {
