@@ -344,8 +344,9 @@ export function getComponentFilters(blocks) {
       .forEach((block) => {
         const blockId = toClassName(block.name);
         const uniqueBlockVariants = getUniqueBlockVariants(block);
-        uniqueBlockVariants.forEach((variant) => {
-          sectionFilter.components.push(variant.id);
+        uniqueBlockVariants.forEach((variant, index) => {
+          const id = index === 0 ? variant.id : `${variant.id}-${index}`;
+          sectionFilter.components.push(id);
         });
 
         if (block.items) {
