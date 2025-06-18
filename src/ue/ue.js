@@ -15,7 +15,7 @@ import { fromHtml } from 'hast-util-from-html';
 import { select, selectAll } from 'hast-util-select';
 import { toHtml } from 'hast-util-to-html';
 import { h } from 'hastscript';
-import { getHtmlDoc, getUEConfig, getUEHtmlHeadEntries } from './scaffold.js';
+import { getHtmlDoc, getUEConfig2, getUEHtmlHeadEntries } from './scaffold.js';
 import { injectUEAttributes } from './attributes.js';
 import { extractLocalMetadata, fetchBulkMetadata } from './metadata.js';
 import rewriteIcons from './rewrite-icons.js';
@@ -73,7 +73,7 @@ function injectMetadata(metadata, headNode) {
   });
 }
 
-export async function prepareHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
+export async function prepareHtml(env, daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
   // get the HTML document tree
   const documentTree = getHtmlDoc();
 
@@ -104,7 +104,7 @@ export async function prepareHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
   rewriteIcons(bodyNode);
 
   // add data attributes for UE to the body
-  const ueConfig = await getUEConfig(aemCtx);
+  const ueConfig = await getUEConfig2(env, daCtx);
   injectUEAttributes(bodyNode, ueConfig);
 
   // output the final HTML document

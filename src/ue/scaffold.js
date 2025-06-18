@@ -12,6 +12,7 @@
 
 import { fromHtml } from 'hast-util-from-html';
 import { h } from 'hastscript';
+import { fetchBlockLibrary, getComponentDefinitions, getComponentFilters, getComponentModels } from './definitions';
 
 export function getHtmlDoc() {
   const htmlDocStr = '<!DOCTYPE html><html><head></head><body></body></html>';
@@ -55,7 +56,7 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
       type: 'application/vnd.adobe.aue.component+json',
       src: orgSiteInPath
         ? `/${org}/${site}/component-definition.json`
-        : '/component-definition.json',
+        : '/.da-ue/component-definition.json',
     }),
   );
   children.push(
@@ -63,7 +64,7 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
       type: 'application/vnd.adobe.aue.model+json',
       src: orgSiteInPath
         ? `/${org}/${site}/component-models.json`
-        : '/component-models.json',
+        : '/.da-ue/component-models.json',
     }),
   );
   children.push(
@@ -71,7 +72,7 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
       type: 'application/vnd.adobe.aue.filter+json',
       src: orgSiteInPath
         ? `/${org}/${site}/component-filters.json`
-        : '/component-filters.json',
+        : '/.da-ue/component-filters.json',
     }),
   );
 
@@ -126,5 +127,20 @@ export async function getUEConfig(aemCtx) {
     return acc;
   }, {});
 
+  return ueConfig;
+}
+
+// TODO make this universal for either AEM or DA internal
+export async function getUEConfig2(env, daCtx) {
+  const blocks = await fetchBlockLibrary(env, daCtx);
+  const componentDefinitions = getComponentDefinitions(blocks);
+  const componentModels = getComponentModels(blocks);
+  const componentFilters = getComponentFilters(blocks);
+
+  const ueConfig = {
+    'component-model': componentModels,
+    'component-definition': componentDefinitions,
+    'component-filter': componentFilters,
+  };
   return ueConfig;
 }
