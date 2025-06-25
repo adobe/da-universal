@@ -23,7 +23,7 @@ export default async function getHandler({ req, env, daCtx }) {
 
   if (path.startsWith('/gimme_cookie')) return getCookie({ req });
 
-  const resourceRegex = /\.(css|js|png|jpg|jpeg|webp|gif|svg|ico|json|xml|woff|woff2|plain\.html)$/i;
+  const resourceRegex = /\.(css|js|js\.map|png|jpg|jpeg|webp|gif|svg|ico|json|xml|woff|woff2|plain\.html)$/i;
   if (resourceRegex.test(path)) {
     return handleAEMProxyRequest({ req, env, daCtx });
   }
