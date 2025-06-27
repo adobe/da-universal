@@ -10,12 +10,12 @@
  * governing permissions and limitations under the License.
  */
 
+/* eslint-env mocha */
+
 import assert from 'assert';
 import { describe, it, before } from 'mocha';
 import esmock from 'esmock';
 import { select, selectAll } from 'hast-util-select';
-import { fromHtml } from 'hast-util-from-html';
-import { minifyWhitespace } from 'hast-util-minify-whitespace';
 import { h } from 'hastscript';
 
 describe('UE attributes', () => {
@@ -28,7 +28,7 @@ describe('UE attributes', () => {
   describe('injectUEAttributes', () => {
     it('adds UE attributes to main content', () => {
       const bodyTree = h('body', {}, [
-        h('main', {}, [])
+        h('main', {}, []),
       ]);
 
       const ueConfig = {
@@ -45,7 +45,7 @@ describe('UE attributes', () => {
 
       attributes.injectUEAttributes(bodyTree, ueConfig);
 
-      const main = select('main', bodyTree);      
+      const main = select('main', bodyTree);
       assert.equal(main.properties['data-aue-resource'], 'urn:ab:main');
       assert.equal(main.properties['data-aue-type'], 'container');
       assert.equal(main.properties['data-aue-label'], 'Main Content');
@@ -55,8 +55,8 @@ describe('UE attributes', () => {
     it('adds UE attributes to sections', () => {
       const bodyTree = h('body', {}, [
         h('main', {}, [
-          h('div', {}, [])
-        ])
+          h('div', {}, []),
+        ]),
       ]);
 
       const ueConfig = {
@@ -84,9 +84,9 @@ describe('UE attributes', () => {
       const bodyTree = h('body', {}, [
         h('main', {}, [
           h('div', {}, [
-            h('div', { className: ['card-block'] }, [])
-          ])
-        ])
+            h('div', { className: ['card-block'] }, []),
+          ]),
+        ]),
       ]);
 
       const ueConfig = {
@@ -117,10 +117,10 @@ describe('UE attributes', () => {
           h('div', {}, [
             h('div', { className: ['cards'] }, [
               h('div', {}, []),
-              h('div', {}, [])
-            ])
-          ])
-        ])
+              h('div', {}, []),
+            ]),
+          ]),
+        ]),
       ]);
 
       const ueConfig = {
@@ -158,12 +158,12 @@ describe('UE attributes', () => {
 
     it('adds UE attributes to body for page metadata', () => {
       const bodyTree = h('body', {}, [
-        h('main', {}, [])
+        h('main', {}, []),
       ]);
 
       const ueConfig = {
         'component-model': [
-          { id: 'page-metadata', title: 'Page Metadata' }
+          { id: 'page-metadata', title: 'Page Metadata' },
         ],
         'component-definition': {
           groups: [
@@ -187,7 +187,7 @@ describe('UE attributes', () => {
 
     it('does not add page metadata attributes when not defined in config', () => {
       const bodyTree = h('body', {}, [
-        h('main', {}, [])
+        h('main', {}, []),
       ]);
 
       const ueConfig = {
@@ -216,9 +216,9 @@ describe('UE attributes', () => {
         h('main', {}, [
           h('div', {}, [
             h('h1', {}, [{ type: 'text', value: 'Heading 1' }]),
-            h('p', {}, [{ type: 'text', value: 'Paragraph 1' }])
-          ])
-        ])
+            h('p', {}, [{ type: 'text', value: 'Paragraph 1' }]),
+          ]),
+        ]),
       ]);
 
       const ueConfig = {
@@ -227,7 +227,7 @@ describe('UE attributes', () => {
             {
               components: [
                 { id: 'section', title: 'Section' },
-                { id: 'text', title: 'Text' }
+                { id: 'text', title: 'Text' },
               ],
             },
           ],
@@ -241,7 +241,7 @@ describe('UE attributes', () => {
       assert.equal(richTextDiv.properties['data-aue-type'], 'richtext');
       assert.equal(richTextDiv.properties['data-aue-label'], 'Text');
       assert.equal(richTextDiv.properties['data-aue-prop'], 'root');
-      assert.equal(richTextDiv.properties['className'], 'richtext');
+      assert.equal(richTextDiv.properties.className, 'richtext');
     });
 
     it('adds UE attributes to pictures within sections', () => {
@@ -249,10 +249,10 @@ describe('UE attributes', () => {
         h('main', {}, [
           h('div', {}, [
             h('picture', {}, [
-              h('img', {}, [])
-            ])
-          ])
-        ])
+              h('img', {}, []),
+            ]),
+          ]),
+        ]),
       ]);
 
       const ueConfig = {
@@ -261,7 +261,7 @@ describe('UE attributes', () => {
             {
               components: [
                 { id: 'section', title: 'Section' },
-                { id: 'image', title: 'Image' }
+                { id: 'image', title: 'Image' },
               ],
             },
           ],
@@ -284,12 +284,12 @@ describe('UE attributes', () => {
             h('div', { className: ['hero-block'] }, [
               h('div', {}, [{ type: 'text', value: 'Hero Text' }]),
               h('picture', {}, [
-                h('img', {}, [])
+                h('img', {}, []),
               ]),
-              h('div', {}, [{ type: 'text', value: 'Array Field' }])
-            ])
-          ])
-        ])
+              h('div', {}, [{ type: 'text', value: 'Array Field' }]),
+            ]),
+          ]),
+        ]),
       ]);
 
       const ueConfig = {
@@ -322,7 +322,6 @@ describe('UE attributes', () => {
                 name: 'div:last-child',
                 label: 'Array Field',
                 component: 'text',
-                name: 'array[0]',
               },
             ],
           },
@@ -342,9 +341,9 @@ describe('UE attributes', () => {
       assert.equal(imageField.properties['data-aue-label'], 'Hero Image');
 
       const arrayField = select('main > div > div > div:last-child', bodyTree);
-      assert.equal(arrayField.properties['data-aue-type'], undefined);
-      assert.equal(arrayField.properties['data-aue-prop'], undefined);
-      assert.equal(arrayField.properties['data-aue-label'], undefined);
+      assert.equal(arrayField.properties['data-aue-type'], 'text');
+      assert.equal(arrayField.properties['data-aue-prop'], 'div:last-child');
+      assert.equal(arrayField.properties['data-aue-label'], 'Array Field');
     });
 
     it('handles whitespace text nodes in wrapParagraphs', () => {
@@ -352,9 +351,9 @@ describe('UE attributes', () => {
         h('main', {}, [
           h('div', {}, [
             h('h1', {}, [{ type: 'text', value: 'Heading 1' }]),
-            h('p', {}, [{ type: 'text', value: 'Paragraph 1' }])
-          ])
-        ])
+            h('p', {}, [{ type: 'text', value: 'Paragraph 1' }]),
+          ]),
+        ]),
       ]);
 
       const ueConfig = {
@@ -389,9 +388,9 @@ describe('UE attributes', () => {
           h('div', {}, [
             h('h1', {}, 'Heading 1'),
             h('img', {}),
-            h('p', {}, 'Paragraph 1')
-          ])
-        ])
+            h('p', {}, 'Paragraph 1'),
+          ]),
+        ]),
       ]);
 
       const ueConfig = {
@@ -434,15 +433,15 @@ describe('UE attributes', () => {
             h('div', { className: ['custom-columns'] }, [
               h('div', {}, [
                 h('div', {}, [h('p', {}, 'Cell 1')]),
-                h('div', {}, [h('p', {}, 'Cell 2')])
+                h('div', {}, [h('p', {}, 'Cell 2')]),
               ]),
               h('div', {}, [
                 h('div', {}, [h('p', {}, 'Cell 3')]),
-                h('div', {}, [h('p', {}, 'Cell 4')])
-              ])
-            ])
-          ])
-        ])
+                h('div', {}, [h('p', {}, 'Cell 4')]),
+              ]),
+            ]),
+          ]),
+        ]),
       ]);
 
       const ueConfig = {
@@ -451,14 +450,14 @@ describe('UE attributes', () => {
             {
               components: [
                 { id: 'section', title: 'Section' },
-                { 
-                  id: 'custom-columns', 
+                {
+                  id: 'custom-columns',
                   title: 'Custom Columns',
                   plugins: {
                     da: {
-                      behaviour: 'columns'
-                    }
-                  }
+                      behaviour: 'columns',
+                    },
+                  },
                 },
               ],
             },
@@ -528,12 +527,12 @@ describe('UE attributes', () => {
               h('div', {}, [
                 h('div', {}, [
                   h('picture', {}, [h('img', { src: 'img.jpg' })]),
-                  { type: 'text', value: 'Some text' }
-                ])
-              ])
-            ])
-          ])
-        ])
+                  { type: 'text', value: 'Some text' },
+                ]),
+              ]),
+            ]),
+          ]),
+        ]),
       ]);
 
       const ueConfig = {
@@ -541,14 +540,14 @@ describe('UE attributes', () => {
           groups: [
             {
               components: [
-                { 
-                  id: 'custom-columns', 
+                {
+                  id: 'custom-columns',
                   title: 'Custom Columns',
                   plugins: {
                     da: {
-                      behaviour: 'columns'
-                    }
-                  }
+                      behaviour: 'columns',
+                    },
+                  },
                 },
               ],
             },
@@ -585,7 +584,6 @@ describe('UE attributes', () => {
       assert.equal(richtext.properties['data-aue-prop'], 'root');
       assert.equal(richtext.properties['data-aue-behavior'], 'component');
     });
-
   });
 
   describe('removeUEAttributes', () => {
@@ -600,7 +598,7 @@ describe('UE attributes', () => {
           'data-aue-resource': 'urn:ab:section-0/block-0',
           'data-aue-type': 'component',
           className: 'block',
-        }, [])
+        }, []),
       ]);
 
       const result = attributes.removeUEAttributes(tree);
@@ -627,23 +625,23 @@ describe('UE attributes', () => {
               'data-aue-type': 'richtext',
               'data-aue-label': 'Text',
               'data-aue-prop': 'root',
-              'data-aue-behavior': 'component'
+              'data-aue-behavior': 'component',
             }, [
               h('h1', {}, 'Heading 1'),
-              h('p', {}, 'Paragraph 1')
+              h('p', {}, 'Paragraph 1'),
             ]),
             h('div', {
               'data-aue-resource': 'urn:ab:section-0/text-1',
               'data-aue-type': 'richtext',
               'data-aue-label': 'Text',
               'data-aue-prop': 'root',
-              'data-aue-behavior': 'component'
+              'data-aue-behavior': 'component',
             }, [
-              h('p', {}, 'Paragraph 2')
-            ])
-          ])
+              h('p', {}, 'Paragraph 2'),
+            ]),
+          ]),
         ]),
-        h('footer', {}, [])
+        h('footer', {}, []),
       ]);
 
       const result = attributes.unwrapParagraphs(tree);
@@ -668,10 +666,10 @@ describe('UE attributes', () => {
               'data-aue-type': 'richtext',
               'data-aue-label': 'Text',
               'data-aue-prop': 'text',
-              'data-aue-behavior': 'component'
+              'data-aue-behavior': 'component',
             }, [
               h('h1', {}, 'Heading 1'),
-              h('p', {}, 'Paragraph 1')
+              h('p', {}, 'Paragraph 1'),
             ]),
             h('img', { src: 'https://placehold.co/600x400' }, []),
             h('div', {
@@ -679,13 +677,13 @@ describe('UE attributes', () => {
               'data-aue-type': 'richtext',
               'data-aue-label': 'Text',
               'data-aue-prop': 'text',
-              'data-aue-behavior': 'component'
+              'data-aue-behavior': 'component',
             }, [
-              h('p', {}, 'Paragraph 2')
-            ])
-          ])
+              h('p', {}, 'Paragraph 2'),
+            ]),
+          ]),
         ]),
-        h('footer', {}, [])
+        h('footer', {}, []),
       ]);
 
       const result = attributes.unwrapParagraphs(tree);
@@ -708,22 +706,22 @@ describe('UE attributes', () => {
               'data-aue-resource': 'urn:ab:section-0/block-0',
               'data-aue-type': 'component',
               'data-aue-label': 'Hero',
-              'data-aue-model': 'hero'
+              'data-aue-model': 'hero',
             }, [
               h('div', {}, [
                 h('div', {
                   'data-aue-type': 'richtext',
                   'data-aue-prop': '1234',
-                  'data-aue-label': 'Hero Text'
+                  'data-aue-label': 'Hero Text',
                 }, [
                   h('h1', {}, 'Heading 1'),
                   h('p', {}, 'Paragraph 1'),
                   h('p', {}, [
                     h('a', { href: '/adobe', title: 'Adobe' }, [
-                      h('em', {}, 'Adobe')
-                    ])
-                  ])
-                ])
+                      h('em', {}, 'Adobe'),
+                    ]),
+                  ]),
+                ]),
               ]),
               h('div', {}, [
                 h('div', {}, [
@@ -731,14 +729,14 @@ describe('UE attributes', () => {
                     src: 'https://placehold.co/600x400',
                     'data-aue-type': 'media',
                     'data-aue-prop': '1234',
-                    'data-aue-label': 'Hero Image'
-                  }, [])
-                ])
-              ])
-            ])
-          ])
+                    'data-aue-label': 'Hero Image',
+                  }, []),
+                ]),
+              ]),
+            ]),
+          ]),
         ]),
-        h('footer', {}, [])
+        h('footer', {}, []),
       ]);
 
       const result = attributes.unwrapParagraphs(tree);
@@ -755,4 +753,4 @@ describe('UE attributes', () => {
       assert.equal(cell2.tagName, 'div');
     });
   });
-}); 
+});

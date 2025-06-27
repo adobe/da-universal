@@ -162,13 +162,11 @@ export async function fetchBulkMetadata(aemCtx) {
     const json = await response.json();
     const metadata = json.default ?? json;
     if (!metadata) {
-      // eslint-disable-next-line no-console
       console.log('Metadata sheet is not valid');
       return Modifiers.EMPTY;
     }
 
     if (!Array.isArray(metadata.data)) {
-      // eslint-disable-next-line no-console
       console.log('Metadata sheet is not valid');
       return Modifiers.EMPTY;
     }

@@ -18,7 +18,7 @@ const reqs = {
   contentSubFolderIndex: new Request('https://main--site--org.ue.da.live/sub-folder/'),
   invalid: new Request('https://xyz.ue.da.live/'),
   nonHtmlFile: new Request('https://main--site--org.ue.da.live/folder/content.json'),
-  plainFile: new Request('https://main--site--org.ue.da.live/folder/content.plain.html')
+  plainFile: new Request('https://main--site--org.ue.da.live/folder/content.plain.html'),
 };
 
 export default reqs;

@@ -27,15 +27,15 @@ describe('Config Module', () => {
     // Initialize mock properties
     mockFetch.lastCall = null;
     mockFetch.nextResponse = null;
-    
+
     // Replace global fetch
     globalThis.fetch = mockFetch;
 
     mockEnv = {
       DA_ADMIN: 'https://admin.da.live',
       daadmin: {
-        fetch: mockFetch
-      }
+        fetch: mockFetch,
+      },
     };
 
     // Import module after mocking
@@ -57,12 +57,12 @@ describe('Config Module', () => {
     if (Array.isArray(dataOrObj)) {
       mockFetch.nextResponse = {
         ok: true,
-        json: async () => ({ data: dataOrObj })
+        json: async () => ({ data: dataOrObj }),
       };
     } else {
       mockFetch.nextResponse = {
         ok: true,
-        json: async () => dataOrObj
+        json: async () => dataOrObj,
       };
     }
   };
@@ -71,7 +71,7 @@ describe('Config Module', () => {
     it('should fetch site config successfully (single-sheet)', async () => {
       const mockData = [
         { key: 'editor.ue.template', value: '/content=/templates' },
-        { key: 'editor.ue.template', value: '/components=/blocks' }
+        { key: 'editor.ue.template', value: '/components=/blocks' },
       ];
       setMockResponse({ data: mockData });
 
@@ -81,14 +81,14 @@ describe('Config Module', () => {
         url: 'https://admin.da.live/config/test-org/test-site',
         opts: {
           headers: new Headers({
-            'authorization': 'test-token'
-          })
-        }
+            authorization: 'test-token',
+          }),
+        },
       };
       assert.strictEqual(mockFetch.lastCall.url, expectedCall.url);
       assert.deepStrictEqual(
         Object.fromEntries(mockFetch.lastCall.opts.headers.entries()),
-        Object.fromEntries(expectedCall.opts.headers.entries())
+        Object.fromEntries(expectedCall.opts.headers.entries()),
       );
       assert.deepStrictEqual(result, mockData);
     });
@@ -101,21 +101,25 @@ describe('Config Module', () => {
           offset: 0,
           data: [
             { key: 'aem.repositoryId', value: 'author-p129757-e1266090.adobeaemcloud.com' },
-            { key: 'editor.ue.template', value: '/products=/scripts/ue-templates.html' }
-          ]
+            { key: 'editor.ue.template', value: '/products=/scripts/ue-templates.html' },
+          ],
         },
         library: {
           total: 2,
           limit: 2,
           offset: 0,
           data: [
-            { title: 'Blocks', path: 'https://content.da.live/sgotenks/da-citisignal/docs/library/blocks.json', format: '', ref: '', icon: '', experience: '' },
-            { title: 'Templates', path: 'https://content.da.live/sgotenks/da-citisignal/docs/library/templates.json', format: '', ref: '', icon: '', experience: '' }
-          ]
+            {
+              title: 'Blocks', path: 'https://content.da.live/sgotenks/da-citisignal/docs/library/blocks.json', format: '', ref: '', icon: '', experience: '',
+            },
+            {
+              title: 'Templates', path: 'https://content.da.live/sgotenks/da-citisignal/docs/library/templates.json', format: '', ref: '', icon: '', experience: '',
+            },
+          ],
         },
         ':names': ['data', 'library'],
         ':version': 3,
-        ':type': 'multi-sheet'
+        ':type': 'multi-sheet',
       };
       setMockResponse(multiSheet);
       const result = await configModule.getSiteConfig(mockEnv, mockDaCtx);
@@ -137,7 +141,7 @@ describe('Config Module', () => {
       const mockData = [
         { key: 'editor.ue.template', value: '/content=/templates' },
         { key: 'editor.ue.template', value: '/components=/blocks' },
-        { key: 'editor.ue.template', value: '/assets=/media' }
+        { key: 'editor.ue.template', value: '/assets=/media' },
       ];
       setMockResponse({ data: mockData });
 
@@ -147,14 +151,14 @@ describe('Config Module', () => {
         url: 'https://admin.da.live/config/test-org',
         opts: {
           headers: new Headers({
-            'authorization': 'test-token'
-          })
-        }
+            authorization: 'test-token',
+          }),
+        },
       };
       assert.strictEqual(mockFetch.lastCall.url, expectedCall.url);
       assert.deepStrictEqual(
         Object.fromEntries(mockFetch.lastCall.opts.headers.entries()),
-        Object.fromEntries(expectedCall.opts.headers.entries())
+        Object.fromEntries(expectedCall.opts.headers.entries()),
       );
       assert.deepStrictEqual(result, mockData);
     });
@@ -167,20 +171,22 @@ describe('Config Module', () => {
           offset: 0,
           data: [
             { key: 'org.setting', value: 'org-value' },
-            { key: 'editor.ue.template', value: '/org=/org-templates.html' }
-          ]
+            { key: 'editor.ue.template', value: '/org=/org-templates.html' },
+          ],
         },
         library: {
           total: 1,
           limit: 1,
           offset: 0,
           data: [
-            { title: 'Org Blocks', path: 'https://content.da.live/org/library/blocks.json', format: '', ref: '', icon: '', experience: '' }
-          ]
+            {
+              title: 'Org Blocks', path: 'https://content.da.live/org/library/blocks.json', format: '', ref: '', icon: '', experience: '',
+            },
+          ],
         },
         ':names': ['data', 'library'],
         ':version': 3,
-        ':type': 'multi-sheet'
+        ':type': 'multi-sheet',
       };
       setMockResponse(multiSheet);
       const result = await configModule.getOrgConfig(mockEnv, mockDaCtx);
@@ -201,7 +207,7 @@ describe('Config Module', () => {
     it('should not include authorization header when authToken is not provided', async () => {
       const ctxWithoutToken = { org: 'test-org', site: 'test-site' };
       setMockResponse([
-        { key: 'editor.ue.template', value: '/content=/templates' }
+        { key: 'editor.ue.template', value: '/content=/templates' },
       ]);
 
       await configModule.getSiteConfig(mockEnv, ctxWithoutToken);
@@ -209,13 +215,13 @@ describe('Config Module', () => {
       const expectedCall = {
         url: 'https://admin.da.live/config/test-org/test-site',
         opts: {
-          headers: new Headers()
-        }
+          headers: new Headers(),
+        },
       };
       assert.strictEqual(mockFetch.lastCall.url, expectedCall.url);
       assert.deepStrictEqual(
         Object.fromEntries(mockFetch.lastCall.opts.headers.entries()),
-        Object.fromEntries(expectedCall.opts.headers.entries())
+        Object.fromEntries(expectedCall.opts.headers.entries()),
       );
     });
   });
