@@ -52,20 +52,28 @@ describe('Config Module', () => {
     authToken: 'test-token',
   };
 
-  const setMockResponse = (data) => {
-    mockFetch.nextResponse = {
-      ok: true,
-      json: async () => ({ data })
-    };
+  // Helper to set mock response, supports both array and object
+  const setMockResponse = (dataOrObj) => {
+    if (Array.isArray(dataOrObj)) {
+      mockFetch.nextResponse = {
+        ok: true,
+        json: async () => ({ data: dataOrObj })
+      };
+    } else {
+      mockFetch.nextResponse = {
+        ok: true,
+        json: async () => dataOrObj
+      };
+    }
   };
 
   describe('getSiteConfig', () => {
-    it('should fetch site config successfully', async () => {
+    it('should fetch site config successfully (single-sheet)', async () => {
       const mockData = [
         { key: 'editor.ue.template', value: '/content=/templates' },
         { key: 'editor.ue.template', value: '/components=/blocks' }
       ];
-      setMockResponse(mockData);
+      setMockResponse({ data: mockData });
 
       const result = await configModule.getSiteConfig(mockEnv, mockDaCtx);
 
@@ -85,6 +93,36 @@ describe('Config Module', () => {
       assert.deepStrictEqual(result, mockData);
     });
 
+    it('should fetch site config successfully (multi-sheet)', async () => {
+      const multiSheet = {
+        data: {
+          total: 2,
+          limit: 2,
+          offset: 0,
+          data: [
+            { key: 'aem.repositoryId', value: 'author-p129757-e1266090.adobeaemcloud.com' },
+            { key: 'editor.ue.template', value: '/products=/scripts/ue-templates.html' }
+          ]
+        },
+        library: {
+          total: 2,
+          limit: 2,
+          offset: 0,
+          data: [
+            { title: 'Blocks', path: 'https://content.da.live/sgotenks/da-citisignal/docs/library/blocks.json', format: '', ref: '', icon: '', experience: '' },
+            { title: 'Templates', path: 'https://content.da.live/sgotenks/da-citisignal/docs/library/templates.json', format: '', ref: '', icon: '', experience: '' }
+          ]
+        },
+        ':names': ['data', 'library'],
+        ':version': 3,
+        ':type': 'multi-sheet'
+      };
+      setMockResponse(multiSheet);
+      const result = await configModule.getSiteConfig(mockEnv, mockDaCtx);
+      // Should return only the first sheet's data array
+      assert.deepStrictEqual(result, multiSheet.data.data);
+    });
+
     it('should return null when fetch fails', async () => {
       mockFetch.nextResponse = { ok: false };
 
@@ -95,13 +133,13 @@ describe('Config Module', () => {
   });
 
   describe('getOrgConfig', () => {
-    it('should fetch org config successfully', async () => {
+    it('should fetch org config successfully (single-sheet)', async () => {
       const mockData = [
         { key: 'editor.ue.template', value: '/content=/templates' },
         { key: 'editor.ue.template', value: '/components=/blocks' },
         { key: 'editor.ue.template', value: '/assets=/media' }
       ];
-      setMockResponse(mockData);
+      setMockResponse({ data: mockData });
 
       const result = await configModule.getOrgConfig(mockEnv, mockDaCtx);
 
@@ -119,6 +157,35 @@ describe('Config Module', () => {
         Object.fromEntries(expectedCall.opts.headers.entries())
       );
       assert.deepStrictEqual(result, mockData);
+    });
+
+    it('should fetch org config successfully (multi-sheet)', async () => {
+      const multiSheet = {
+        data: {
+          total: 2,
+          limit: 2,
+          offset: 0,
+          data: [
+            { key: 'org.setting', value: 'org-value' },
+            { key: 'editor.ue.template', value: '/org=/org-templates.html' }
+          ]
+        },
+        library: {
+          total: 1,
+          limit: 1,
+          offset: 0,
+          data: [
+            { title: 'Org Blocks', path: 'https://content.da.live/org/library/blocks.json', format: '', ref: '', icon: '', experience: '' }
+          ]
+        },
+        ':names': ['data', 'library'],
+        ':version': 3,
+        ':type': 'multi-sheet'
+      };
+      setMockResponse(multiSheet);
+      const result = await configModule.getOrgConfig(mockEnv, mockDaCtx);
+      // Should return only the first sheet's data array
+      assert.deepStrictEqual(result, multiSheet.data.data);
     });
 
     it('should return null when fetch fails', async () => {
