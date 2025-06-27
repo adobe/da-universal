@@ -10,6 +10,8 @@
  * governing permissions and limitations under the License.
  */
 
+import { getFirstSheet } from '../utils/sheet.js';
+
 async function fetchConfig(env, daCtx, path) {
   const headers = new Headers();
   if (daCtx.authToken) {
@@ -23,7 +25,9 @@ async function fetchConfig(env, daCtx, path) {
     return null;
   }
   const json = await res.json();
-  return json?.data;
+  if (!json) return [];
+  const data = getFirstSheet(json);
+  return data;
 }
 
 export async function getSiteConfig(env, daCtx) {
