@@ -10,6 +10,8 @@
  * governing permissions and limitations under the License.
  */
 
+/* eslint-env mocha */
+
 import assert from 'assert';
 import { describe, it } from 'mocha';
 import esmock from 'esmock';
@@ -32,7 +34,7 @@ describe('hast utilities', () => {
       };
       const result = utils.childNodes(node);
       assert.equal(result.length, 2);
-      assert(result.every(n => n.type === 'element'));
+      assert(result.every((n) => n.type === 'element'));
     });
   });
 
@@ -54,7 +56,7 @@ describe('hast utilities', () => {
           { type: 'text', value: '\n  ' },
         ],
       };
-      
+
       const result = utils.removeWhitespaceTextNodes(tree);
       assert.equal(result.children.length, 1);
       assert.equal(result.children[0].type, 'element');
@@ -69,7 +71,7 @@ describe('hast utilities', () => {
           { type: 'text', value: 'World' },
         ],
       };
-      
+
       const result = utils.removeWhitespaceTextNodes(tree);
       assert.equal(result.children.length, 2);
       assert.equal(result.children[0].value, 'Hello');
@@ -84,7 +86,7 @@ describe('hast utilities', () => {
           className: ['block-name', 'class1', 'class2'],
         },
       };
-      
+
       const result = utils.getBlockNameAndClasses(blockNode);
       assert.deepEqual(result, {
         name: 'block-name',
@@ -92,4 +94,4 @@ describe('hast utilities', () => {
       });
     });
   });
-}); 
+});

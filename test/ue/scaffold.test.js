@@ -10,8 +10,12 @@
  * governing permissions and limitations under the License.
  */
 
+/* eslint-env mocha */
+
 import assert from 'assert';
-import { describe, it, before, beforeEach } from 'mocha';
+import {
+  describe, it, before, beforeEach,
+} from 'mocha';
 import esmock from 'esmock';
 import { getAemCtx } from '../../src/utils/aemCtx.js';
 
@@ -63,17 +67,17 @@ describe('UE scaffold', () => {
 
       // Check system:ab meta tag
       const ueSystemTag = metaTags.find(
-        (tag) => tag.properties.name === 'urn:adobe:aue:system:ab'
+        (tag) => tag.properties.name === 'urn:adobe:aue:system:ab',
       );
       assert.ok(ueSystemTag);
       assert.strictEqual(
         ueSystemTag.properties.content,
-        'da:https://ref--site--org.test-ue-host/some-path'
+        'da:https://ref--site--org.test-ue-host/some-path',
       );
 
       // Check service meta tag
       const serviceTag = metaTags.find(
-        (tag) => tag.properties.name === 'urn:adobe:aue:config:service'
+        (tag) => tag.properties.name === 'urn:adobe:aue:config:service',
       );
       assert.ok(serviceTag);
       assert.strictEqual(serviceTag.properties.content, 'test-ue-service');
@@ -84,41 +88,39 @@ describe('UE scaffold', () => {
 
       // Check CORS script
       const corsScript = scriptTags.find(
-        (tag) =>
-          tag.properties.src ===
-          'https://universal-editor-service.adobe.io/cors.js'
+        (tag) => tag.properties.src
+          === 'https://universal-editor-service.adobe.io/cors.js',
       );
       assert.ok(corsScript);
 
       // Check component definition script
       const componentDefScript = scriptTags.find(
-        (tag) =>
-          tag.properties.type === 'application/vnd.adobe.aue.component+json'
+        (tag) => tag.properties.type === 'application/vnd.adobe.aue.component+json',
       );
       assert.ok(componentDefScript);
       assert.strictEqual(
         componentDefScript.properties.src,
-        '/component-definition.json'
+        '/component-definition.json',
       );
 
       // Check component models script
       const componentModelsScript = scriptTags.find(
-        (tag) => tag.properties.type === 'application/vnd.adobe.aue.model+json'
+        (tag) => tag.properties.type === 'application/vnd.adobe.aue.model+json',
       );
       assert.ok(componentModelsScript);
       assert.strictEqual(
         componentModelsScript.properties.src,
-        '/component-models.json'
+        '/component-models.json',
       );
 
       // Check component filters script
       const componentFiltersScript = scriptTags.find(
-        (tag) => tag.properties.type === 'application/vnd.adobe.aue.filter+json'
+        (tag) => tag.properties.type === 'application/vnd.adobe.aue.filter+json',
       );
       assert.ok(componentFiltersScript);
       assert.strictEqual(
         componentFiltersScript.properties.src,
-        '/component-filters.json'
+        '/component-filters.json',
       );
     });
 
@@ -135,17 +137,17 @@ describe('UE scaffold', () => {
 
       // Check system:ab meta tag
       const ueSystemTag = metaTags.find(
-        (tag) => tag.properties.name === 'urn:adobe:aue:system:ab'
+        (tag) => tag.properties.name === 'urn:adobe:aue:system:ab',
       );
       assert.ok(ueSystemTag);
       assert.strictEqual(
         ueSystemTag.properties.content,
-        'da:https://test-ue-host/org/site/some-path'
+        'da:https://test-ue-host/org/site/some-path',
       );
 
       // Check service meta tag
       const serviceTag = metaTags.find(
-        (tag) => tag.properties.name === 'urn:adobe:aue:config:service'
+        (tag) => tag.properties.name === 'urn:adobe:aue:config:service',
       );
       assert.ok(serviceTag);
       assert.strictEqual(serviceTag.properties.content, 'test-ue-service');
@@ -154,33 +156,32 @@ describe('UE scaffold', () => {
 
       // Check component definition script
       const componentDefScript = scriptTags.find(
-        (tag) =>
-          tag.properties.type === 'application/vnd.adobe.aue.component+json'
+        (tag) => tag.properties.type === 'application/vnd.adobe.aue.component+json',
       );
       assert.ok(componentDefScript);
       assert.strictEqual(
         componentDefScript.properties.src,
-        '/org/site/component-definition.json'
+        '/org/site/component-definition.json',
       );
 
       // Check component models script
       const componentModelsScript = scriptTags.find(
-        (tag) => tag.properties.type === 'application/vnd.adobe.aue.model+json'
+        (tag) => tag.properties.type === 'application/vnd.adobe.aue.model+json',
       );
       assert.ok(componentModelsScript);
       assert.strictEqual(
         componentModelsScript.properties.src,
-        '/org/site/component-models.json'
+        '/org/site/component-models.json',
       );
 
       // Check component filters script
       const componentFiltersScript = scriptTags.find(
-        (tag) => tag.properties.type === 'application/vnd.adobe.aue.filter+json'
+        (tag) => tag.properties.type === 'application/vnd.adobe.aue.filter+json',
       );
       assert.ok(componentFiltersScript);
       assert.strictEqual(
         componentFiltersScript.properties.src,
-        '/org/site/component-filters.json'
+        '/org/site/component-filters.json',
       );
     });
 
@@ -194,45 +195,44 @@ describe('UE scaffold', () => {
 
       // Check system:ab meta tag
       const ueSystemTag = metaTags.find(
-        (tag) => tag.properties.name === 'urn:adobe:aue:system:ab'
+        (tag) => tag.properties.name === 'urn:adobe:aue:system:ab',
       );
       assert.ok(ueSystemTag);
       assert.strictEqual(
         ueSystemTag.properties.content,
-        'da:https://test-ue-host/org/site/some-path'
+        'da:https://test-ue-host/org/site/some-path',
       );
 
       const scriptTags = entries.filter((entry) => entry.tagName === 'script');
 
       // Check component definition script
       const componentDefScript = scriptTags.find(
-        (tag) =>
-          tag.properties.type === 'application/vnd.adobe.aue.component+json'
+        (tag) => tag.properties.type === 'application/vnd.adobe.aue.component+json',
       );
       assert.ok(componentDefScript);
       assert.strictEqual(
         componentDefScript.properties.src,
-        '/component-definition.json'
+        '/component-definition.json',
       );
 
       // Check component models script
       const componentModelsScript = scriptTags.find(
-        (tag) => tag.properties.type === 'application/vnd.adobe.aue.model+json'
+        (tag) => tag.properties.type === 'application/vnd.adobe.aue.model+json',
       );
       assert.ok(componentModelsScript);
       assert.strictEqual(
         componentModelsScript.properties.src,
-        '/component-models.json'
+        '/component-models.json',
       );
 
       // Check component filters script
       const componentFiltersScript = scriptTags.find(
-        (tag) => tag.properties.type === 'application/vnd.adobe.aue.filter+json'
+        (tag) => tag.properties.type === 'application/vnd.adobe.aue.filter+json',
       );
       assert.ok(componentFiltersScript);
       assert.strictEqual(
         componentFiltersScript.properties.src,
-        '/component-filters.json'
+        '/component-filters.json',
       );
     });
   });
