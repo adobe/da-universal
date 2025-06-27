@@ -108,7 +108,6 @@ export async function getUEConfig(aemCtx) {
         .json()
         .then((data) => ({ type, data }))
         .catch(() => ({ type, undefined })))
-      // eslint-disable-next-line no-console
       .catch((error) => console.error(`Error fetching ${url}: ${error}`))),
   );
   const ueConfig = responses.reduce((acc, response) => {

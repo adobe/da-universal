@@ -9,37 +9,32 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { defineConfig, globalIgnores } from '@eslint/config-helpers'
+import globals from 'globals';
+import { defineConfig, globalIgnores } from '@eslint/config-helpers';
 import { recommended, source, test } from '@adobe/eslint-config-helix';
 
 export default defineConfig([
-  
-  globalIgnores([
-      '.vscode/*',
-      '.wrangler/*',
-      'coverage/*',
-    ]),
-    {
-      rules: {
-        'no-param-reassign': ['error', { props: false }],
-        'import/no-unresolved': ['error', { ignore: ['@octokit/rest'] }],
+  globalIgnores(['.vscode/*', '.wrangler/*', 'coverage/*']),
+  {
+    languageOptions: {
+      ...recommended.languageOptions,
+      globals: {
+        ...globals.serviceworker,
+        ...globals.browser,
+        ...globals.es6,
+        __rootdir: true,
       },
-      plugins: {
-        import: recommended.plugins.import,
-      },
-      extends: [recommended],
     },
-
-    {
-      ...source,
-      files: [...source.files],
+    rules: {
+      'no-param-reassign': ['error', { props: false }],
+      'no-console': 'off',
+      'import/no-unresolved': ['error', { ignore: ['@octokit/rest'] }],
     },
-
-    {
-      ...test,
-      files: [...test.files],
-    }
-
- 
-  
-]); 
+    plugins: {
+      import: recommended.plugins.import,
+    },
+    extends: [recommended],
+  },
+  source,
+  test,
+]);

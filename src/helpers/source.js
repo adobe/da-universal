@@ -26,7 +26,6 @@ async function formPutHandler(req) {
   try {
     formData = await req.formData();
   } catch (e) {
-    // eslint-disable-next-line no-console
     console.log('No form data');
   }
   return formData ? getFormEntries(formData) : null;
