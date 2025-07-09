@@ -45,11 +45,13 @@ function getAuthToken(req) {
     return req.headers.get('Authorization');
   }
 
-  const cookies = req.headers.get('Cookie');
-  if (cookies) {
-    const authTokenMatch = cookies.match(/auth_token=([^;]+)/);
-    if (authTokenMatch && authTokenMatch[1]) {
-      return `Bearer ${authTokenMatch[1]}`;
+  if (req.method === 'GET') {
+    const cookies = req.headers.get('Cookie');
+    if (cookies) {
+      const authTokenMatch = cookies.match(/auth_token=([^;]+)/);
+      if (authTokenMatch && authTokenMatch[1]) {
+        return `Bearer ${authTokenMatch[1]}`;
+      }
     }
   }
   return undefined;

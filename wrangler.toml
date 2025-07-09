@@ -2,6 +2,8 @@ name = "da-ue"
 main = "src/index.js"
 compatibility_date = "2023-11-21"
 
+keep_vars = true
+
 vars = { UE_HOST = "ue.da.live", DA_ADMIN = "https://admin.da.live" }
 services = [{ binding = "daadmin", service = "da-admin" }]
 
@@ -13,8 +15,8 @@ vars = { ENVIRONMENT = "dev", UE_HOST = "localhost:4712", UE_SERVICE = "https://
 services = [{ binding = "daadmin", service = "da-admin" }]
 
 [env.stage]
-vars = { ENVIRONMENT = "stage", UE_HOST = "stage-ue.da.live", UE_SERVICE = "https://universal-editor-service-dev.adobe.io", DA_ADMIN = "https://admin.da.live" }
-services = [{ binding = "daadmin", service = "da-admin" }]
+vars = { ENVIRONMENT = "stage", UE_HOST = "stage-ue.da.live", UE_SERVICE = "https://universal-editor-service-dev.adobe.io", DA_ADMIN = "https://stage-admin.da.live" }
+services = [{ binding = "daadmin", service = "da-admin-stage" }]
 
 [env.stage.observability]
 enabled = true
