@@ -23,9 +23,27 @@ export default async function getHandler({ req, env, daCtx }) {
 
   if (path.startsWith('/gimme_cookie')) return getCookie({ req });
 
-  const resourceRegex = /\.(css|js|js\.map|png|jpg|jpeg|webp|gif|svg|ico|json|xml|woff|woff2|plain\.html)$/i;
+  const resourceRegex = /\.(css|js|js\.map|json|xml|woff|woff2|plain\.html)$/i;
   if (resourceRegex.test(path)) {
     return handleAEMProxyRequest({ req, env, daCtx });
+  }
+
+  const assetRegex = /\.(png|jpg|jpeg|webp|gif|svg|ico)$/i;
+  if (assetRegex.test(path)) {
+    const [daSourceGetRes, aemProxyRes] = await Promise.allSettled([
+      daSourceGet({ req, env, daCtx }),
+      handleAEMProxyRequest({ req, env, daCtx }),
+    ]);
+
+    if (daSourceGetRes.status === 'fulfilled' && daSourceGetRes.value.status === 200) {
+      return daSourceGetRes.value;
+    }
+
+    if (aemProxyRes.status === 'fulfilled') {
+      return aemProxyRes.value;
+    }
+
+    return get404();
   }
 
   // default route to DA admin for all the content requests
