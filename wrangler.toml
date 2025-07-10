@@ -15,8 +15,8 @@ vars = { ENVIRONMENT = "dev", UE_HOST = "localhost:4712", UE_SERVICE = "https://
 services = [{ binding = "daadmin", service = "da-admin" }]
 
 [env.stage]
-vars = { ENVIRONMENT = "stage", UE_HOST = "stage-ue.da.live", UE_SERVICE = "https://universal-editor-service-dev.adobe.io", DA_ADMIN = "https://stage-admin.da.live" }
-services = [{ binding = "daadmin", service = "da-admin-stage" }]
+vars = { ENVIRONMENT = "stage", UE_HOST = "stage-ue.da.live", UE_SERVICE = "https://universal-editor-service-dev.adobe.io", DA_ADMIN = "https://admin.da.live" }
+services = [{ binding = "daadmin", service = "da-admin" }]
 
 [env.stage.observability]
 enabled = true

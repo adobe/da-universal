@@ -90,7 +90,7 @@ export async function daSourceGet({ req, env, daCtx }) {
 
   // get the content from DA admin
   const adminUrl = new URL(
-    `/source/${org}/${site}${path}.${ext}`,
+    `/source/${org}/${site}${path}` + (ext === 'html' ? `.${ext}` : ''),
     env.DA_ADMIN,
   );
 
@@ -102,7 +102,9 @@ export async function daSourceGet({ req, env, daCtx }) {
     method: 'GET',
     headers,
   });
+  console.log('daAdmin ->', adminUrl);
   const daAdminResp = await env.daadmin.fetch(req);
+  console.log('daAdminResp <-', adminUrl, daAdminResp.status);
   if (daAdminResp && ext !== 'html') {
     return daAdminResp;
   }
