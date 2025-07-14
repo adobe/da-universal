@@ -9,6 +9,8 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+import { DEFAULT_UNAUTHORIZED_HTML_MESSAGE } from '../utils/constants.js';
+
 export function daResp({
   body, status, contentType, contentLength,
 }) {
@@ -27,8 +29,12 @@ export function daResp({
   return new Response(body, { status, headers });
 }
 
-export function get404() {
-  return daResp({ body: '', status: 404 });
+export function get404(message = '') {
+  return daResp({ body: message, status: 404, contentType: 'text/html' });
+}
+
+export function get401(message = DEFAULT_UNAUTHORIZED_HTML_MESSAGE) {
+  return daResp({ body: message, status: 404, contentType: 'text/html' });
 }
 
 export function getRobots() {

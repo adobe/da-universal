@@ -17,7 +17,7 @@ import putHelper from '../helpers/source.js';
 import { removeUEAttributes, unwrapParagraphs } from '../ue/attributes.js';
 import { prepareHtml } from '../ue/ue.js';
 import { getAemCtx, getAEMHtml } from '../utils/aemCtx.js';
-import { daResp } from '../responses/index.js';
+import { daResp, get401, get404 } from '../responses/index.js';
 import { BRANCH_NOT_FOUND_HTML_MESSAGE, DEFAULT_HTML_TEMPLATE, UNAUTHORIZED_HTML_MESSAGE } from '../utils/constants.js';
 import { getSiteConfig } from '../storage/config.js';
 
@@ -67,25 +67,16 @@ export async function daSourceGet({ req, env, daCtx }) {
     org, site, path, ext, authToken,
   } = daCtx;
 
-  const response = {
-    status: 200,
-    contentType: 'text/html; charset=utf-8',
-  };
-
   // check if Authorization header is present
   if (!authToken) {
-    response.body = UNAUTHORIZED_HTML_MESSAGE;
-    response.status = 401;
-    return daResp(response);
+    return get401(UNAUTHORIZED_HTML_MESSAGE);
   }
 
   // get the AEM parts (head.html)
   const aemCtx = getAemCtx(env, daCtx);
   const headHtml = await getAEMHtml(aemCtx, '/head.html');
   if (!headHtml) {
-    response.body = BRANCH_NOT_FOUND_HTML_MESSAGE;
-    response.status = 404;
-    return daResp(response);
+    return get404(BRANCH_NOT_FOUND_HTML_MESSAGE);
   }
 
   // get the content from DA admin
@@ -102,21 +93,26 @@ export async function daSourceGet({ req, env, daCtx }) {
     method: 'GET',
     headers,
   });
+  let body;
   const daAdminResp = await env.daadmin.fetch(req);
   if (daAdminResp && daAdminResp.status === 200) {
     // enrich stored content with HTML header and UE attributes
     const originalBodyHtml = await daAdminResp.text();
     const responseHtml = await prepareHtml(daCtx, aemCtx, originalBodyHtml, headHtml);
-    response.body = responseHtml;
+    body = responseHtml;
   } else {
     // enrich default template with HTML header and UE attributes
     const templateHtml = await getPageTemplate(env, daCtx, aemCtx, headHtml);
     const responseHtml = await prepareHtml(daCtx, aemCtx, templateHtml, headHtml);
-    response.body = responseHtml;
+    body = responseHtml;
   }
 
-  response.contentLength = response.body.length;
-  return daResp(response);
+  return daResp({
+    status: 200,
+    body,
+    contentLength: body.length,
+    contentType: 'text/html; charset=utf-8',
+  });
 }
 
 export async function daSourcePost({ req, env, daCtx }) {
