@@ -23,11 +23,13 @@ export default async function getHandler({ req, env, daCtx }) {
 
   if (path.startsWith('/gimme_cookie')) return getCookie({ req });
 
+  // all non-html code resources are passed through to AEM
   const resourceRegex = /\.(css|js|js\.map|json|xml|woff|woff2|plain\.html)$/i;
   if (resourceRegex.test(path)) {
     return handleAEMProxyRequest({ req, env, daCtx });
   }
 
+  // all assets are passed loaded from DA admin and AEM
   const assetRegex = /\.(png|jpg|jpeg|webp|gif|svg|ico)$/i;
   if (assetRegex.test(path)) {
     const [daSourceGetRes, aemProxyRes] = await Promise.allSettled([

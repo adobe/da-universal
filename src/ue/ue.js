@@ -19,6 +19,7 @@ import { getHtmlDoc, getUEConfig, getUEHtmlHeadEntries } from './scaffold.js';
 import { injectUEAttributes } from './attributes.js';
 import { extractLocalMetadata, fetchBulkMetadata } from './metadata.js';
 import rewriteIcons from './rewrite-icons.js';
+import rewriteDaImgSrcs from './rewrite-images.js';
 
 /**
  * Injects AEM HTML head entries into the head node of an HTML document.
@@ -102,6 +103,9 @@ export async function prepareHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
 
   // rewrite icons
   rewriteIcons(bodyNode);
+
+  // rewrite DA img srcs
+  rewriteDaImgSrcs(bodyNode);
 
   // add data attributes for UE to the body
   const ueConfig = await getUEConfig(aemCtx);
