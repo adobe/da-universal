@@ -9,7 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { daResp } from '../responses/index.js';
+import { daResp, get401 } from '../responses/index.js';
 import { DEFAULT_CORS_HEADERS, TRUSTED_ORIGINS } from '../utils/constants.js';
 
 export function getCookie({ req }) {
@@ -33,5 +33,5 @@ export function getCookie({ req }) {
       return new Response('cookie set', { headers: respHeaders });
     }
   }
-  return daResp({ body: '401 Unauthorized', status: 401, contentType: 'text/plain' });
+  return get401();
 }
