@@ -34,7 +34,7 @@ export function get404(message = '') {
 }
 
 export function get401(message = DEFAULT_UNAUTHORIZED_HTML_MESSAGE) {
-  return daResp({ body: message, status: 404, contentType: 'text/html' });
+  return daResp({ body: message, status: 401, contentType: 'text/html' });
 }
 
 export function getRobots() {
