@@ -82,6 +82,14 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
     }),
   );
 
+  // TODO: temporary fix to disable duplicate content functionality
+  children.push(
+    h('meta', {
+      name: 'urn:adobe:aue:config:disable',
+      content: 'duplicate,copy',
+    }),
+  );
+
   return children;
 }
 
