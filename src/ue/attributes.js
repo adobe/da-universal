@@ -83,7 +83,7 @@ function wrapParagraphs(section) {
  * @param {Object} block - The block element to process
  */
 function addBlockFieldAttributes(ueConfig, block) {
-  const blockName = block.properties['data-aue-component'];
+  const blockName = block.properties['data-aue-component'] ?? block.properties['data-aue-model'];
   const modelDef = getModelDefinition(ueConfig, blockName);
   if (modelDef) {
     const fields = modelDef.fields || [];
@@ -184,7 +184,7 @@ export function injectUEAttributes(bodyTree, ueConfig) {
       'data-aue-resource': 'urn:ab:page',
       'data-aue-label': 'Page',
       'data-aue-type': 'component',
-      'data-aue-component': 'page-metadata',
+      'data-aue-model': 'page-metadata',
     });
   }
 
@@ -195,7 +195,7 @@ export function injectUEAttributes(bodyTree, ueConfig) {
       'data-aue-resource': 'urn:ab:main',
       'data-aue-type': 'container',
       'data-aue-label': 'Main Content',
-      'data-aue-component': 'main',
+      'data-aue-filter': 'main',
     });
 
     const sections = selectAll(':scope>div', mainTree);

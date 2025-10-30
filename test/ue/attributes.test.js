@@ -49,7 +49,7 @@ describe('UE attributes', () => {
       assert.equal(main.properties['data-aue-resource'], 'urn:ab:main');
       assert.equal(main.properties['data-aue-type'], 'container');
       assert.equal(main.properties['data-aue-label'], 'Main Content');
-      assert.equal(main.properties['data-aue-component'], 'main');
+      assert.equal(main.properties['data-aue-filter'], 'main');
     });
 
     it('adds UE attributes to sections', () => {
@@ -181,7 +181,7 @@ describe('UE attributes', () => {
       assert.equal(bodyTree.properties['data-aue-resource'], 'urn:ab:page');
       assert.equal(bodyTree.properties['data-aue-label'], 'Page');
       assert.equal(bodyTree.properties['data-aue-type'], 'component');
-      assert.equal(bodyTree.properties['data-aue-component'], 'page-metadata');
+      assert.equal(bodyTree.properties['data-aue-model'], 'page-metadata');
     });
 
     it('does not add page metadata attributes when not defined in config', () => {
