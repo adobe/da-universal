@@ -1,8 +1,5 @@
-name: Install, lint, and test
+name: Pull Request Tests
 on:
-  push:
-    branches:
-      - main
   pull_request:
     types: [opened, synchronize, reopened]
 jobs:
