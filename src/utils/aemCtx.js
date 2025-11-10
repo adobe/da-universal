@@ -20,6 +20,7 @@ export function getAemCtx(env, daCtx) {
     liveUrl: `https://${ref}--${site}--${org}.aem.live`,
     ueHostname: env.UE_HOST,
     ueService: env.UE_SERVICE,
+    ueCorsLib: env.UE_CORS_LIB,
   };
 
   return obj;

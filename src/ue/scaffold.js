@@ -28,7 +28,7 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
     isLocal,
     orgSiteInPath,
   } = daCtx;
-  const { ueHostname, ueService } = aemCtx;
+  const { ueHostname, ueService, ueCorsLib } = aemCtx;
   const children = [];
 
   children.push(h('meta', {
@@ -46,7 +46,7 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
   }
   children.push(
     h('script', {
-      src: 'https://universal-editor-service.adobe.io/cors.js',
+      src: ueCorsLib || 'https://universal-editor-service.adobe.io/cors.js',
       async: '',
     }),
   );

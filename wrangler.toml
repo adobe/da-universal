@@ -9,11 +9,11 @@ services = [{ binding = "daadmin", service = "da-admin" }]
 port = 4712
 
 [env.dev]
-vars = { ENVIRONMENT = "dev", UE_HOST = "localhost:4712", UE_SERVICE = "https://localhost:8000", DA_ADMIN = "https://admin.da.live" }
+vars = { ENVIRONMENT = "dev", UE_HOST = "localhost:4712", UE_SERVICE = "https://localhost:8000", UE_CORS_LIB="https://universal-editor-service-stage.adobe.io/cors.js", DA_ADMIN = "https://admin.da.live" }
 services = [{ binding = "daadmin", service = "da-admin" }]
 
 [env.stage]
-vars = { ENVIRONMENT = "stage", UE_HOST = "stage-ue.da.live", UE_SERVICE = "https://universal-editor-service-dev.adobe.io", DA_ADMIN = "https://admin.da.live" }
+vars = { ENVIRONMENT = "stage", UE_HOST = "stage-ue.da.live", UE_SERVICE = "https://universal-editor-service-dev.adobe.io", UE_CORS_LIB="https://universal-editor-service-stage.adobe.io/cors.js", DA_ADMIN = "https://admin.da.live" }
 services = [{ binding = "daadmin", service = "da-admin" }]
 
 [env.stage.observability]

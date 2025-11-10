@@ -46,8 +46,8 @@ function wrapParagraphs(section) {
   wrappedSection.children.forEach((child) => {
     if (
       isElement(child, 'div')
-      || isElement(child, 'img')
-      || isElement(child, 'picture')
+      // || isElement(child, 'img')
+      // || isElement(child, 'picture')
     ) {
       // End the current wrapper if it exists
       if (currentWrapper) {
@@ -161,6 +161,7 @@ function addColumnBehaviourInstrumentation(section, sIndex, block, bIndex, block
             'data-aue-label': 'Text',
             'data-aue-prop': 'root',
             'data-aue-behavior': 'component',
+            'data-aue-filter': 'text',
           });
         });
       }
@@ -226,6 +227,7 @@ export function injectUEAttributes(bodyTree, ueConfig) {
           'data-aue-label': 'Text',
           'data-aue-prop': 'root',
           'data-aue-behavior': 'component',
+          'data-aue-filter': 'text',
         });
       });
 
