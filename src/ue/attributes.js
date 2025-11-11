@@ -83,7 +83,7 @@ function wrapParagraphs(section) {
  * @param {Object} block - The block element to process
  */
 function addBlockFieldAttributes(ueConfig, block) {
-  const blockName = block.properties['data-aue-model'];
+  const blockName = block.properties['data-aue-component'] ?? block.properties['data-aue-model'];
   const modelDef = getModelDefinition(ueConfig, blockName);
   if (modelDef) {
     const fields = modelDef.fields || [];
@@ -109,10 +109,8 @@ function addColumnBehaviourInstrumentation(section, sIndex, block, bIndex, block
   addAttributes(block, {
     'data-aue-resource': `urn:ab:section-${sIndex}/columns-${bIndex}`,
     'data-aue-label': blockCmpDef.title,
-    'data-aue-model': blockName,
-    'data-aue-filter': blockName,
+    'data-aue-component': blockName,
     'data-aue-type': 'container',
-    'data-aue-behavior': 'component',
   });
 
   const rows = selectAll(':scope>div', block);
@@ -120,8 +118,7 @@ function addColumnBehaviourInstrumentation(section, sIndex, block, bIndex, block
     addAttributes(row, {
       'data-aue-resource': `urn:ab:section-${sIndex}/columns-${bIndex}/row-${rIndex}`,
       'data-aue-label': `${blockCmpDef.title} Row`,
-      'data-aue-model': `${blockName}-row`,
-      'data-aue-filter': `${blockName}-row`,
+      'data-aue-component': `${blockName}-row`,
       'data-aue-type': 'container',
       'data-aue-behavior': 'component',
     });
@@ -131,8 +128,7 @@ function addColumnBehaviourInstrumentation(section, sIndex, block, bIndex, block
       addAttributes(cell, {
         'data-aue-resource': `urn:ab:section-${sIndex}/columns-${bIndex}/row-${rIndex}/cell-${cIndex}`,
         'data-aue-label': `${blockCmpDef.title} Cell`,
-        'data-aue-model': `${blockName}-cell`,
-        'data-aue-filter': `${blockName}-cell`,
+        'data-aue-component': `${blockName}-cell`,
         'data-aue-type': 'container',
         'data-aue-behavior': 'component',
       });
@@ -145,10 +141,9 @@ function addColumnBehaviourInstrumentation(section, sIndex, block, bIndex, block
           addAttributes(picture, {
             'data-aue-resource': `urn:ab:section-${sIndex}/columns-${bIndex}/row-${rIndex}/cell-${cIndex}/image-${iIndex}`,
             'data-aue-label': 'Image',
-            'data-aue-behavior': 'component',
+            'data-aue-component': 'image',
             'data-aue-prop': 'image',
             'data-aue-type': 'container',
-            'data-aue-model': 'image',
           });
         });
 
@@ -157,6 +152,7 @@ function addColumnBehaviourInstrumentation(section, sIndex, block, bIndex, block
         richTextWrappers.forEach((wrapper, wIndex) => {
           addAttributes(wrapper, {
             'data-aue-resource': `urn:ab:section-${sIndex}/columns-${bIndex}/row-${rIndex}/cell-${cIndex}/text-${wIndex}`,
+            'data-aue-component': 'text',
             'data-aue-type': 'richtext',
             'data-aue-label': 'Text',
             'data-aue-prop': 'root',
@@ -210,9 +206,8 @@ export function injectUEAttributes(bodyTree, ueConfig) {
         'data-aue-resource': `urn:ab:section-${sIndex}`,
         'data-aue-type': 'container',
         'data-aue-label': componentDef ? componentDef.title : 'Section',
-        'data-aue-model': 'section',
+        'data-aue-component': 'section',
         'data-aue-behavior': 'component',
-        'data-aue-filter': 'section',
       });
 
       // handle rich text
@@ -235,10 +230,9 @@ export function injectUEAttributes(bodyTree, ueConfig) {
         addAttributes(picture, {
           'data-aue-resource': `urn:ab:section-${sIndex}/asset-${iIndex}`,
           'data-aue-label': 'Image',
-          'data-aue-behavior': 'component',
           'data-aue-prop': 'image',
           'data-aue-type': 'media',
-          'data-aue-model': 'image',
+          'data-aue-component': 'image',
         });
         // TODO wait for SITES-27973
         // const img = select('img', picture);
@@ -270,16 +264,15 @@ export function injectUEAttributes(bodyTree, ueConfig) {
           'data-aue-label': blockCmpDef
             ? blockCmpDef.title
             : `${blockName} (no definition)`,
-          'data-aue-model': blockName,
+          'data-aue-component': blockName,
         });
         addBlockFieldAttributes(ueConfig, block);
 
         // apply block flter and child items
         if (filterDef) {
           addAttributes(block, {
-            'data-aue-filter': blockName,
+            'data-aue-component': blockName,
             'data-aue-type': 'container',
-            'data-aue-behavior': 'component',
           });
 
           const itemId = filterDef.components[0];
@@ -291,7 +284,7 @@ export function injectUEAttributes(bodyTree, ueConfig) {
                 'data-aue-resource': `urn:ab:section-${sIndex}/block-${bIndex}/item-${biIndex}`,
                 'data-aue-type': 'component',
                 'data-aue-label': itemCmpDef.title,
-                'data-aue-model': itemCmpDef.id,
+                'data-aue-component': itemCmpDef.id,
               });
               addBlockFieldAttributes(ueConfig, blockItem);
             });

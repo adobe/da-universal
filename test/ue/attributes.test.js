@@ -77,7 +77,7 @@ describe('UE attributes', () => {
       assert.equal(section.properties['data-aue-resource'], 'urn:ab:section-0');
       assert.equal(section.properties['data-aue-type'], 'container');
       assert.equal(section.properties['data-aue-label'], 'Section');
-      assert.equal(section.properties['data-aue-model'], 'section');
+      assert.equal(section.properties['data-aue-component'], 'section');
     });
 
     it('adds UE attributes to blocks within sections', () => {
@@ -108,7 +108,7 @@ describe('UE attributes', () => {
       assert.equal(block.properties['data-aue-resource'], 'urn:ab:section-0/block-0');
       assert.equal(block.properties['data-aue-type'], 'component');
       assert.equal(block.properties['data-aue-label'], 'Card Block');
-      assert.equal(block.properties['data-aue-model'], 'card-block');
+      assert.equal(block.properties['data-aue-component'], 'card-block');
     });
 
     it('adds UE attributes to block items', () => {
@@ -149,11 +149,10 @@ describe('UE attributes', () => {
       assert.equal(blockItems[0].properties['data-aue-resource'], 'urn:ab:section-0/block-0/item-0');
       assert.equal(blockItems[0].properties['data-aue-type'], 'component');
       assert.equal(blockItems[0].properties['data-aue-label'], 'Card');
-      assert.equal(blockItems[0].properties['data-aue-model'], 'card');
+      assert.equal(blockItems[0].properties['data-aue-component'], 'card');
       assert.equal(blockItems[1].properties['data-aue-resource'], 'urn:ab:section-0/block-0/item-1');
       assert.equal(blockItems[1].properties['data-aue-type'], 'component');
       assert.equal(blockItems[1].properties['data-aue-label'], 'Card');
-      assert.equal(blockItems[1].properties['data-aue-model'], 'card');
     });
 
     it('adds UE attributes to body for page metadata', () => {
@@ -208,7 +207,7 @@ describe('UE attributes', () => {
       assert.equal(bodyTree.properties['data-aue-resource'], undefined);
       assert.equal(bodyTree.properties['data-aue-label'], undefined);
       assert.equal(bodyTree.properties['data-aue-type'], undefined);
-      assert.equal(bodyTree.properties['data-aue-model'], undefined);
+      assert.equal(bodyTree.properties['data-aue-component'], undefined);
     });
 
     it('adds UE attributes to richtext within sections', () => {
@@ -274,7 +273,7 @@ describe('UE attributes', () => {
       assert.equal(image.properties['data-aue-resource'], 'urn:ab:section-0/asset-0');
       assert.equal(image.properties['data-aue-type'], 'media');
       assert.equal(image.properties['data-aue-label'], 'Image');
-      assert.equal(image.properties['data-aue-model'], 'image');
+      assert.equal(image.properties['data-aue-component'], 'image');
     });
 
     it('adds UE attributes to block fields based on model definition', () => {
@@ -477,46 +476,36 @@ describe('UE attributes', () => {
       const columnBlock = select('main > div > div', bodyTree);
       assert.equal(columnBlock.properties['data-aue-resource'], 'urn:ab:section-0/columns-0');
       assert.equal(columnBlock.properties['data-aue-label'], 'Custom Columns');
-      assert.equal(columnBlock.properties['data-aue-model'], 'custom-columns');
-      assert.equal(columnBlock.properties['data-aue-filter'], 'custom-columns');
+      assert.equal(columnBlock.properties['data-aue-component'], 'custom-columns');
       assert.equal(columnBlock.properties['data-aue-type'], 'container');
-      assert.equal(columnBlock.properties['data-aue-behavior'], 'component');
 
       // Test first row attributes
       const firstRow = select('main > div > div > div:first-child', bodyTree);
       assert.equal(firstRow.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-0');
       assert.equal(firstRow.properties['data-aue-label'], 'Custom Columns Row');
-      assert.equal(firstRow.properties['data-aue-model'], 'custom-columns-row');
-      assert.equal(firstRow.properties['data-aue-filter'], 'custom-columns-row');
+      assert.equal(firstRow.properties['data-aue-component'], 'custom-columns-row');
       assert.equal(firstRow.properties['data-aue-type'], 'container');
-      assert.equal(firstRow.properties['data-aue-behavior'], 'component');
 
       // Test first cell attributes
       const firstCell = select('main > div > div > div:first-child > div:first-child', bodyTree);
       assert.equal(firstCell.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-0/cell-0');
       assert.equal(firstCell.properties['data-aue-label'], 'Custom Columns Cell');
-      assert.equal(firstCell.properties['data-aue-model'], 'custom-columns-cell');
-      assert.equal(firstCell.properties['data-aue-filter'], 'custom-columns-cell');
+      assert.equal(firstCell.properties['data-aue-component'], 'custom-columns-cell');
       assert.equal(firstCell.properties['data-aue-type'], 'container');
-      assert.equal(firstCell.properties['data-aue-behavior'], 'component');
 
       // Test second row attributes
       const secondRow = select('main > div > div > div:last-child', bodyTree);
       assert.equal(secondRow.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-1');
       assert.equal(secondRow.properties['data-aue-label'], 'Custom Columns Row');
-      assert.equal(secondRow.properties['data-aue-model'], 'custom-columns-row');
-      assert.equal(secondRow.properties['data-aue-filter'], 'custom-columns-row');
+      assert.equal(secondRow.properties['data-aue-component'], 'custom-columns-row');
       assert.equal(secondRow.properties['data-aue-type'], 'container');
-      assert.equal(secondRow.properties['data-aue-behavior'], 'component');
 
       // Test second row first cell attributes
       const secondRowFirstCell = select('main > div > div > div:last-child > div:first-child', bodyTree);
       assert.equal(secondRowFirstCell.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-1/cell-0');
       assert.equal(secondRowFirstCell.properties['data-aue-label'], 'Custom Columns Cell');
-      assert.equal(secondRowFirstCell.properties['data-aue-model'], 'custom-columns-cell');
-      assert.equal(secondRowFirstCell.properties['data-aue-filter'], 'custom-columns-cell');
+      assert.equal(secondRowFirstCell.properties['data-aue-component'], 'custom-columns-cell');
       assert.equal(secondRowFirstCell.properties['data-aue-type'], 'container');
-      assert.equal(secondRowFirstCell.properties['data-aue-behavior'], 'component');
     });
 
     it('instruments picture and richtext inside column cells', () => {
@@ -570,10 +559,9 @@ describe('UE attributes', () => {
       assert.ok(picture, 'Picture element exists');
       assert.equal(picture.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-0/cell-0/image-0');
       assert.equal(picture.properties['data-aue-label'], 'Image');
-      assert.equal(picture.properties['data-aue-behavior'], 'component');
       assert.equal(picture.properties['data-aue-prop'], 'image');
       assert.equal(picture.properties['data-aue-type'], 'container');
-      assert.equal(picture.properties['data-aue-model'], 'image');
+      assert.equal(picture.properties['data-aue-component'], 'image');
 
       // Richtext instrumentation
       const richtext = select('div.richtext', cell);
@@ -706,7 +694,7 @@ describe('UE attributes', () => {
               'data-aue-resource': 'urn:ab:section-0/block-0',
               'data-aue-type': 'component',
               'data-aue-label': 'Hero',
-              'data-aue-model': 'hero',
+              'data-aue-component': 'hero',
             }, [
               h('div', {}, [
                 h('div', {
