@@ -242,12 +242,6 @@ export function injectUEAttributes(bodyTree, ueConfig) {
           'data-aue-type': 'media',
           'data-aue-model': 'image',
         });
-        // TODO wait for SITES-27973
-        // const img = select('img', picture);
-        // addAttributes(img, {
-        //   'data-aue-prop': 'image',
-        //   'data-aue-type': 'media'
-        // });
       });
 
       // handle blocks
