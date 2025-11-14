@@ -79,26 +79,48 @@ function wrapParagraphs(section) {
  * This function processes fields in a block component and adds appropriate UE attributes
  * based on the field type (richtext, reference, text).
  *
- * @param {Object} ueConfig - Configuration object containing UE component models
+ * @param {Object} blockCmpFields - The defined UE fields for the block 
  * @param {Object} block - The block element to process
  */
 function addBlockFieldAttributes(ueConfig, block) {
   const blockName = block.properties['data-aue-component'] ?? block.properties['data-aue-model'];
-  const modelDef = getModelDefinition(ueConfig, blockName);
-  if (modelDef) {
-    const fields = modelDef.fields || [];
-    const fieldsWithAttributes = fields.filter((field) => field.component === 'richtext' || field.component === 'reference' || (field.component === 'text' && field.name.indexOf('[') === -1));
-    fieldsWithAttributes.forEach((field) => {
-      const blockFieldTag = select(field.name, block);
-      if (blockFieldTag) {
+  const blockCmpDef = getComponentDefinition(ueConfig, blockName);
+  const blockModelDef = getModelDefinition(ueConfig, blockName);
+  if (!blockCmpDef || !blockModelDef) return;
+
+  const cmpFieldsDef = blockCmpDef.plugins?.da?.fields || [];
+  const modelFields = blockModelDef.fields || [];
+  if (cmpFieldsDef.length === 0 || modelFields.length === 0) return;
+
+  // extract available unique fields from cmpFieldsDef
+  const cmpFields = [];
+  const seenSelectors = new Set();
+  cmpFieldsDef.forEach((fieldObj) => {
+    const { name, selector } = fieldObj;
+    if (selector) {
+      const cleanedSelector = selector.replace(/\[.*?\]/g, '');
+      if (!seenSelectors.has(cleanedSelector)) {
+        cmpFields.push({ selector, name });
+        seenSelectors.add(cleanedSelector);
+      }
+    }
+  });
+
+  // add attributes to block fields based on cmpFields mapping and modelFields
+  cmpFields.forEach((cmpField) => {
+    const blockFieldTag = select(cmpField.selector, block);
+    if (blockFieldTag) {
+      // find matching model field
+      const modelField = modelFields.find((mf) => mf.name === cmpField.name);
+      if (modelField) {
         addAttributes(blockFieldTag, {
-          'data-aue-type': field.component === 'reference' ? 'media' : field.component,
-          'data-aue-prop': field.name,
-          'data-aue-label': field.label || field.name,
+          'data-aue-type': modelField.component === 'reference' ? 'media' : modelField.component,
+          'data-aue-prop': cmpField.name,
+          'data-aue-label': modelField.label || cmpField.name,
         });
       }
-    });
-  }
+    }
+  });
 }
 
 function addColumnBehaviourInstrumentation(section, sIndex, block, bIndex, blockCmpDef, ueConfig) {
@@ -251,6 +273,7 @@ export function injectUEAttributes(bodyTree, ueConfig) {
         if (blockName === 'metadata' || blockName === 'section-metadata' || blockName === 'richtext') return;
 
         const blockCmpDef = getComponentDefinition(ueConfig, blockName);
+        const blockModelDef = getModelDefinition(ueConfig, blockName);
         const filterDef = getFilterDefinition(ueConfig, blockName);
 
         if (blockCmpDef?.plugins?.da?.behaviour === 'columns') {
@@ -276,15 +299,15 @@ export function injectUEAttributes(bodyTree, ueConfig) {
           });
 
           const itemId = filterDef.components[0];
-          const itemCmpDef = getComponentDefinition(ueConfig, itemId);
-          if (itemCmpDef) {
+          const blockItemCmpDef = getComponentDefinition(ueConfig, itemId);
+          if (blockItemCmpDef) {
             const blockItems = selectAll(':scope>div', block);
             blockItems.forEach((blockItem, biIndex) => {
               addAttributes(blockItem, {
                 'data-aue-resource': `urn:ab:section-${sIndex}/block-${bIndex}/item-${biIndex}`,
                 'data-aue-type': 'component',
-                'data-aue-label': itemCmpDef.title,
-                'data-aue-component': itemCmpDef.id,
+                'data-aue-label': blockItemCmpDef.title,
+                'data-aue-component': blockItemCmpDef.id,
               });
               addBlockFieldAttributes(ueConfig, blockItem);
             });
