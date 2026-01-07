@@ -165,7 +165,7 @@ function addColumnBehaviourInstrumentation(section, sIndex, block, bIndex, block
             'data-aue-label': 'Image',
             'data-aue-component': 'image',
             'data-aue-prop': 'image',
-            'data-aue-type': 'container',
+            'data-aue-type': 'media',
           });
         });
 
