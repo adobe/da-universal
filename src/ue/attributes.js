@@ -10,9 +10,10 @@
  * governing permissions and limitations under the License.
  */
 import { select, selectAll } from 'hast-util-select';
-import { visit } from 'unist-util-visit';
 import { isElement } from 'hast-util-is-element';
+import { toString } from 'hast-util-to-string';
 import { h } from 'hastscript';
+import { visit } from 'unist-util-visit';
 import {
   getBlockNameAndClasses,
   removeWhitespaceTextNodes,
@@ -79,7 +80,7 @@ function wrapParagraphs(section) {
  * This function processes fields in a block component and adds appropriate UE attributes
  * based on the field type (richtext, reference, text).
  *
- * @param {Object} blockCmpFields - The defined UE fields for the block 
+ * @param {Object} blockCmpFields - The defined UE fields for the block
  * @param {Object} block - The block element to process
  */
 function addBlockFieldAttributes(ueConfig, block) {
@@ -123,15 +124,14 @@ function addBlockFieldAttributes(ueConfig, block) {
   });
 }
 
-function addColumnBehaviourInstrumentation(section, sIndex, block, bIndex, blockCmpDef, ueConfig) {
+function addColumnBlockInstrumentation(sIndex, block, bIndex, ueConfig) {
   const { name: blockName } = getBlockNameAndClasses(block);
+  const blockCmpDef = getComponentDefinition(ueConfig, blockName);
   const cellFilterDef = getFilterDefinition(ueConfig, `${blockName}-cell`);
 
-  // handle columns
+  // add additional container attribute to the column block
   addAttributes(block, {
     'data-aue-resource': `urn:ab:section-${sIndex}/columns-${bIndex}`,
-    'data-aue-label': blockCmpDef.title,
-    'data-aue-component': blockName,
     'data-aue-type': 'container',
   });
 
@@ -183,6 +183,45 @@ function addColumnBehaviourInstrumentation(section, sIndex, block, bIndex, block
         });
       }
     });
+  });
+}
+
+/**
+ * Adds Universal Editor (UE) attributes to key-value block components.
+ * Key-value blocks are two-column structures where the first column contains field names (keys)
+ * and the second column contains the editable values. This function extracts keys from the first
+ * column, matches them to model field definitions, and adds appropriate UE attributes.
+ *
+ * @param {Object} ueConfig - The UE configuration object containing component and model definitions
+ * @param {Object} block - The block element to process
+ */
+function addKeyValueBlockInstrumentation(block, ueConfig) {
+  const { name: blockName } = getBlockNameAndClasses(block);
+  const blockCmpDef = getComponentDefinition(ueConfig, blockName);
+  const blockModelDef = getModelDefinition(ueConfig, blockName);
+  if (!blockCmpDef || !blockModelDef) return;
+
+  const modelFields = blockModelDef.fields || [];
+  if (modelFields.length === 0) return;
+
+  const rows = selectAll(':scope>div', block);
+  rows.forEach((row) => {
+    const columns = selectAll(':scope>div', row);
+    if (columns.length !== 2) return; // key-value blocks must have exactly 2 columns
+    const keyColumn = columns[0];
+    const valueColumn = columns[1];
+    const keyText = toString(keyColumn);
+    if (!keyText) return;
+
+    // find matching model field
+    const modelField = modelFields.find((mf) => mf.name === keyText.trim());
+    if (modelField) {
+      addAttributes(valueColumn, {
+        'data-aue-type': modelField.component === 'reference' ? 'media' : modelField.component,
+        'data-aue-prop': modelField.name,
+        'data-aue-label': modelField.label || modelField.name,
+      });
+    }
   });
 }
 
@@ -273,13 +312,7 @@ export function injectUEAttributes(bodyTree, ueConfig) {
         if (blockName === 'metadata' || blockName === 'section-metadata' || blockName === 'richtext') return;
 
         const blockCmpDef = getComponentDefinition(ueConfig, blockName);
-        const blockModelDef = getModelDefinition(ueConfig, blockName);
         const filterDef = getFilterDefinition(ueConfig, blockName);
-
-        if (blockCmpDef?.plugins?.da?.behaviour === 'columns') {
-          addColumnBehaviourInstrumentation(section, sIndex, block, bIndex, blockCmpDef, ueConfig);
-          return;
-        }
 
         addAttributes(block, {
           'data-aue-resource': `urn:ab:section-${sIndex}/block-${bIndex}`,
@@ -289,6 +322,19 @@ export function injectUEAttributes(bodyTree, ueConfig) {
             : `${blockName} (no definition)`,
           'data-aue-component': blockName,
         });
+
+        // special handling for column blocks
+        if (blockCmpDef?.plugins?.da?.behaviour === 'columns' || blockCmpDef?.plugins?.da?.type === 'columns-block') {
+          addColumnBlockInstrumentation(sIndex, block, bIndex, ueConfig);
+          return;
+        }
+
+        // special handling for key-value blocks
+        if (blockCmpDef?.plugins?.da?.type === 'keyvalue-block') {
+          addKeyValueBlockInstrumentation(block, ueConfig);
+          return;
+        }
+
         addBlockFieldAttributes(ueConfig, block);
 
         // apply block flter and child items

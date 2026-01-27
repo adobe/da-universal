@@ -279,13 +279,16 @@ describe('UE attributes', () => {
     it('adds UE attributes to block fields based on model definition', () => {
       const bodyTree = h('body', {}, [
         h('main', {}, [
-          h('div', {}, [
-            h('div', { className: ['hero-block'] }, [
-              h('div', {}, [{ type: 'text', value: 'Hero Text' }]),
-              h('picture', {}, [
-                h('img', {}, []),
+          h('div', {}, [ // the section
+            h('div', { className: ['hero-block'] }, [ // the heroblock
+              h('div', {}, [
+                h('div', {}, [
+                  h('picture', {}, [
+                    h('img', { src: 'img.jpg', alt: 'Hero Image' }),
+                  ]),
+                  h('h1', {}, [{ type: 'text', value: 'Hero Text' }]),
+                ]),
               ]),
-              h('div', {}, [{ type: 'text', value: 'Array Field' }]),
             ]),
           ]),
         ]),
@@ -297,7 +300,31 @@ describe('UE attributes', () => {
             {
               components: [
                 { id: 'section', title: 'Section' },
-                { id: 'hero-block', title: 'Hero Block' },
+                {
+                  id: 'hero-block',
+                  title: 'Hero',
+                  model: 'hero-block',
+                  plugins: {
+                    da: {
+                      rows: 1,
+                      columns: 1,
+                      fields: [
+                        {
+                          name: 'image',
+                          selector: 'div>div>picture>img[src]',
+                        },
+                        {
+                          name: 'imageAlt',
+                          selector: 'div>div>picture>img[alt]',
+                        },
+                        {
+                          name: 'text',
+                          selector: 'div>div>h1',
+                        },
+                      ],
+                    },
+                  },
+                },
               ],
             },
           ],
@@ -308,18 +335,18 @@ describe('UE attributes', () => {
             title: 'Hero Block',
             fields: [
               {
-                name: 'div:first-child',
+                name: 'text',
                 label: 'Hero Text',
                 component: 'richtext',
               },
               {
-                name: 'picture',
+                name: 'image',
                 label: 'Hero Image',
                 component: 'reference',
               },
               {
-                name: 'div:last-child',
-                label: 'Array Field',
+                name: 'imageAlt',
+                label: 'Hero Image Alt',
                 component: 'text',
               },
             ],
@@ -329,20 +356,17 @@ describe('UE attributes', () => {
 
       attributes.injectUEAttributes(bodyTree, ueConfig);
 
-      const textField = select('main > div > div > div:first-child', bodyTree);
+      const textField = select('main div.hero-block > div > div > h1', bodyTree);
       assert.equal(textField.properties['data-aue-type'], 'richtext');
-      assert.equal(textField.properties['data-aue-prop'], 'div:first-child');
+      assert.equal(textField.properties['data-aue-prop'], 'text');
       assert.equal(textField.properties['data-aue-label'], 'Hero Text');
 
-      const imageField = select('main > div > div > picture', bodyTree);
+      const imageField = select('main div.hero-block > div > div > picture > img', bodyTree);
       assert.equal(imageField.properties['data-aue-type'], 'media');
-      assert.equal(imageField.properties['data-aue-prop'], 'picture');
+      assert.equal(imageField.properties['data-aue-prop'], 'image');
       assert.equal(imageField.properties['data-aue-label'], 'Hero Image');
-
-      const arrayField = select('main > div > div > div:last-child', bodyTree);
-      assert.equal(arrayField.properties['data-aue-type'], 'text');
-      assert.equal(arrayField.properties['data-aue-prop'], 'div:last-child');
-      assert.equal(arrayField.properties['data-aue-label'], 'Array Field');
+      assert.equal(imageField.properties.src, 'img.jpg');
+      assert.equal(imageField.properties.alt, 'Hero Image');
     });
 
     it('handles whitespace text nodes in wrapParagraphs', () => {
@@ -560,7 +584,7 @@ describe('UE attributes', () => {
       assert.equal(picture.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-0/cell-0/image-0');
       assert.equal(picture.properties['data-aue-label'], 'Image');
       assert.equal(picture.properties['data-aue-prop'], 'image');
-      assert.equal(picture.properties['data-aue-type'], 'container');
+      assert.equal(picture.properties['data-aue-type'], 'media');
       assert.equal(picture.properties['data-aue-component'], 'image');
 
       // Richtext instrumentation
