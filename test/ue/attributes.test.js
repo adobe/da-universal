@@ -647,7 +647,7 @@ describe('UE attributes', () => {
                     model: 'keyvalue-block',
                     plugins: {
                       da: {
-                        type: 'keyvalue-block',
+                        type: 'key-value-block',
                       },
                     },
                   },
@@ -755,7 +755,7 @@ describe('UE attributes', () => {
                     model: 'keyvalue-block',
                     plugins: {
                       da: {
-                        type: 'keyvalue-block',
+                        type: 'key-value-block',
                       },
                     },
                   },
@@ -845,7 +845,7 @@ describe('UE attributes', () => {
                     model: 'keyvalue-block',
                     plugins: {
                       da: {
-                        type: 'keyvalue-block',
+                        type: 'key-value-block',
                       },
                     },
                   },
@@ -990,7 +990,7 @@ describe('UE attributes', () => {
                     model: 'keyvalue-block',
                     plugins: {
                       da: {
-                        type: 'keyvalue-block',
+                        type: 'key-value-block',
                       },
                     },
                   },

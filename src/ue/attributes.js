@@ -330,7 +330,7 @@ export function injectUEAttributes(bodyTree, ueConfig) {
         }
 
         // special handling for key-value blocks
-        if (blockCmpDef?.plugins?.da?.type === 'keyvalue-block') {
+        if (blockCmpDef?.plugins?.da?.type === 'key-value-block') {
           addKeyValueBlockInstrumentation(block, ueConfig);
           return;
         }
