@@ -17,6 +17,7 @@ import { describe, it, before } from 'mocha';
 import esmock from 'esmock';
 import { select, selectAll } from 'hast-util-select';
 import { h } from 'hastscript';
+import { toString } from 'hast-util-to-string';
 
 describe('UE attributes', () => {
   let attributes;
@@ -26,551 +27,1006 @@ describe('UE attributes', () => {
   });
 
   describe('injectUEAttributes', () => {
-    it('adds UE attributes to main content', () => {
-      const bodyTree = h('body', {}, [
-        h('main', {}, []),
-      ]);
+    describe('main content and sections', () => {
+      it('adds UE attributes to main content', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, []),
+        ]);
 
-      const ueConfig = {
-        'component-definition': {
-          groups: [
-            {
-              components: [
-                { id: 'section', title: 'Section' },
-              ],
-            },
-          ],
-        },
-      };
-
-      attributes.injectUEAttributes(bodyTree, ueConfig);
-
-      const main = select('main', bodyTree);
-      assert.equal(main.properties['data-aue-resource'], 'urn:ab:main');
-      assert.equal(main.properties['data-aue-type'], 'container');
-      assert.equal(main.properties['data-aue-label'], 'Main Content');
-      assert.equal(main.properties['data-aue-filter'], 'main');
-    });
-
-    it('adds UE attributes to sections', () => {
-      const bodyTree = h('body', {}, [
-        h('main', {}, [
-          h('div', {}, []),
-        ]),
-      ]);
-
-      const ueConfig = {
-        'component-definition': {
-          groups: [
-            {
-              components: [
-                { id: 'section', title: 'Section' },
-              ],
-            },
-          ],
-        },
-      };
-
-      attributes.injectUEAttributes(bodyTree, ueConfig);
-
-      const section = select('main > div', bodyTree);
-      assert.equal(section.properties['data-aue-resource'], 'urn:ab:section-0');
-      assert.equal(section.properties['data-aue-type'], 'container');
-      assert.equal(section.properties['data-aue-label'], 'Section');
-      assert.equal(section.properties['data-aue-component'], 'section');
-    });
-
-    it('adds UE attributes to blocks within sections', () => {
-      const bodyTree = h('body', {}, [
-        h('main', {}, [
-          h('div', {}, [
-            h('div', { className: ['card-block'] }, []),
-          ]),
-        ]),
-      ]);
-
-      const ueConfig = {
-        'component-definition': {
-          groups: [
-            {
-              components: [
-                { id: 'section', title: 'Section' },
-                { id: 'card-block', title: 'Card Block' },
-              ],
-            },
-          ],
-        },
-      };
-
-      attributes.injectUEAttributes(bodyTree, ueConfig);
-
-      const block = select('main > div > div', bodyTree);
-      assert.equal(block.properties['data-aue-resource'], 'urn:ab:section-0/block-0');
-      assert.equal(block.properties['data-aue-type'], 'component');
-      assert.equal(block.properties['data-aue-label'], 'Card Block');
-      assert.equal(block.properties['data-aue-component'], 'card-block');
-    });
-
-    it('adds UE attributes to block items', () => {
-      const bodyTree = h('body', {}, [
-        h('main', {}, [
-          h('div', {}, [
-            h('div', { className: ['cards'] }, [
-              h('div', {}, []),
-              h('div', {}, []),
-            ]),
-          ]),
-        ]),
-      ]);
-
-      const ueConfig = {
-        'component-definition': {
-          groups: [
-            {
-              components: [
-                { id: 'section', title: 'Section' },
-                { id: 'cards', title: 'Cards' },
-                { id: 'card', title: 'Card' },
-              ],
-            },
-          ],
-        },
-        'component-filter': [
-          {
-            id: 'cards',
-            components: ['card'],
-          },
-        ],
-      };
-
-      attributes.injectUEAttributes(bodyTree, ueConfig);
-
-      const blockItems = selectAll('main > div > div > div', bodyTree);
-      assert.equal(blockItems[0].properties['data-aue-resource'], 'urn:ab:section-0/block-0/item-0');
-      assert.equal(blockItems[0].properties['data-aue-type'], 'component');
-      assert.equal(blockItems[0].properties['data-aue-label'], 'Card');
-      assert.equal(blockItems[0].properties['data-aue-component'], 'card');
-      assert.equal(blockItems[1].properties['data-aue-resource'], 'urn:ab:section-0/block-0/item-1');
-      assert.equal(blockItems[1].properties['data-aue-type'], 'component');
-      assert.equal(blockItems[1].properties['data-aue-label'], 'Card');
-    });
-
-    it('adds UE attributes to body for page metadata', () => {
-      const bodyTree = h('body', {}, [
-        h('main', {}, []),
-      ]);
-
-      const ueConfig = {
-        'component-model': [
-          { id: 'page-metadata', title: 'Page Metadata' },
-        ],
-        'component-definition': {
-          groups: [
-            {
-              components: [
-                { id: 'section', title: 'Section' },
-              ],
-            },
-          ],
-        },
-      };
-
-      attributes.injectUEAttributes(bodyTree, ueConfig);
-
-      // Check body attributes for page metadata
-      assert.equal(bodyTree.properties['data-aue-resource'], 'urn:ab:page');
-      assert.equal(bodyTree.properties['data-aue-label'], 'Page');
-      assert.equal(bodyTree.properties['data-aue-type'], 'component');
-      assert.equal(bodyTree.properties['data-aue-model'], 'page-metadata');
-    });
-
-    it('does not add page metadata attributes when not defined in config', () => {
-      const bodyTree = h('body', {}, [
-        h('main', {}, []),
-      ]);
-
-      const ueConfig = {
-        'component-definition': {
-          groups: [
-            {
-              components: [
-                { id: 'section', title: 'Section' },
-              ],
-            },
-          ],
-        },
-      };
-
-      attributes.injectUEAttributes(bodyTree, ueConfig);
-
-      // Check that body doesn't have page metadata attributes
-      assert.equal(bodyTree.properties['data-aue-resource'], undefined);
-      assert.equal(bodyTree.properties['data-aue-label'], undefined);
-      assert.equal(bodyTree.properties['data-aue-type'], undefined);
-      assert.equal(bodyTree.properties['data-aue-component'], undefined);
-    });
-
-    it('adds UE attributes to richtext within sections', () => {
-      const bodyTree = h('body', {}, [
-        h('main', {}, [
-          h('div', {}, [
-            h('h1', {}, [{ type: 'text', value: 'Heading 1' }]),
-            h('p', {}, [{ type: 'text', value: 'Paragraph 1' }]),
-          ]),
-        ]),
-      ]);
-
-      const ueConfig = {
-        'component-definition': {
-          groups: [
-            {
-              components: [
-                { id: 'section', title: 'Section' },
-                { id: 'text', title: 'Text' },
-              ],
-            },
-          ],
-        },
-      };
-
-      attributes.injectUEAttributes(bodyTree, ueConfig);
-
-      const richTextDiv = select('main > div > div', bodyTree);
-      assert.equal(richTextDiv.properties['data-aue-resource'], 'urn:ab:section-0/text-0');
-      assert.equal(richTextDiv.properties['data-aue-type'], 'richtext');
-      assert.equal(richTextDiv.properties['data-aue-label'], 'Text');
-      assert.equal(richTextDiv.properties['data-aue-prop'], 'root');
-      assert.equal(richTextDiv.properties.className, 'richtext');
-    });
-
-    it('adds UE attributes to pictures within sections', () => {
-      const bodyTree = h('body', {}, [
-        h('main', {}, [
-          h('div', {}, [
-            h('picture', {}, [
-              h('img', {}, []),
-            ]),
-          ]),
-        ]),
-      ]);
-
-      const ueConfig = {
-        'component-definition': {
-          groups: [
-            {
-              components: [
-                { id: 'section', title: 'Section' },
-                { id: 'image', title: 'Image' },
-              ],
-            },
-          ],
-        },
-      };
-
-      attributes.injectUEAttributes(bodyTree, ueConfig);
-
-      const image = select('main > div > picture', bodyTree);
-      assert.equal(image.properties['data-aue-resource'], 'urn:ab:section-0/asset-0');
-      assert.equal(image.properties['data-aue-type'], 'media');
-      assert.equal(image.properties['data-aue-label'], 'Image');
-      assert.equal(image.properties['data-aue-component'], 'image');
-    });
-
-    it('adds UE attributes to block fields based on model definition', () => {
-      const bodyTree = h('body', {}, [
-        h('main', {}, [
-          h('div', {}, [
-            h('div', { className: ['hero-block'] }, [
-              h('div', {}, [{ type: 'text', value: 'Hero Text' }]),
-              h('picture', {}, [
-                h('img', {}, []),
-              ]),
-              h('div', {}, [{ type: 'text', value: 'Array Field' }]),
-            ]),
-          ]),
-        ]),
-      ]);
-
-      const ueConfig = {
-        'component-definition': {
-          groups: [
-            {
-              components: [
-                { id: 'section', title: 'Section' },
-                { id: 'hero-block', title: 'Hero Block' },
-              ],
-            },
-          ],
-        },
-        'component-model': [
-          {
-            id: 'hero-block',
-            title: 'Hero Block',
-            fields: [
+        const ueConfig = {
+          'component-definition': {
+            groups: [
               {
-                name: 'div:first-child',
-                label: 'Hero Text',
-                component: 'richtext',
-              },
-              {
-                name: 'picture',
-                label: 'Hero Image',
-                component: 'reference',
-              },
-              {
-                name: 'div:last-child',
-                label: 'Array Field',
-                component: 'text',
+                components: [
+                  { id: 'section', title: 'Section' },
+                ],
               },
             ],
           },
-        ],
-      };
+        };
 
-      attributes.injectUEAttributes(bodyTree, ueConfig);
+        attributes.injectUEAttributes(bodyTree, ueConfig);
 
-      const textField = select('main > div > div > div:first-child', bodyTree);
-      assert.equal(textField.properties['data-aue-type'], 'richtext');
-      assert.equal(textField.properties['data-aue-prop'], 'div:first-child');
-      assert.equal(textField.properties['data-aue-label'], 'Hero Text');
+        const main = select('main', bodyTree);
+        assert.equal(main.properties['data-aue-resource'], 'urn:ab:main');
+        assert.equal(main.properties['data-aue-type'], 'container');
+        assert.equal(main.properties['data-aue-label'], 'Main Content');
+        assert.equal(main.properties['data-aue-filter'], 'main');
+      });
 
-      const imageField = select('main > div > div > picture', bodyTree);
-      assert.equal(imageField.properties['data-aue-type'], 'media');
-      assert.equal(imageField.properties['data-aue-prop'], 'picture');
-      assert.equal(imageField.properties['data-aue-label'], 'Hero Image');
-
-      const arrayField = select('main > div > div > div:last-child', bodyTree);
-      assert.equal(arrayField.properties['data-aue-type'], 'text');
-      assert.equal(arrayField.properties['data-aue-prop'], 'div:last-child');
-      assert.equal(arrayField.properties['data-aue-label'], 'Array Field');
-    });
-
-    it('handles whitespace text nodes in wrapParagraphs', () => {
-      const bodyTree = h('body', {}, [
-        h('main', {}, [
-          h('div', {}, [
-            h('h1', {}, [{ type: 'text', value: 'Heading 1' }]),
-            h('p', {}, [{ type: 'text', value: 'Paragraph 1' }]),
+      it('adds UE attributes to sections', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, [
+            h('div', {}, []),
           ]),
-        ]),
-      ]);
+        ]);
 
-      const ueConfig = {
-        'component-definition': {
-          groups: [
-            {
-              components: [
-                { id: 'section', title: 'Section' },
-                { id: 'text', title: 'Text' },
-              ],
-            },
-          ],
-        },
-      };
+        const ueConfig = {
+          'component-definition': {
+            groups: [
+              {
+                components: [
+                  { id: 'section', title: 'Section' },
+                ],
+              },
+            ],
+          },
+        };
 
-      attributes.injectUEAttributes(bodyTree, ueConfig);
+        attributes.injectUEAttributes(bodyTree, ueConfig);
 
-      const section = select('main > div', bodyTree);
-      assert.equal(section.children.length, 1);
-      assert.equal(section.children[0].tagName, 'div');
-      assert.equal(section.children[0].properties['data-aue-resource'], 'urn:ab:section-0/text-0');
-      assert.equal(section.children[0].properties['data-aue-type'], 'richtext');
-      assert.equal(section.children[0].properties['data-aue-label'], 'Text');
-      assert.equal(section.children[0].children.length, 2);
-      assert.equal(section.children[0].children[0].tagName, 'h1');
-      assert.equal(section.children[0].children[1].tagName, 'p');
-    });
+        const section = select('main > div', bodyTree);
+        assert.equal(section.properties['data-aue-resource'], 'urn:ab:section-0');
+        assert.equal(section.properties['data-aue-type'], 'container');
+        assert.equal(section.properties['data-aue-label'], 'Section');
+        assert.equal(section.properties['data-aue-component'], 'section');
+      });
 
-    it('handles multiple consecutive richtext wrappers', () => {
-      const bodyTree = h('body', {}, [
-        h('main', {}, [
-          h('div', {}, [
-            h('h1', {}, 'Heading 1'),
-            h('img', {}),
-            h('p', {}, 'Paragraph 1'),
+      it('adds UE attributes to richtext within sections', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, [
+            h('div', {}, [
+              h('h1', {}, [{ type: 'text', value: 'Heading 1' }]),
+              h('p', {}, [{ type: 'text', value: 'Paragraph 1' }]),
+            ]),
           ]),
-        ]),
-      ]);
+        ]);
 
-      const ueConfig = {
-        'component-definition': {
-          groups: [
-            {
-              components: [
-                { id: 'section', title: 'Section' },
-                { id: 'text', title: 'Text' },
-                { id: 'image', title: 'Image' },
-              ],
-            },
-          ],
-        },
-      };
+        const ueConfig = {
+          'component-definition': {
+            groups: [
+              {
+                components: [
+                  { id: 'section', title: 'Section' },
+                  { id: 'text', title: 'Text' },
+                ],
+              },
+            ],
+          },
+        };
 
-      attributes.injectUEAttributes(bodyTree, ueConfig);
+        attributes.injectUEAttributes(bodyTree, ueConfig);
 
-      const section = select('main > div', bodyTree);
-      assert.equal(section.children.length, 3);
-      assert.equal(section.children[0].tagName, 'div');
-      assert.equal(section.children[0].properties['data-aue-resource'], 'urn:ab:section-0/text-0');
-      assert.equal(section.children[0].properties['data-aue-type'], 'richtext');
-      assert.equal(section.children[0].properties['data-aue-label'], 'Text');
-      assert.equal(section.children[0].children.length, 1);
-      assert.equal(section.children[0].children[0].tagName, 'h1');
-      assert.equal(section.children[1].tagName, 'img');
-      assert.equal(section.children[2].tagName, 'div');
-      assert.equal(section.children[2].properties['data-aue-resource'], 'urn:ab:section-0/text-1');
-      assert.equal(section.children[2].properties['data-aue-type'], 'richtext');
-      assert.equal(section.children[2].properties['data-aue-label'], 'Text');
-      assert.equal(section.children[2].children.length, 1);
-      assert.equal(section.children[2].children[0].tagName, 'p');
-    });
+        const richTextDiv = select('main > div > div', bodyTree);
+        assert.equal(richTextDiv.properties['data-aue-resource'], 'urn:ab:section-0/text-0');
+        assert.equal(richTextDiv.properties['data-aue-type'], 'richtext');
+        assert.equal(richTextDiv.properties['data-aue-label'], 'Text');
+        assert.equal(richTextDiv.properties['data-aue-prop'], 'root');
+        assert.equal(richTextDiv.properties.className, 'richtext');
+      });
 
-    it('adds UE attributes to column structure with proper hierarchy', () => {
-      const bodyTree = h('body', {}, [
-        h('main', {}, [
-          h('div', {}, [
-            h('div', { className: ['custom-columns'] }, [
-              h('div', {}, [
-                h('div', {}, [h('p', {}, 'Cell 1')]),
-                h('div', {}, [h('p', {}, 'Cell 2')]),
-              ]),
-              h('div', {}, [
-                h('div', {}, [h('p', {}, 'Cell 3')]),
-                h('div', {}, [h('p', {}, 'Cell 4')]),
+      it('adds UE attributes to pictures within sections', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, [
+            h('div', {}, [
+              h('picture', {}, [
+                h('img', {}, []),
               ]),
             ]),
           ]),
-        ]),
-      ]);
+        ]);
 
-      const ueConfig = {
-        'component-definition': {
-          groups: [
-            {
-              components: [
-                { id: 'section', title: 'Section' },
-                {
-                  id: 'custom-columns',
-                  title: 'Custom Columns',
-                  plugins: {
-                    da: {
-                      behaviour: 'columns',
-                    },
-                  },
-                },
-              ],
-            },
-          ],
-        },
-        'component-filter': [
-          {
-            id: 'custom-columns-cell',
-            components: ['text', 'image'],
+        const ueConfig = {
+          'component-definition': {
+            groups: [
+              {
+                components: [
+                  { id: 'section', title: 'Section' },
+                  { id: 'image', title: 'Image' },
+                ],
+              },
+            ],
           },
-        ],
-      };
+        };
 
-      attributes.injectUEAttributes(bodyTree, ueConfig);
+        attributes.injectUEAttributes(bodyTree, ueConfig);
 
-      // Test column block attributes
-      const columnBlock = select('main > div > div', bodyTree);
-      assert.equal(columnBlock.properties['data-aue-resource'], 'urn:ab:section-0/columns-0');
-      assert.equal(columnBlock.properties['data-aue-label'], 'Custom Columns');
-      assert.equal(columnBlock.properties['data-aue-component'], 'custom-columns');
-      assert.equal(columnBlock.properties['data-aue-type'], 'container');
+        const image = select('main > div > picture', bodyTree);
+        assert.equal(image.properties['data-aue-resource'], 'urn:ab:section-0/asset-0');
+        assert.equal(image.properties['data-aue-type'], 'media');
+        assert.equal(image.properties['data-aue-label'], 'Image');
+        assert.equal(image.properties['data-aue-component'], 'image');
+      });
 
-      // Test first row attributes
-      const firstRow = select('main > div > div > div:first-child', bodyTree);
-      assert.equal(firstRow.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-0');
-      assert.equal(firstRow.properties['data-aue-label'], 'Custom Columns Row');
-      assert.equal(firstRow.properties['data-aue-component'], 'custom-columns-row');
-      assert.equal(firstRow.properties['data-aue-type'], 'container');
+      it('handles whitespace text nodes in wrapParagraphs', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, [
+            h('div', {}, [
+              h('h1', {}, [{ type: 'text', value: 'Heading 1' }]),
+              h('p', {}, [{ type: 'text', value: 'Paragraph 1' }]),
+            ]),
+          ]),
+        ]);
 
-      // Test first cell attributes
-      const firstCell = select('main > div > div > div:first-child > div:first-child', bodyTree);
-      assert.equal(firstCell.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-0/cell-0');
-      assert.equal(firstCell.properties['data-aue-label'], 'Custom Columns Cell');
-      assert.equal(firstCell.properties['data-aue-component'], 'custom-columns-cell');
-      assert.equal(firstCell.properties['data-aue-type'], 'container');
+        const ueConfig = {
+          'component-definition': {
+            groups: [
+              {
+                components: [
+                  { id: 'section', title: 'Section' },
+                  { id: 'text', title: 'Text' },
+                ],
+              },
+            ],
+          },
+        };
 
-      // Test second row attributes
-      const secondRow = select('main > div > div > div:last-child', bodyTree);
-      assert.equal(secondRow.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-1');
-      assert.equal(secondRow.properties['data-aue-label'], 'Custom Columns Row');
-      assert.equal(secondRow.properties['data-aue-component'], 'custom-columns-row');
-      assert.equal(secondRow.properties['data-aue-type'], 'container');
+        attributes.injectUEAttributes(bodyTree, ueConfig);
 
-      // Test second row first cell attributes
-      const secondRowFirstCell = select('main > div > div > div:last-child > div:first-child', bodyTree);
-      assert.equal(secondRowFirstCell.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-1/cell-0');
-      assert.equal(secondRowFirstCell.properties['data-aue-label'], 'Custom Columns Cell');
-      assert.equal(secondRowFirstCell.properties['data-aue-component'], 'custom-columns-cell');
-      assert.equal(secondRowFirstCell.properties['data-aue-type'], 'container');
+        const section = select('main > div', bodyTree);
+        assert.equal(section.children.length, 1);
+        assert.equal(section.children[0].tagName, 'div');
+        assert.equal(section.children[0].properties['data-aue-resource'], 'urn:ab:section-0/text-0');
+        assert.equal(section.children[0].properties['data-aue-type'], 'richtext');
+        assert.equal(section.children[0].properties['data-aue-label'], 'Text');
+        assert.equal(section.children[0].children.length, 2);
+        assert.equal(section.children[0].children[0].tagName, 'h1');
+        assert.equal(section.children[0].children[1].tagName, 'p');
+      });
+
+      it('handles multiple consecutive richtext wrappers', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, [
+            h('div', {}, [
+              h('h1', {}, 'Heading 1'),
+              h('img', {}),
+              h('p', {}, 'Paragraph 1'),
+            ]),
+          ]),
+        ]);
+
+        const ueConfig = {
+          'component-definition': {
+            groups: [
+              {
+                components: [
+                  { id: 'section', title: 'Section' },
+                  { id: 'text', title: 'Text' },
+                  { id: 'image', title: 'Image' },
+                ],
+              },
+            ],
+          },
+        };
+
+        attributes.injectUEAttributes(bodyTree, ueConfig);
+
+        const section = select('main > div', bodyTree);
+        assert.equal(section.children.length, 3);
+        assert.equal(section.children[0].tagName, 'div');
+        assert.equal(section.children[0].properties['data-aue-resource'], 'urn:ab:section-0/text-0');
+        assert.equal(section.children[0].properties['data-aue-type'], 'richtext');
+        assert.equal(section.children[0].properties['data-aue-label'], 'Text');
+        assert.equal(section.children[0].children.length, 1);
+        assert.equal(section.children[0].children[0].tagName, 'h1');
+        assert.equal(section.children[1].tagName, 'img');
+        assert.equal(section.children[2].tagName, 'div');
+        assert.equal(section.children[2].properties['data-aue-resource'], 'urn:ab:section-0/text-1');
+        assert.equal(section.children[2].properties['data-aue-type'], 'richtext');
+        assert.equal(section.children[2].properties['data-aue-label'], 'Text');
+        assert.equal(section.children[2].children.length, 1);
+        assert.equal(section.children[2].children[0].tagName, 'p');
+      });
     });
 
-    it('instruments picture and richtext inside column cells', () => {
-      const bodyTree = h('body', {}, [
-        h('main', {}, [
-          h('div', {}, [
-            h('div', { className: ['custom-columns'] }, [
-              h('div', {}, [
+    describe('page metadata', () => {
+      it('adds UE attributes to body for page metadata', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, []),
+        ]);
+
+        const ueConfig = {
+          'component-model': [
+            { id: 'page-metadata', title: 'Page Metadata' },
+          ],
+          'component-definition': {
+            groups: [
+              {
+                components: [
+                  { id: 'section', title: 'Section' },
+                ],
+              },
+            ],
+          },
+        };
+
+        attributes.injectUEAttributes(bodyTree, ueConfig);
+
+        // Check body attributes for page metadata
+        assert.equal(bodyTree.properties['data-aue-resource'], 'urn:ab:page');
+        assert.equal(bodyTree.properties['data-aue-label'], 'Page');
+        assert.equal(bodyTree.properties['data-aue-type'], 'component');
+        assert.equal(bodyTree.properties['data-aue-model'], 'page-metadata');
+      });
+
+      it('does not add page metadata attributes when not defined in config', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, []),
+        ]);
+
+        const ueConfig = {
+          'component-definition': {
+            groups: [
+              {
+                components: [
+                  { id: 'section', title: 'Section' },
+                ],
+              },
+            ],
+          },
+        };
+
+        attributes.injectUEAttributes(bodyTree, ueConfig);
+
+        // Check that body doesn't have page metadata attributes
+        assert.equal(bodyTree.properties['data-aue-resource'], undefined);
+        assert.equal(bodyTree.properties['data-aue-label'], undefined);
+        assert.equal(bodyTree.properties['data-aue-type'], undefined);
+        assert.equal(bodyTree.properties['data-aue-component'], undefined);
+      });
+    });
+
+    describe('blocks and block attributes', () => {
+      it('adds UE attributes to blocks within sections', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, [
+            h('div', {}, [
+              h('div', { className: ['card-block'] }, []),
+            ]),
+          ]),
+        ]);
+
+        const ueConfig = {
+          'component-definition': {
+            groups: [
+              {
+                components: [
+                  { id: 'section', title: 'Section' },
+                  { id: 'card-block', title: 'Card Block' },
+                ],
+              },
+            ],
+          },
+        };
+
+        attributes.injectUEAttributes(bodyTree, ueConfig);
+
+        const block = select('main > div > div', bodyTree);
+        assert.equal(block.properties['data-aue-resource'], 'urn:ab:section-0/block-0');
+        assert.equal(block.properties['data-aue-type'], 'component');
+        assert.equal(block.properties['data-aue-label'], 'Card Block');
+        assert.equal(block.properties['data-aue-component'], 'card-block');
+      });
+
+      it('adds UE attributes to block items', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, [
+            h('div', {}, [
+              h('div', { className: ['cards'] }, [
+                h('div', {}, []),
+                h('div', {}, []),
+              ]),
+            ]),
+          ]),
+        ]);
+
+        const ueConfig = {
+          'component-definition': {
+            groups: [
+              {
+                components: [
+                  { id: 'section', title: 'Section' },
+                  { id: 'cards', title: 'Cards' },
+                  { id: 'card', title: 'Card' },
+                ],
+              },
+            ],
+          },
+          'component-filter': [
+            {
+              id: 'cards',
+              components: ['card'],
+            },
+          ],
+        };
+
+        attributes.injectUEAttributes(bodyTree, ueConfig);
+
+        const blockItems = selectAll('main > div > div > div', bodyTree);
+        assert.equal(blockItems[0].properties['data-aue-resource'], 'urn:ab:section-0/block-0/item-0');
+        assert.equal(blockItems[0].properties['data-aue-type'], 'component');
+        assert.equal(blockItems[0].properties['data-aue-label'], 'Card');
+        assert.equal(blockItems[0].properties['data-aue-component'], 'card');
+        assert.equal(blockItems[1].properties['data-aue-resource'], 'urn:ab:section-0/block-0/item-1');
+        assert.equal(blockItems[1].properties['data-aue-type'], 'component');
+        assert.equal(blockItems[1].properties['data-aue-label'], 'Card');
+      });
+
+      it('adds UE attributes to block fields based on fields and model definition', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, [
+            h('div', {}, [ // the section
+              h('div', { className: ['hero-block'] }, [ // the heroblock
                 h('div', {}, [
-                  h('picture', {}, [h('img', { src: 'img.jpg' })]),
-                  { type: 'text', value: 'Some text' },
+                  h('div', {}, [
+                    h('picture', {}, [
+                      h('img', { src: 'img.jpg', alt: 'Hero Image' }),
+                    ]),
+                    h('h1', {}, [{ type: 'text', value: 'Hero Text' }]),
+                  ]),
                 ]),
               ]),
             ]),
           ]),
-        ]),
-      ]);
+        ]);
 
-      const ueConfig = {
-        'component-definition': {
-          groups: [
-            {
-              components: [
-                {
-                  id: 'custom-columns',
-                  title: 'Custom Columns',
-                  plugins: {
-                    da: {
-                      behaviour: 'columns',
+        const ueConfig = {
+          'component-definition': {
+            groups: [
+              {
+                components: [
+                  { id: 'section', title: 'Section' },
+                  {
+                    id: 'hero-block',
+                    title: 'Hero',
+                    model: 'hero-block',
+                    plugins: {
+                      da: {
+                        rows: 1,
+                        columns: 1,
+                        fields: [
+                          {
+                            name: 'image',
+                            selector: 'div>div>picture>img[src]',
+                          },
+                          {
+                            name: 'imageAlt',
+                            selector: 'div>div>picture>img[alt]',
+                          },
+                          {
+                            name: 'text',
+                            selector: 'div>div>h1',
+                          },
+                        ],
+                      },
                     },
                   },
+                ],
+              },
+            ],
+          },
+          'component-model': [
+            {
+              id: 'hero-block',
+              fields: [
+                {
+                  name: 'text',
+                  label: 'Hero Text',
+                  component: 'richtext',
+                },
+                {
+                  name: 'image',
+                  label: 'Hero Image',
+                  component: 'reference',
+                },
+                {
+                  name: 'imageAlt',
+                  label: 'Hero Image Alt',
+                  component: 'text',
                 },
               ],
             },
           ],
-        },
-        'component-filter': [
-          {
-            id: 'custom-columns-cell',
-            components: ['text', 'image'], // triggers instrumentation
+        };
+
+        attributes.injectUEAttributes(bodyTree, ueConfig);
+
+        const textField = select('main div.hero-block > div > div > h1', bodyTree);
+        assert.equal(textField.properties['data-aue-type'], 'richtext');
+        assert.equal(textField.properties['data-aue-prop'], 'text');
+        assert.equal(textField.properties['data-aue-label'], 'Hero Text');
+
+        const imageField = select('main div.hero-block > div > div > picture > img', bodyTree);
+        assert.equal(imageField.properties['data-aue-type'], 'media');
+        assert.equal(imageField.properties['data-aue-prop'], 'image');
+        assert.equal(imageField.properties['data-aue-label'], 'Hero Image');
+        assert.equal(imageField.properties.src, 'img.jpg');
+        assert.equal(imageField.properties.alt, 'Hero Image');
+      });
+    });
+
+    describe('column blocks', () => {
+      it('adds UE attributes to column structure with proper hierarchy', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, [
+            h('div', {}, [
+              h('div', { className: ['custom-columns'] }, [
+                h('div', {}, [
+                  h('div', {}, [h('p', {}, 'Cell 1')]),
+                  h('div', {}, [h('p', {}, 'Cell 2')]),
+                ]),
+                h('div', {}, [
+                  h('div', {}, [h('p', {}, 'Cell 3')]),
+                  h('div', {}, [h('p', {}, 'Cell 4')]),
+                ]),
+              ]),
+            ]),
+          ]),
+        ]);
+
+        const ueConfig = {
+          'component-definition': {
+            groups: [
+              {
+                components: [
+                  { id: 'section', title: 'Section' },
+                  {
+                    id: 'custom-columns',
+                    title: 'Custom Columns',
+                    plugins: {
+                      da: {
+                        behaviour: 'columns',
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
           },
-        ],
-      };
+          'component-filter': [
+            {
+              id: 'custom-columns-cell',
+              components: ['text', 'image'],
+            },
+          ],
+        };
 
-      attributes.injectUEAttributes(bodyTree, ueConfig);
+        attributes.injectUEAttributes(bodyTree, ueConfig);
 
-      // Find the cell
-      const cell = select('main > div > div > div > div', bodyTree);
-      // Picture instrumentation
-      const picture = select('picture', cell);
-      assert.ok(picture, 'Picture element exists');
-      assert.equal(picture.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-0/cell-0/image-0');
-      assert.equal(picture.properties['data-aue-label'], 'Image');
-      assert.equal(picture.properties['data-aue-prop'], 'image');
-      assert.equal(picture.properties['data-aue-type'], 'container');
-      assert.equal(picture.properties['data-aue-component'], 'image');
+        // Test column block attributes
+        const columnBlock = select('main > div > div', bodyTree);
+        assert.equal(columnBlock.properties['data-aue-resource'], 'urn:ab:section-0/columns-0');
+        assert.equal(columnBlock.properties['data-aue-label'], 'Custom Columns');
+        assert.equal(columnBlock.properties['data-aue-component'], 'custom-columns');
+        assert.equal(columnBlock.properties['data-aue-type'], 'container');
 
-      // Richtext instrumentation
-      const richtext = select('div.richtext', cell);
-      assert.ok(richtext, 'Richtext wrapper exists');
-      assert.equal(richtext.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-0/cell-0/text-0');
-      assert.equal(richtext.properties['data-aue-type'], 'richtext');
-      assert.equal(richtext.properties['data-aue-label'], 'Text');
-      assert.equal(richtext.properties['data-aue-prop'], 'root');
-      assert.equal(richtext.properties['data-aue-behavior'], 'component');
+        // Test first row attributes
+        const firstRow = select('main > div > div > div:first-child', bodyTree);
+        assert.equal(firstRow.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-0');
+        assert.equal(firstRow.properties['data-aue-label'], 'Custom Columns Row');
+        assert.equal(firstRow.properties['data-aue-component'], 'custom-columns-row');
+        assert.equal(firstRow.properties['data-aue-type'], 'container');
+
+        // Test first cell attributes
+        const firstCell = select('main > div > div > div:first-child > div:first-child', bodyTree);
+        assert.equal(firstCell.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-0/cell-0');
+        assert.equal(firstCell.properties['data-aue-label'], 'Custom Columns Cell');
+        assert.equal(firstCell.properties['data-aue-component'], 'custom-columns-cell');
+        assert.equal(firstCell.properties['data-aue-type'], 'container');
+
+        // Test second row attributes
+        const secondRow = select('main > div > div > div:last-child', bodyTree);
+        assert.equal(secondRow.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-1');
+        assert.equal(secondRow.properties['data-aue-label'], 'Custom Columns Row');
+        assert.equal(secondRow.properties['data-aue-component'], 'custom-columns-row');
+        assert.equal(secondRow.properties['data-aue-type'], 'container');
+
+        // Test second row first cell attributes
+        const secondRowFirstCell = select('main > div > div > div:last-child > div:first-child', bodyTree);
+        assert.equal(secondRowFirstCell.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-1/cell-0');
+        assert.equal(secondRowFirstCell.properties['data-aue-label'], 'Custom Columns Cell');
+        assert.equal(secondRowFirstCell.properties['data-aue-component'], 'custom-columns-cell');
+        assert.equal(secondRowFirstCell.properties['data-aue-type'], 'container');
+      });
+
+      it('instruments picture and richtext inside column cells', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, [
+            h('div', {}, [
+              h('div', { className: ['custom-columns'] }, [
+                h('div', {}, [
+                  h('div', {}, [
+                    h('picture', {}, [h('img', { src: 'img.jpg' })]),
+                    { type: 'text', value: 'Some text' },
+                  ]),
+                ]),
+              ]),
+            ]),
+          ]),
+        ]);
+
+        const ueConfig = {
+          'component-definition': {
+            groups: [
+              {
+                components: [
+                  {
+                    id: 'custom-columns',
+                    title: 'Custom Columns',
+                    plugins: {
+                      da: {
+                        behaviour: 'columns',
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+          'component-filter': [
+            {
+              id: 'custom-columns-cell',
+              components: ['text', 'image'], // triggers instrumentation
+            },
+          ],
+        };
+
+        attributes.injectUEAttributes(bodyTree, ueConfig);
+
+        // Find the cell
+        const cell = select('main > div > div > div > div', bodyTree);
+        // Picture instrumentation
+        const picture = select('picture', cell);
+        assert.ok(picture, 'Picture element exists');
+        assert.equal(picture.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-0/cell-0/image-0');
+        assert.equal(picture.properties['data-aue-label'], 'Image');
+        assert.equal(picture.properties['data-aue-prop'], 'image');
+        assert.equal(picture.properties['data-aue-type'], 'media');
+        assert.equal(picture.properties['data-aue-component'], 'image');
+
+        // Richtext instrumentation
+        const richtext = select('div.richtext', cell);
+        assert.ok(richtext, 'Richtext wrapper exists');
+        assert.equal(richtext.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-0/cell-0/text-0');
+        assert.equal(richtext.properties['data-aue-type'], 'richtext');
+        assert.equal(richtext.properties['data-aue-label'], 'Text');
+        assert.equal(richtext.properties['data-aue-prop'], 'root');
+        assert.equal(richtext.properties['data-aue-behavior'], 'component');
+      });
+    });
+
+    describe('key-value blocks', () => {
+      it('adds UE attributes to key-value block fields full block instrumentation', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, [
+            h('div', {}, [ // the section
+              h('div', { className: ['keyvalue-block'] }, [// the keyvalue block
+                h('div', {}, [ // the first row
+                  h('div', {}, [h('p', {}, 'key1')]),
+                  h('div', {}, [h('p', {}, 'text value 1')]),
+                ]),
+                h('div', {}, [ // the second row
+                  h('div', {}, [h('p', {}, 'key2')]),
+                  h('div', {}, [
+                    h('h1', {}, 'Section Title'),
+                    h('p', {}, [
+                      'Some paragraph text with ',
+                      h('strong', {}, 'some text in bold'),
+                      '.',
+                    ]),
+                  ]),
+                ]),
+                h('div', {}, [ // the third row
+                  h('div', {}, [h('p', {}, 'key3')]),
+                  h('div', {}, [h('img', { src: 'img3.jpg', alt: 'Image 3' })]),
+                ]),
+              ]),
+            ]),
+          ]),
+        ]);
+
+        const ueConfig = {
+          'component-definition': {
+            groups: [
+              {
+                components: [
+                  { id: 'section', title: 'Section' },
+                  {
+                    id: 'keyvalue-block',
+                    title: 'Key Value Block Sample',
+                    model: 'keyvalue-block',
+                    plugins: {
+                      da: {
+                        type: 'key-value-block',
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+          'component-model': [
+            {
+              id: 'keyvalue-block',
+              fields: [
+                {
+                  name: 'key1',
+                  label: 'Key 1',
+                  component: 'text',
+                },
+                {
+                  name: 'key2',
+                  label: 'Key 2',
+                  component: 'richtext',
+                },
+                {
+                  name: 'key3',
+                  component: 'reference',
+                },
+              ],
+            },
+          ],
+        };
+
+        attributes.injectUEAttributes(bodyTree, ueConfig);
+
+        const block = select('main div.keyvalue-block', bodyTree);
+        assert.equal(block.properties['data-aue-resource'], 'urn:ab:section-0/block-0');
+        assert.equal(block.properties['data-aue-type'], 'component');
+        assert.equal(block.properties['data-aue-label'], 'Key Value Block Sample');
+        assert.equal(block.properties['data-aue-component'], 'keyvalue-block');
+
+        const row1 = select('main div.keyvalue-block > div:first-child', bodyTree);
+        const key1cell = select('div:first-child', row1);
+        assert.equal(toString(key1cell), 'key1');
+        const text1cell = select('div:last-child', row1);
+        assert.equal(text1cell.properties['data-aue-type'], 'text');
+        assert.equal(text1cell.properties['data-aue-prop'], 'key1');
+        assert.equal(text1cell.properties['data-aue-label'], 'Key 1');
+
+        const row2 = select('main div.keyvalue-block > div:nth-child(2)', bodyTree);
+        const key2cell = select('div:first-child', row2);
+        assert.equal(toString(key2cell), 'key2');
+        const text2cell = select('div:last-child', row2);
+        assert.equal(text2cell.properties['data-aue-type'], 'richtext');
+        assert.equal(text2cell.properties['data-aue-prop'], 'key2');
+        assert.equal(text2cell.properties['data-aue-label'], 'Key 2');
+
+        const row3 = select('main div.keyvalue-block > div:last-child', bodyTree);
+        const key3cell = select('div:first-child', row3);
+        assert.equal(toString(key3cell), 'key3');
+        const image3cell = select('div:last-child', row3);
+        assert.equal(image3cell.properties['data-aue-type'], 'media');
+        assert.equal(image3cell.properties['data-aue-prop'], 'key3');
+        assert.equal(image3cell.properties['data-aue-label'], 'key3'); // fallback to the key name
+        const img3Tag = select('img', image3cell);
+        assert.equal(img3Tag.properties.src, 'img3.jpg');
+        assert.equal(img3Tag.properties.alt, 'Image 3');
+      });
+
+      it('adds UE attributes to key-value block fields partially block instrumentation 1', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, [
+            h('div', {}, [ // the section
+              h('div', { className: ['keyvalue-block'] }, [// the keyvalue block
+                h('div', {}, [ // the first row
+                  h('div', {}, [h('p', {}, 'key1')]),
+                  h('div', {}, [h('p', {}, 'text value 1')]),
+                ]),
+                h('div', {}, [ // the second row
+                  h('div', {}, [h('p', {}, '')]),
+                  h('div', {}, [
+                    h('h1', {}, 'Section Title'),
+                    h('p', {}, [
+                      'Some paragraph text with ',
+                      h('strong', {}, 'some text in bold'),
+                      '.',
+                    ]),
+                  ]),
+                ]),
+                h('div', {}, [ // the third row
+                  h('div', {}, [h('p', {}, 'key3')]),
+                  h('div', {}, [h('img', { src: 'img3.jpg', alt: 'Image 3' })]),
+                ]),
+              ]),
+            ]),
+          ]),
+        ]);
+
+        const ueConfig = {
+          'component-definition': {
+            groups: [
+              {
+                components: [
+                  { id: 'section', title: 'Section' },
+                  {
+                    id: 'keyvalue-block',
+                    title: 'Key Value Block Sample',
+                    model: 'keyvalue-block',
+                    plugins: {
+                      da: {
+                        type: 'key-value-block',
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+          'component-model': [
+            {
+              id: 'keyvalue-block',
+              fields: [
+                {
+                  name: 'key1',
+                  label: 'Key 1',
+                  component: 'text',
+                },
+                {
+                  name: 'key2',
+                  label: 'Key 2',
+                  component: 'richtext',
+                },
+              ],
+            },
+          ],
+        };
+
+        attributes.injectUEAttributes(bodyTree, ueConfig);
+
+        const block = select('main div.keyvalue-block', bodyTree);
+        assert.equal(block.properties['data-aue-resource'], 'urn:ab:section-0/block-0');
+        assert.equal(block.properties['data-aue-type'], 'component');
+        assert.equal(block.properties['data-aue-label'], 'Key Value Block Sample');
+        assert.equal(block.properties['data-aue-component'], 'keyvalue-block');
+
+        const row1 = select('main div.keyvalue-block > div:first-child', bodyTree);
+        const key1cell = select('div:first-child', row1);
+        assert.equal(toString(key1cell), 'key1');
+        const text1cell = select('div:last-child', row1);
+        assert.equal(text1cell.properties['data-aue-type'], 'text');
+        assert.equal(text1cell.properties['data-aue-prop'], 'key1');
+        assert.equal(text1cell.properties['data-aue-label'], 'Key 1');
+
+        const row2 = select('main div.keyvalue-block > div:nth-child(2)', bodyTree);
+        const text2cell = select('div:last-child', row2);
+        // no key 2 in first column, so no UE attributes should be added
+        assert.deepEqual(text2cell.properties, {});
+      });
+
+      it('adds UE attributes to key-value block fields partially block instrumentation 2', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, [
+            h('div', {}, [ // the section
+              h('div', { className: ['keyvalue-block'] }, [// the keyvalue block
+                h('div', {}, [ // the first row
+                  h('div', {}, [h('p', {}, 'key1')]),
+                  h('div', {}, [h('p', {}, 'text value 1')]),
+                ]),
+                h('div', {}, [ // the second row
+                  h('div', {}, [h('p', {}, 'key2')]),
+                  h('div', {}, [
+                    h('h1', {}, 'Section Title'),
+                    h('p', {}, [
+                      'Some paragraph text with ',
+                      h('strong', {}, 'some text in bold'),
+                      '.',
+                    ]),
+                  ]),
+                ]),
+                h('div', {}, [ // the third row
+                  h('div', {}, [h('p', {}, 'key3')]),
+                  h('div', {}, [h('img', { src: 'img3.jpg', alt: 'Image 3' })]),
+                ]),
+              ]),
+            ]),
+          ]),
+        ]);
+
+        const ueConfig = {
+          'component-definition': {
+            groups: [
+              {
+                components: [
+                  { id: 'section', title: 'Section' },
+                  {
+                    id: 'keyvalue-block',
+                    title: 'Key Value Block Sample',
+                    model: 'keyvalue-block',
+                    plugins: {
+                      da: {
+                        type: 'key-value-block',
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+          'component-model': [
+            {
+              id: 'keyvalue-block',
+              fields: [
+                {
+                  name: 'key1',
+                  label: 'Key 1',
+                  component: 'text',
+                },
+                {
+                  name: 'key3',
+                  component: 'reference',
+                },
+              ],
+            },
+          ],
+        };
+
+        attributes.injectUEAttributes(bodyTree, ueConfig);
+
+        const block = select('main div.keyvalue-block', bodyTree);
+        assert.equal(block.properties['data-aue-resource'], 'urn:ab:section-0/block-0');
+        assert.equal(block.properties['data-aue-type'], 'component');
+        assert.equal(block.properties['data-aue-label'], 'Key Value Block Sample');
+        assert.equal(block.properties['data-aue-component'], 'keyvalue-block');
+
+        const row1 = select('main div.keyvalue-block > div:first-child', bodyTree);
+        const key1cell = select('div:first-child', row1);
+        assert.equal(toString(key1cell), 'key1');
+        const text1cell = select('div:last-child', row1);
+        assert.equal(text1cell.properties['data-aue-type'], 'text');
+        assert.equal(text1cell.properties['data-aue-prop'], 'key1');
+        assert.equal(text1cell.properties['data-aue-label'], 'Key 1');
+
+        const row2 = select('main div.keyvalue-block > div:nth-child(2)', bodyTree);
+        const key2cell = select('div:first-child', row2);
+        assert.equal(toString(key2cell), 'key2');
+        const text2cell = select('div:last-child', row2);
+        // no field defined for this key, so no UE attributes should be added
+        assert.deepEqual(text2cell.properties, {});
+
+        const row3 = select('main div.keyvalue-block > div:last-child', bodyTree);
+        const key3cell = select('div:first-child', row3);
+        assert.equal(toString(key3cell), 'key3');
+        const image3cell = select('div:last-child', row3);
+        assert.equal(image3cell.properties['data-aue-type'], 'media');
+        assert.equal(image3cell.properties['data-aue-prop'], 'key3');
+        assert.equal(image3cell.properties['data-aue-label'], 'key3'); // fallback to the key name
+        const img3Tag = select('img', image3cell);
+        assert.equal(img3Tag.properties.src, 'img3.jpg');
+        assert.equal(img3Tag.properties.alt, 'Image 3');
+      });
+
+      it('adds no UE attributes to key-value block fields with no defined fields', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, [
+            h('div', {}, [ // the section
+              h('div', { className: ['keyvalue-block'] }, [// the keyvalue block
+                h('div', {}, [ // the first row
+                  h('div', {}, [h('p', {}, 'key1')]),
+                  h('div', {}, [h('p', {}, 'text value 1')]),
+                ]),
+              ]),
+            ]),
+          ]),
+        ]);
+
+        const ueConfig = {
+          'component-definition': {
+            groups: [
+              {
+                components: [
+                  { id: 'section', title: 'Section' },
+                  {
+                    id: 'keyvalue-block',
+                    title: 'Key Value Block Sample',
+                    model: 'keyvalue-block',
+                    plugins: {
+                      da: {
+                        type: 'keyvalue-block',
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+          'component-model': [
+            {
+              id: 'keyvalue-block',
+            },
+          ],
+        };
+
+        attributes.injectUEAttributes(bodyTree, ueConfig);
+
+        const block = select('main div.keyvalue-block', bodyTree);
+        assert.equal(block.properties['data-aue-resource'], 'urn:ab:section-0/block-0');
+        assert.equal(block.properties['data-aue-type'], 'component');
+        assert.equal(block.properties['data-aue-label'], 'Key Value Block Sample');
+        assert.equal(block.properties['data-aue-component'], 'keyvalue-block');
+
+        const row1 = select('main div.keyvalue-block > div:first-child', bodyTree);
+        const key1cell = select('div:first-child', row1);
+        assert.equal(toString(key1cell), 'key1');
+        const text1cell = select('div:last-child', row1);
+        // no field defined for this key, so no UE attributes should be added
+        assert.deepEqual(text1cell.properties, {});
+      });
+
+      it('adds no UE attributes to key-value block with invalid column count', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, [
+            h('div', {}, [ // the section
+              h('div', { className: ['keyvalue-block'] }, [// the keyvalue block
+                h('div', {}, [ // the first row
+                  h('div', {}, [h('p', {}, 'key1')]),
+                  h('div', {}, [h('p', {}, 'text value 1')]),
+                  h('div', {}, [h('p', {}, 'text value 2')]),
+                ]),
+              ]),
+            ]),
+          ]),
+        ]);
+
+        const ueConfig = {
+          'component-definition': {
+            groups: [
+              {
+                components: [
+                  { id: 'section', title: 'Section' },
+                  {
+                    id: 'keyvalue-block',
+                    title: 'Key Value Block Sample',
+                    model: 'keyvalue-block',
+                    plugins: {
+                      da: {
+                        type: 'key-value-block',
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+          'component-model': [
+            {
+              id: 'keyvalue-block',
+              fields: [
+                {
+                  name: 'key1',
+                  label: 'Key 1',
+                  component: 'text',
+                },
+              ],
+            },
+          ],
+        };
+
+        attributes.injectUEAttributes(bodyTree, ueConfig);
+
+        const block = select('main div.keyvalue-block', bodyTree);
+        assert.equal(block.properties['data-aue-resource'], 'urn:ab:section-0/block-0');
+        assert.equal(block.properties['data-aue-type'], 'component');
+        assert.equal(block.properties['data-aue-label'], 'Key Value Block Sample');
+        assert.equal(block.properties['data-aue-component'], 'keyvalue-block');
+
+        const row1 = select('main div.keyvalue-block > div:first-child', bodyTree);
+        const key1cell = select('div:first-child', row1);
+        assert.equal(toString(key1cell), 'key1');
+        const text1cell = select('div:last-child', row1);
+        // no field defined for this key, so no UE attributes should be added
+        assert.deepEqual(text1cell.properties, {});
+      });
     });
   });
 

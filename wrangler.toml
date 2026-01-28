@@ -10,7 +10,7 @@ port = 4712
 
 [env.dev]
 vars = { ENVIRONMENT = "dev", UE_HOST = "localhost:4712", UE_SERVICE = "https://localhost:8000", DA_ADMIN = "https://admin.da.live" }
-services = [{ binding = "daadmin", service = "da-admin" }]
+services = [{ binding = "daadmin", service = "da-admin-dev" }]
 
 [env.stage]
 vars = { ENVIRONMENT = "stage", UE_HOST = "stage-ue.da.live", UE_SERVICE = "https://universal-editor-service-dev.adobe.io", DA_ADMIN = "https://admin.da.live" }

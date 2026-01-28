@@ -146,4 +146,18 @@ describe('DA context', () => {
       assert.ifError(daCtx.site);
     });
   });
+
+  describe('ue-service query parameter', () => {
+    it('should set ueService when ue-service query parameter is present as string', () => {
+      const req = new Request('https://main--site--org.ue.da.live/folder/content?ue-service=local');
+      daCtx = getDaCtx(req);
+      assert.strictEqual(daCtx.ueService, 'local');
+    });
+
+    it('should set ueService with empty string when ue-service is empty', () => {
+      const req = new Request('https://main--site--org.ue.da.live/folder/content?ue-service=');
+      daCtx = getDaCtx(req);
+      assert.strictEqual(daCtx.ueService, '');
+    });
+  });
 });
