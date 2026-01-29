@@ -26,3 +26,4 @@ jspm_packages/
 .wrangler/
 .DS_Store
 .cursor
+.idea

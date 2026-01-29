@@ -61,7 +61,7 @@ function getAuthToken(req) {
  * @returns {DaCtx} The Dark Alley Context.
  */
 export function getDaCtx(req) {
-  const { pathname, hostname } = new URL(req.url);
+  const { pathname, hostname, searchParams } = new URL(req.url);
 
   // TODO this requires some improvements to be more robust
   const {
@@ -108,6 +108,11 @@ export function getDaCtx(req) {
     daCtx.pathname = `/${daPathBase}`;
   } else {
     daCtx.pathname = `/${daPathBase}.${daCtx.ext}`;
+  }
+
+  const query = Object.fromEntries(searchParams.entries());
+  if (typeof query['ue-service'] === 'string') {
+    daCtx.ueService = query['ue-service'];
   }
 
   daCtx.authToken = getAuthToken(req);
