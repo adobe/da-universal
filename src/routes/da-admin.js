@@ -72,6 +72,18 @@ export async function daSourceGet({ req, env, daCtx }) {
     return get401(UNAUTHORIZED_HTML_MESSAGE);
   }
 
+  const headers = new Headers();
+  headers.set('Authorization', authToken);
+
+  if (ext !== 'html') {
+    /*
+     for non-HTML files, simply proxy the request without processing
+     and ensure that extensions are not duplicated
+    */
+    const adminUrl = new URL(`/source/${org}/${site}${path}`, env.DA_ADMIN);
+    return env.daadmin.fetch(adminUrl, { method: 'GET', headers });
+  }
+
   // get the AEM parts (head.html)
   const aemCtx = getAemCtx(env, daCtx);
   const headHtml = await getAEMHtml(aemCtx, '/head.html');
@@ -84,9 +96,6 @@ export async function daSourceGet({ req, env, daCtx }) {
     `/source/${org}/${site}${path}.${ext}`,
     env.DA_ADMIN,
   );
-
-  const headers = new Headers();
-  headers.set('Authorization', authToken);
 
   // eslint-disable-next-line no-param-reassign
   req = new Request(adminUrl, {
