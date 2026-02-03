@@ -76,6 +76,10 @@ export async function daSourceGet({ req, env, daCtx }) {
   headers.set('Authorization', authToken);
 
   if (ext !== 'html') {
+    /*
+     for non-HTML files, simply proxy the request without processing
+     and ensure that extensions are not duplicated
+    */
     const adminUrl = new URL(`/source/${org}/${site}${path}`, env.DA_ADMIN);
     return env.daadmin.fetch(adminUrl, { method: 'GET', headers });
   }
