@@ -10,7 +10,31 @@
  * governing permissions and limitations under the License.
  */
 
-export const TRUSTED_ORIGINS = ['https://experience.adobe.com', 'https://localhost.corp.adobe.com:8080'];
+export const TRUSTED_ORIGINS = [
+  'https://da.live',
+  'https://experience.adobe.com',
+  'https://localhost.corp.adobe.com:8080',
+];
+
+export const TRUSTED_ORIGINS_PATTERNS = [
+  /^https:\/\/[a-zA-Z0-9]+--da-live--adobe\.aem\.(live|page)$/,
+];
+
+/**
+ * Checks if an origin is trusted by matching against TRUSTED_ORIGINS array
+ * and TRUSTED_ORIGINS_PATTERNS regex patterns
+ * @param {string} origin - The origin URL to check
+ * @returns {boolean} - True if the origin is trusted
+ */
+export function isTrustedOrigin(origin) {
+  if (!origin) return false;
+
+  // Check if origin is in the trusted origins array
+  if (TRUSTED_ORIGINS.includes(origin)) return true;
+
+  // Check if origin matches any of the trusted patterns
+  return TRUSTED_ORIGINS_PATTERNS.some((pattern) => pattern.test(origin));
+}
 
 export const DEFAULT_CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',

@@ -11,12 +11,12 @@
  */
 
 import { daResp } from '../responses/index.js';
-import { DEFAULT_CORS_HEADERS, TRUSTED_ORIGINS } from '../utils/constants.js';
+import { DEFAULT_CORS_HEADERS, isTrustedOrigin } from '../utils/constants.js';
 
 export default async function optionsHandler({ req }) {
   const { headers } = req;
 
-  if (!TRUSTED_ORIGINS.includes(headers.get('Origin'))) return daResp({ body: '403 Forbidden', status: 403, contentType: 'text/plain' });
+  if (!isTrustedOrigin(headers.get('Origin'))) return daResp({ body: '403 Forbidden', status: 403, contentType: 'text/plain' });
 
   if (
     headers.get('Origin') !== null

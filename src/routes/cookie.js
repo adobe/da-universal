@@ -10,12 +10,12 @@
  * governing permissions and limitations under the License.
  */
 import { daResp, get401 } from '../responses/index.js';
-import { DEFAULT_CORS_HEADERS, TRUSTED_ORIGINS } from '../utils/constants.js';
+import { DEFAULT_CORS_HEADERS, isTrustedOrigin } from '../utils/constants.js';
 
 export function getCookie({ req }) {
   const { headers } = req;
 
-  if (!TRUSTED_ORIGINS.includes(headers.get('Origin'))) return daResp({ body: '403 Forbidden', status: 403, contentType: 'text/plain' });
+  if (!isTrustedOrigin(headers.get('Origin'))) return daResp({ body: '403 Forbidden', status: 403, contentType: 'text/plain' });
 
   const authToken = headers.get('Authorization');
   if (authToken) {
