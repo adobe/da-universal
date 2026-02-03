@@ -46,6 +46,10 @@ export default async function getHandler({ req, env, daCtx }) {
     return get404();
   }
 
+  if (new URL(req.url).searchParams.get('dapreview') === 'on') {
+    return handleAEMProxyRequest({ req, env, daCtx });
+  }
+
   // default route to DA admin for all the content requests
   return daSourceGet({ req, env, daCtx });
 }
