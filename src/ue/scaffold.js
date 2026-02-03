@@ -27,8 +27,10 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
     aemPathname,
     isLocal,
     orgSiteInPath,
+    ueService: ueServiceParam,
   } = daCtx;
   const { ueHostname, ueService } = aemCtx;
+  let finalUeService = ueService;
   const children = [];
 
   children.push(h('meta', {
@@ -36,11 +38,15 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
     content: isLocal ? `da:https://${ueHostname}/${org}/${site}${path}` : `da:https://${ref}--${site}--${org}.${ueHostname}${path}`,
   }));
 
-  if (ueService) {
+  if (ueServiceParam && ueServiceParam === 'local') {
+    finalUeService = 'https://localhost:8000';
+  }
+
+  if (finalUeService) {
     children.push(
       h('meta', {
         name: 'urn:adobe:aue:config:service',
-        content: ueService,
+        content: finalUeService,
       }),
     );
   }
@@ -79,6 +85,14 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
     h('meta', {
       name: 'urn:adobe:aue:config:preview',
       content: `https://${ref}--${site}--${org}.aem.page${aemPathname}`,
+    }),
+  );
+
+  // TODO: temporary fix to disable duplicate content functionality
+  children.push(
+    h('meta', {
+      name: 'urn:adobe:aue:config:disable',
+      content: 'duplicate,copy',
     }),
   );
 

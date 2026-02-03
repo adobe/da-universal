@@ -63,7 +63,7 @@ describe('UE scaffold', () => {
 
       // Check meta tags
       const metaTags = entries.filter((entry) => entry.tagName === 'meta');
-      assert.strictEqual(metaTags.length, 3);
+      assert.strictEqual(metaTags.length, 4);
 
       // Check system:ab meta tag
       const ueSystemTag = metaTags.find(
@@ -133,7 +133,7 @@ describe('UE scaffold', () => {
 
       // Check meta tags
       const metaTags = entries.filter((entry) => entry.tagName === 'meta');
-      assert.strictEqual(metaTags.length, 3);
+      assert.strictEqual(metaTags.length, 4);
 
       // Check system:ab meta tag
       const ueSystemTag = metaTags.find(
@@ -234,6 +234,20 @@ describe('UE scaffold', () => {
         componentFiltersScript.properties.src,
         '/component-filters.json',
       );
+    });
+
+    it('overrides ueService to localhost:8000 when ueService parameter is "local"', () => {
+      daCtx.ueService = 'local';
+
+      const entries = scaffold.getUEHtmlHeadEntries(daCtx, aemCtx);
+
+      // Check service meta tag is overridden to localhost:8000
+      const serviceTag = entries.find(
+        (entry) => entry.tagName === 'meta'
+          && entry.properties.name === 'urn:adobe:aue:config:service',
+      );
+      assert.ok(serviceTag);
+      assert.strictEqual(serviceTag.properties.content, 'https://localhost:8000');
     });
   });
 
