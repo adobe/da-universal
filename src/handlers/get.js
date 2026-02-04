@@ -46,7 +46,10 @@ export default async function getHandler({ req, env, daCtx }) {
     return get404();
   }
 
-  if (new URL(req.url).searchParams.get('dapreview') === 'on') {
+  const url = new URL(req.url);
+  const isPreviewHost = url.hostname.endsWith('.preview.da.live') || url.hostname.endsWith('.stage-preview.da.live');
+
+  if (url.searchParams.get('dapreview') === 'on' || isPreviewHost) {
     return handleAEMProxyRequest({ req, env, daCtx });
   }
 
