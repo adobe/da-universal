@@ -55,6 +55,17 @@ function getAuthToken(req) {
   return undefined;
 }
 
+function getSiteToken(req) {
+  const cookies = req.headers.get('Cookie');
+  if (cookies) {
+    const siteTokenMatch = cookies.match(/site_token=([^;]+)/);
+    if (siteTokenMatch && siteTokenMatch[1]) {
+      return siteTokenMatch[1];
+    }
+  }
+  return undefined;
+}
+
 /**
  * Gets Dark Alley Context
  * @param {pathname} pathname
@@ -116,5 +127,6 @@ export function getDaCtx(req) {
   }
 
   daCtx.authToken = getAuthToken(req);
+  daCtx.siteToken = getSiteToken(req);
   return daCtx;
 }

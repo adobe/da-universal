@@ -12,7 +12,43 @@
 import { daResp, get401 } from '../responses/index.js';
 import { DEFAULT_CORS_HEADERS, isTrustedOrigin } from '../utils/constants.js';
 
-export function getCookie({ req }) {
+async function exchangeSiteToken(org, site, accessToken) {
+  try {
+    const response = await fetch('https://admin.hlx.page/auth/adobe/exchange', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        org,
+        site,
+        accessToken,
+      }),
+    });
+
+    if (!response.ok) {
+      // 401/403 error cases
+      return null;
+    }
+
+    const data = await response.json();
+
+    // If site doesn't require auth, data will be empty object
+    if (!data.siteToken) {
+      return null;
+    }
+
+    return {
+      siteToken: data.siteToken,
+      siteTokenExpiry: data.siteTokenExpiry,
+    };
+  } catch (error) {
+    console.error('Error exchanging site token:', error);
+    return null;
+  }
+}
+
+export async function getCookie({ req, daCtx }) {
   const { headers } = req;
 
   if (!isTrustedOrigin(headers.get('Origin'))) return daResp({ body: '403 Forbidden', status: 403, contentType: 'text/plain' });
@@ -22,9 +58,23 @@ export function getCookie({ req }) {
     const cookieValue = authToken.split(' ')[1];
 
     if (cookieValue) {
+      const { org, site } = daCtx;
+
       const respHeaders = new Headers();
       respHeaders.append('Content-Type', 'text/plain');
       respHeaders.append('Set-Cookie', `auth_token=${cookieValue}; Secure; Path=/; HttpOnly; SameSite=None; Partitioned; Max-Age=84600`);
+
+      // Try to exchange for site token
+      if (org && site) {
+        const siteTokenData = await exchangeSiteToken(org, site, cookieValue);
+        if (siteTokenData) {
+          // Calculate Max-Age based on token expiry time (siteTokenExpiry is in milliseconds)
+          const now = Date.now();
+          const maxAge = Math.floor((siteTokenData.siteTokenExpiry - now) / 1000);
+          respHeaders.append('Set-Cookie', `site_token=${siteTokenData.siteToken}; Secure; Path=/; HttpOnly; SameSite=None; Partitioned; Max-Age=${maxAge}`);
+        }
+      }
+
       respHeaders.append('Access-Control-Allow-Origin', req.headers.get('Origin'));
       Object.entries(DEFAULT_CORS_HEADERS).forEach(([key, value]) => {
         respHeaders.append(key, value);
