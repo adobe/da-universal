@@ -18,6 +18,12 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
   // eslint-disable-next-line no-param-reassign
   req = new Request(aemUrl, req);
   req.headers.set('Origin', new URL(aemCtx.liveUrl).origin);
+
+  // Add site token if available
+  if (daCtx.siteToken) {
+    req.headers.set('Authorization', `token ${daCtx.siteToken}`);
+  }
+
   let response = await fetch(req);
   response = new Response(response.body, response);
   response.headers.set('Access-Control-Allow-Origin', aemUrl.origin);
