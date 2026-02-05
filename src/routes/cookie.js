@@ -56,7 +56,7 @@ export async function getCookie({ req, daCtx }) {
   const authToken = headers.get('Authorization');
   if (authToken) {
     // Sanitize to JWT-safe chars (base64url + dot separator) to prevent cookie injection
-    const cookieValue = authToken.split(' ')[1]?.replace(/[^a-zA-Z0-9\-_.]/g, '') || null;
+    const cookieValue = authToken.split(' ')[1]?.replace(/[^a-zA-Z0-9\-_.=]/g, '') || null;
 
     if (cookieValue) {
       const { org, site } = daCtx;
