@@ -113,5 +113,10 @@ export async function prepareHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
     allowDangerousHtml: true,
     upperDoctype: true,
   });
+
+  // ensure that all content is relative to the proxy
+  htmlDocStr = htmlDocStr.replace(`https://content.da.live/${org}/${site}/`, '/');
+  htmlDocStr = htmlDocStr.replace(`https://stage-content.da.live/${org}/${site}/`, '/');
+
   return htmlDocStr;
 }
