@@ -66,7 +66,7 @@ export async function getCookie({ req, daCtx }) {
       respHeaders.append('Set-Cookie', `auth_token=${cookieValue}; Secure; Path=/; HttpOnly; SameSite=None; Partitioned; Max-Age=84600`);
 
       // Try to exchange for site token
-      if (org && site) {
+      if (org && site && !daCtx.siteToken) {
         const siteTokenData = await exchangeSiteToken(org, site, cookieValue);
         if (siteTokenData) {
           // Calculate Max-Age based on token expiry time (siteTokenExpiry is in milliseconds)
