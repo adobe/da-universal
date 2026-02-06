@@ -14,10 +14,10 @@ import { getAemCtx } from '../utils/aemCtx.js';
 export async function handleAEMProxyRequest({ req, env, daCtx }) {
   const aemCtx = getAemCtx(env, daCtx);
   const { search } = new URL(req.url);
-  const aemUrl = new URL(`${daCtx.aemPathname}${search}`, aemCtx.liveUrl);
+  const aemUrl = new URL(`${daCtx.aemPathname}${search}`, aemCtx.previewUrl);
   // eslint-disable-next-line no-param-reassign
   req = new Request(aemUrl, req);
-  req.headers.set('Origin', new URL(aemCtx.liveUrl).origin);
+  req.headers.set('Origin', new URL(aemCtx.previewUrl).origin);
 
   // Add site token if available
   if (daCtx.siteToken) {
