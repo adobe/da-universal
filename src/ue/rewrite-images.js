@@ -26,19 +26,13 @@ function stripContentPrefix(url, org, site) {
 export default function rewrite(bodyTree, daCtx) {
   const { org, site } = daCtx;
   const elements = selectAll('img, picture > source', bodyTree);
+  const propByTag = { img: 'src', source: 'srcset' };
   elements.forEach((el) => {
-    if (el.tagName === 'img') {
-      const { src } = el.properties;
-      const rewritten = stripContentPrefix(src, org, site);
+    const prop = propByTag[el.tagName];
+    if (prop && el.properties[prop]) {
+      const rewritten = stripContentPrefix(el.properties[prop], org, site);
       if (rewritten !== null) {
-        el.properties.src = rewritten;
-      }
-    } else if (el.tagName === 'source') {
-      const { srcSet } = el.properties;
-      if (!srcSet) return;
-      const rewritten = stripContentPrefix(srcSet, org, site);
-      if (rewritten !== null) {
-        el.properties.srcSet = rewritten;
+        el.properties[prop] = rewritten;
       }
     }
   });
