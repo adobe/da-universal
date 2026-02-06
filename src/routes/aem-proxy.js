@@ -24,7 +24,9 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
     req.headers.set('Authorization', `token ${daCtx.siteToken}`);
   }
 
+  console.log(`-> ${aemUrl.toString()}`);
   let response = await fetch(req);
+  console.log(`<- ${aemUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
   response = new Response(response.body, response);
   response.headers.set('Access-Control-Allow-Origin', aemUrl.origin);
   return response;
