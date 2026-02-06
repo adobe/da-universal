@@ -81,7 +81,10 @@ export async function daSourceGet({ req, env, daCtx }) {
      and ensure that extensions are not duplicated
     */
     const adminUrl = new URL(`/source/${org}/${site}${path}`, env.DA_ADMIN);
-    return env.daadmin.fetch(adminUrl, { method: 'GET', headers });
+    console.log(`-> ${adminUrl.toString()}`);
+    const response = await env.daadmin.fetch(adminUrl, { method: 'GET', headers });
+    console.log(`<- ${adminUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+    return response;
   }
 
   // get the AEM parts (head.html)
@@ -103,7 +106,9 @@ export async function daSourceGet({ req, env, daCtx }) {
     headers,
   });
   let body;
+  console.log(`-> ${adminUrl.toString()}`);
   const daAdminResp = await env.daadmin.fetch(req);
+  console.log(`<- ${adminUrl.toString()}. ${daAdminResp.status} ${daAdminResp.statusText}`, { status: daAdminResp.status, statusText: daAdminResp.statusText });
   if (daAdminResp && daAdminResp.status === 200) {
     // enrich stored content with HTML header and UE attributes
     const originalBodyHtml = await daAdminResp.text();
@@ -161,7 +166,9 @@ export async function daSourcePost({ req, env, daCtx }) {
       body,
       headers,
     });
+    console.log(`-> ${adminUrl.toString()}`);
     const response = await env.daadmin.fetch(req);
+    console.log(`<- ${adminUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
     return response;
   }
 
