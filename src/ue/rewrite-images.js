@@ -11,26 +11,35 @@
  */
 import { selectAll } from 'hast-util-select';
 
+const CONTENT_HOSTS = ['content.da.live', 'stage-content.da.live'];
+
+function stripContentPrefix(url, org, site) {
+  for (const host of CONTENT_HOSTS) {
+    const prefix = `https://${host}/${org}/${site}`;
+    if (url.startsWith(prefix)) {
+      return url.slice(prefix.length) || '/';
+    }
+  }
+  return null;
+}
+
 export default function rewrite(bodyTree, daCtx) {
   const { org, site } = daCtx;
-  const prefix = `https://content.da.live/${org}/${site}`;
-  const images = selectAll('img', bodyTree);
-  images.forEach((img) => {
-    const { src } = img.properties;
-    if (src.startsWith(prefix)) {
-      img.properties.src = src.slice(prefix.length) || '/';
-    }
-  });
-
-  const pictures = selectAll('picture', bodyTree);
-  pictures.forEach((picture) => {
-    const sources = selectAll('source', picture);
-    sources.forEach((source) => {
-      const { srcset } = source.properties;
-      if (!srcset) return;
-      if (srcset.startsWith(prefix)) {
-        source.properties.srcset = srcset.slice(prefix.length) || '/';
+  const elements = selectAll('img, picture > source', bodyTree);
+  elements.forEach((el) => {
+    if (el.tagName === 'img') {
+      const { src } = el.properties;
+      const rewritten = stripContentPrefix(src, org, site);
+      if (rewritten !== null) {
+        el.properties.src = rewritten;
       }
-    });
+    } else if (el.tagName === 'source') {
+      const { srcSet } = el.properties;
+      if (!srcSet) return;
+      const rewritten = stripContentPrefix(srcSet, org, site);
+      if (rewritten !== null) {
+        el.properties.srcSet = rewritten;
+      }
+    }
   });
 }
