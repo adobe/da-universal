@@ -26,7 +26,7 @@ function stripContentPrefix(url, org, site) {
 export default function rewrite(bodyTree, daCtx) {
   const { org, site } = daCtx;
   const elements = selectAll('img, picture > source', bodyTree);
-  const propByTag = { img: 'src', source: 'srcset' };
+  const propByTag = { img: 'src', source: 'srcSet' };
   elements.forEach((el) => {
     const prop = propByTag[el.tagName];
     if (prop && el.properties[prop]) {
