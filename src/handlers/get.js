@@ -35,15 +35,27 @@ export default async function getHandler({ req, env, daCtx }) {
       handleAEMProxyRequest({ req, env, daCtx }),
     ]);
 
+    let response;
     if (daSourceGetRes.status === 'fulfilled' && daSourceGetRes.value.status === 200) {
-      return daSourceGetRes.value;
+      response = daSourceGetRes.value;
+    } else if (aemProxyRes.status === 'fulfilled') {
+      response = aemProxyRes.value;
+    } else {
+      return get404();
     }
 
-    if (aemProxyRes.status === 'fulfilled') {
-      return aemProxyRes.value;
+    if (/\.svg$/i.test(path)) {
+      // deliver SVGs as attachments
+      const headers = new Headers(response.headers);
+      headers.set('Content-Disposition', 'attachment');
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
     }
 
-    return get404();
+    return response;
   }
 
   const url = new URL(req.url);
