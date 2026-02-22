@@ -17,16 +17,15 @@ function stripContentPrefix(url, org, site) {
   for (const host of CONTENT_HOSTS) {
     const prefix = `https://${host}/${org}/${site}`;
     if (url.startsWith(prefix)) {
-      return url.slice(prefix.length) || '/';
+      return { path: url.slice(prefix.length) || '/', host };
     }
   }
   return null;
 }
 
-function addContentPrefix(url, org, site) {
+function addContentPrefix(url, org, site, host = CONTENT_HOSTS[0]) {
   if (!url.startsWith('http') && !url.startsWith('//')) {
-    const prefix = `https://${CONTENT_HOSTS[0]}/${org}/${site}`;
-    return `${prefix}${url}`;
+    return `https://${host}/${org}/${site}${url}`;
   }
   return url;
 }
@@ -38,9 +37,10 @@ export function makeImagesRelative(bodyTree, daCtx) {
   elements.forEach((el) => {
     const prop = propByTag[el.tagName];
     if (prop && el.properties[prop]) {
-      const rewritten = stripContentPrefix(el.properties[prop], org, site);
-      if (rewritten !== null) {
-        el.properties[prop] = rewritten;
+      const result = stripContentPrefix(el.properties[prop], org, site);
+      if (result !== null) {
+        el.properties[prop] = result.path;
+        el.properties.dataDaImgHost = result.host;
       }
     }
   });
@@ -53,7 +53,9 @@ export function restoreAbsoluteImages(bodyTree, daCtx) {
   elements.forEach((el) => {
     const prop = propByTag[el.tagName];
     if (prop && el.properties[prop]) {
-      el.properties[prop] = addContentPrefix(el.properties[prop], org, site);
+      const host = el.properties.dataDaImgHost;
+      el.properties[prop] = addContentPrefix(el.properties[prop], org, site, host);
+      delete el.properties.dataDaImgHost;
     }
   });
 }
