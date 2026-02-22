@@ -15,7 +15,7 @@
 import assert from 'assert';
 import { describe, it } from 'mocha';
 import { h } from 'hastscript';
-import rewrite from '../../src/ue/rewrite-images.js';
+import { makeImagesRelative, restoreAbsoluteImages } from '../../src/ue/rewrite-images.js';
 
 describe('rewrite-images', () => {
   const daCtx = { org: 'myorg', site: 'mysite' };
@@ -28,7 +28,7 @@ describe('rewrite-images', () => {
         ]),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      makeImagesRelative(bodyTree, daCtx);
 
       const img = bodyTree.children[0].children[0];
       assert.strictEqual(img.properties.src, '/media/image.png');
@@ -41,7 +41,7 @@ describe('rewrite-images', () => {
         ]),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      makeImagesRelative(bodyTree, daCtx);
 
       const img = bodyTree.children[0].children[0];
       assert.strictEqual(img.properties.src, '/media/photo.jpg');
@@ -52,7 +52,7 @@ describe('rewrite-images', () => {
         h('img', { src: 'https://content.da.live/myorg/mysite' }),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      makeImagesRelative(bodyTree, daCtx);
 
       const img = bodyTree.children[0];
       assert.strictEqual(img.properties.src, '/');
@@ -63,7 +63,7 @@ describe('rewrite-images', () => {
         h('img', { src: 'https://cdn.example.com/images/photo.jpg' }),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      makeImagesRelative(bodyTree, daCtx);
 
       const img = bodyTree.children[0];
       assert.strictEqual(img.properties.src, 'https://cdn.example.com/images/photo.jpg');
@@ -74,7 +74,7 @@ describe('rewrite-images', () => {
         h('img', { src: 'https://content.da.live/otherorg/othersite/media/image.png' }),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      makeImagesRelative(bodyTree, daCtx);
 
       const img = bodyTree.children[0];
       assert.strictEqual(img.properties.src, 'https://content.da.live/otherorg/othersite/media/image.png');
@@ -90,7 +90,7 @@ describe('rewrite-images', () => {
         ]),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      makeImagesRelative(bodyTree, daCtx);
 
       const picture = bodyTree.children[0];
       const source = picture.children[0];
@@ -106,7 +106,7 @@ describe('rewrite-images', () => {
         ]),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      makeImagesRelative(bodyTree, daCtx);
 
       const source = bodyTree.children[0].children[0];
       assert.strictEqual(source.properties.srcSet, '/media/hero.webp');
@@ -119,10 +119,139 @@ describe('rewrite-images', () => {
         ]),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      makeImagesRelative(bodyTree, daCtx);
 
       const source = bodyTree.children[0].children[0];
       assert.strictEqual(source.properties.srcSet, 'https://cdn.example.com/images/hero.webp');
+    });
+  });
+
+  describe('restoreAbsoluteImages', () => {
+    describe('img src restoration', () => {
+      it('restores relative img src to absolute content.da.live URL', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, [
+            h('img', { src: '/media/image.png' }),
+          ]),
+        ]);
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+
+        const img = bodyTree.children[0].children[0];
+        assert.strictEqual(img.properties.src, 'https://content.da.live/myorg/mysite/media/image.png');
+      });
+
+      it('restores relative img src starting with / to absolute URL', () => {
+        const bodyTree = h('body', {}, [
+          h('img', { src: '/images/photo.jpg' }),
+        ]);
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+
+        const img = bodyTree.children[0];
+        assert.strictEqual(img.properties.src, 'https://content.da.live/myorg/mysite/images/photo.jpg');
+      });
+
+      it('does not modify img src that is already an absolute HTTP URL', () => {
+        const bodyTree = h('body', {}, [
+          h('img', { src: 'https://cdn.example.com/images/photo.jpg' }),
+        ]);
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+
+        const img = bodyTree.children[0];
+        assert.strictEqual(img.properties.src, 'https://cdn.example.com/images/photo.jpg');
+      });
+
+      it('does not modify img src that is a protocol-relative URL', () => {
+        const bodyTree = h('body', {}, [
+          h('img', { src: '//cdn.example.com/images/photo.jpg' }),
+        ]);
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+
+        const img = bodyTree.children[0];
+        assert.strictEqual(img.properties.src, '//cdn.example.com/images/photo.jpg');
+      });
+
+      it('restores img src that is just "/" to absolute URL', () => {
+        const bodyTree = h('body', {}, [
+          h('img', { src: '/' }),
+        ]);
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+
+        const img = bodyTree.children[0];
+        assert.strictEqual(img.properties.src, 'https://content.da.live/myorg/mysite/');
+      });
+    });
+
+    describe('source srcSet restoration', () => {
+      it('restores relative source srcSet to absolute content.da.live URL', () => {
+        const bodyTree = h('body', {}, [
+          h('picture', {}, [
+            h('source', { srcSet: '/media/hero.webp' }),
+            h('img', { src: '/media/hero.png' }),
+          ]),
+        ]);
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+
+        const picture = bodyTree.children[0];
+        const source = picture.children[0];
+        const img = picture.children[1];
+        assert.strictEqual(source.properties.srcSet, 'https://content.da.live/myorg/mysite/media/hero.webp');
+        assert.strictEqual(img.properties.src, 'https://content.da.live/myorg/mysite/media/hero.png');
+      });
+
+      it('does not modify source srcSet that is already an absolute URL', () => {
+        const bodyTree = h('body', {}, [
+          h('picture', {}, [
+            h('source', { srcSet: 'https://cdn.example.com/images/hero.webp' }),
+          ]),
+        ]);
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+
+        const source = bodyTree.children[0].children[0];
+        assert.strictEqual(source.properties.srcSet, 'https://cdn.example.com/images/hero.webp');
+      });
+    });
+
+    describe('round-trip conversion', () => {
+      it('successfully converts from absolute to relative and back to absolute', () => {
+        const originalUrl = 'https://content.da.live/myorg/mysite/media/image.png';
+        const bodyTree = h('body', {}, [
+          h('img', { src: originalUrl }),
+        ]);
+
+        makeImagesRelative(bodyTree, daCtx);
+        const img = bodyTree.children[0];
+        assert.strictEqual(img.properties.src, '/media/image.png');
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+        assert.strictEqual(img.properties.src, originalUrl);
+      });
+
+      it('handles picture elements with both source and img in round-trip', () => {
+        const bodyTree = h('body', {}, [
+          h('picture', {}, [
+            h('source', { srcSet: 'https://content.da.live/myorg/mysite/media/hero.webp' }),
+            h('img', { src: 'https://content.da.live/myorg/mysite/media/hero.png' }),
+          ]),
+        ]);
+
+        makeImagesRelative(bodyTree, daCtx);
+        const picture = bodyTree.children[0];
+        const source = picture.children[0];
+        const img = picture.children[1];
+        assert.strictEqual(source.properties.srcSet, '/media/hero.webp');
+        assert.strictEqual(img.properties.src, '/media/hero.png');
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+        assert.strictEqual(source.properties.srcSet, 'https://content.da.live/myorg/mysite/media/hero.webp');
+        assert.strictEqual(img.properties.src, 'https://content.da.live/myorg/mysite/media/hero.png');
+      });
     });
   });
 });

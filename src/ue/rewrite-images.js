@@ -23,7 +23,15 @@ function stripContentPrefix(url, org, site) {
   return null;
 }
 
-export default function rewrite(bodyTree, daCtx) {
+function addContentPrefix(url, org, site) {
+  if (!url.startsWith('http') && !url.startsWith('//')) {
+    const prefix = `https://${CONTENT_HOSTS[0]}/${org}/${site}`;
+    return `${prefix}${url}`;
+  }
+  return url;
+}
+
+export function makeImagesRelative(bodyTree, daCtx) {
   const { org, site } = daCtx;
   const elements = selectAll('img, picture > source', bodyTree);
   const propByTag = { img: 'src', source: 'srcSet' };
@@ -34,6 +42,18 @@ export default function rewrite(bodyTree, daCtx) {
       if (rewritten !== null) {
         el.properties[prop] = rewritten;
       }
+    }
+  });
+}
+
+export function restoreAbsoluteImages(bodyTree, daCtx) {
+  const { org, site } = daCtx;
+  const elements = selectAll('img, picture > source', bodyTree);
+  const propByTag = { img: 'src', source: 'srcSet' };
+  elements.forEach((el) => {
+    const prop = propByTag[el.tagName];
+    if (prop && el.properties[prop]) {
+      el.properties[prop] = addContentPrefix(el.properties[prop], org, site);
     }
   });
 }
