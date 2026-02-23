@@ -19,7 +19,7 @@ import { getHtmlDoc, getUEConfig, getUEHtmlHeadEntries } from './scaffold.js';
 import { injectUEAttributes } from './attributes.js';
 import { extractLocalMetadata, fetchBulkMetadata } from './metadata.js';
 import rewriteIcons from './rewrite-icons.js';
-import rewriteContentDaLiveImages from './rewrite-images.js';
+import { rewriteToRelative } from './rewrite-images.js';
 
 /**
  * Injects AEM HTML head entries into the head node of an HTML document.
@@ -102,7 +102,7 @@ export async function prepareHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
   headNode.children.push(...getUEHtmlHeadEntries(daCtx, aemCtx));
 
   // rewrite content.da.live images
-  rewriteContentDaLiveImages(bodyNode, daCtx);
+  rewriteToRelative(bodyNode, daCtx);
 
   // rewrite icons
   rewriteIcons(bodyNode);

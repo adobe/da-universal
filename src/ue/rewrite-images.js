@@ -12,6 +12,7 @@
 import { selectAll } from 'hast-util-select';
 
 const CONTENT_HOSTS = ['content.da.live', 'stage-content.da.live'];
+const PROP_BY_TAG = { img: 'src', source: 'srcSet' };
 
 function stripContentPrefix(url, org, site) {
   for (const host of CONTENT_HOSTS) {
@@ -23,17 +24,32 @@ function stripContentPrefix(url, org, site) {
   return null;
 }
 
-export default function rewrite(bodyTree, daCtx) {
+export function rewriteToRelative(bodyTree, daCtx) {
   const { org, site } = daCtx;
   const elements = selectAll('img, picture > source', bodyTree);
-  const propByTag = { img: 'src', source: 'srcSet' };
   elements.forEach((el) => {
-    const prop = propByTag[el.tagName];
+    const prop = PROP_BY_TAG[el.tagName];
     if (prop && el.properties[prop]) {
       const rewritten = stripContentPrefix(el.properties[prop], org, site);
       if (rewritten !== null) {
         el.properties[prop] = rewritten;
       }
+    }
+  });
+}
+
+export function rewriteToAbsolute(bodyTree, daCtx) {
+  const { org, site } = daCtx;
+  const base = `https://${CONTENT_HOSTS[0]}/${org}/${site}`;
+  const toAbsolute = (url) => (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//')
+    ? base + (url === '/' ? '' : url) : null);
+  const elements = selectAll('img, picture > source', bodyTree);
+  elements.forEach((el) => {
+    const prop = PROP_BY_TAG[el.tagName];
+    if (!prop || !el.properties[prop]) return;
+    const rewritten = toAbsolute(el.properties[prop]);
+    if (rewritten !== null) {
+      el.properties[prop] = rewritten;
     }
   });
 }

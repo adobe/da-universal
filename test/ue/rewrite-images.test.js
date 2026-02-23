@@ -15,7 +15,7 @@
 import assert from 'assert';
 import { describe, it } from 'mocha';
 import { h } from 'hastscript';
-import rewrite from '../../src/ue/rewrite-images.js';
+import rewrite, { rewriteToAbsolute } from '../../src/ue/rewrite-images.js';
 
 describe('rewrite-images', () => {
   const daCtx = { org: 'myorg', site: 'mysite' };
@@ -123,6 +123,58 @@ describe('rewrite-images', () => {
 
       const source = bodyTree.children[0].children[0];
       assert.strictEqual(source.properties.srcSet, 'https://cdn.example.com/images/hero.webp');
+    });
+  });
+
+  describe('rewriteToAbsolute', () => {
+    it('rewrites relative img src to absolute content.da.live URL', () => {
+      const bodyTree = h('body', {}, [
+        h('img', { src: '/media/image.png' }),
+      ]);
+
+      rewriteToAbsolute(bodyTree, daCtx);
+
+      const img = bodyTree.children[0];
+      assert.strictEqual(img.properties.src, 'https://content.da.live/myorg/mysite/media/image.png');
+    });
+
+    it('does not rewrite already absolute img src', () => {
+      const bodyTree = h('body', {}, [
+        h('img', { src: 'https://cdn.example.com/images/photo.jpg' }),
+      ]);
+
+      rewriteToAbsolute(bodyTree, daCtx);
+
+      const img = bodyTree.children[0];
+      assert.strictEqual(img.properties.src, 'https://cdn.example.com/images/photo.jpg');
+    });
+
+    it('does not rewrite protocol-relative URL (//...)', () => {
+      const bodyTree = h('body', {}, [
+        h('img', { src: '//cdn.example.com/image.png' }),
+      ]);
+
+      rewriteToAbsolute(bodyTree, daCtx);
+
+      const img = bodyTree.children[0];
+      assert.strictEqual(img.properties.src, '//cdn.example.com/image.png');
+    });
+
+    it('rewrites relative source srcSet inside picture to absolute', () => {
+      const bodyTree = h('body', {}, [
+        h('picture', {}, [
+          h('source', { srcSet: '/media/hero.webp' }),
+          h('img', { src: '/media/hero.png' }),
+        ]),
+      ]);
+
+      rewriteToAbsolute(bodyTree, daCtx);
+
+      const picture = bodyTree.children[0];
+      const source = picture.children[0];
+      const img = picture.children[1];
+      assert.strictEqual(source.properties.srcSet, 'https://content.da.live/myorg/mysite/media/hero.webp');
+      assert.strictEqual(img.properties.src, 'https://content.da.live/myorg/mysite/media/hero.png');
     });
   });
 });
