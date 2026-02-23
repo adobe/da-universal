@@ -15,7 +15,7 @@
 import assert from 'assert';
 import { describe, it } from 'mocha';
 import { h } from 'hastscript';
-import rewrite, { rewriteToAbsolute } from '../../src/ue/rewrite-images.js';
+import { rewriteToRelative, rewriteToAbsolute } from '../../src/ue/rewrite-images.js';
 
 describe('rewrite-images', () => {
   const daCtx = { org: 'myorg', site: 'mysite' };
@@ -28,7 +28,7 @@ describe('rewrite-images', () => {
         ]),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      rewriteToRelative(bodyTree, daCtx);
 
       const img = bodyTree.children[0].children[0];
       assert.strictEqual(img.properties.src, '/media/image.png');
@@ -41,7 +41,7 @@ describe('rewrite-images', () => {
         ]),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      rewriteToRelative(bodyTree, daCtx);
 
       const img = bodyTree.children[0].children[0];
       assert.strictEqual(img.properties.src, '/media/photo.jpg');
@@ -52,7 +52,7 @@ describe('rewrite-images', () => {
         h('img', { src: 'https://content.da.live/myorg/mysite' }),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      rewriteToRelative(bodyTree, daCtx);
 
       const img = bodyTree.children[0];
       assert.strictEqual(img.properties.src, '/');
@@ -63,7 +63,7 @@ describe('rewrite-images', () => {
         h('img', { src: 'https://cdn.example.com/images/photo.jpg' }),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      rewriteToRelative(bodyTree, daCtx);
 
       const img = bodyTree.children[0];
       assert.strictEqual(img.properties.src, 'https://cdn.example.com/images/photo.jpg');
@@ -74,7 +74,7 @@ describe('rewrite-images', () => {
         h('img', { src: 'https://content.da.live/otherorg/othersite/media/image.png' }),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      rewriteToRelative(bodyTree, daCtx);
 
       const img = bodyTree.children[0];
       assert.strictEqual(img.properties.src, 'https://content.da.live/otherorg/othersite/media/image.png');
@@ -90,7 +90,7 @@ describe('rewrite-images', () => {
         ]),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      rewriteToRelative(bodyTree, daCtx);
 
       const picture = bodyTree.children[0];
       const source = picture.children[0];
@@ -106,7 +106,7 @@ describe('rewrite-images', () => {
         ]),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      rewriteToRelative(bodyTree, daCtx);
 
       const source = bodyTree.children[0].children[0];
       assert.strictEqual(source.properties.srcSet, '/media/hero.webp');
@@ -119,7 +119,7 @@ describe('rewrite-images', () => {
         ]),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      rewriteToRelative(bodyTree, daCtx);
 
       const source = bodyTree.children[0].children[0];
       assert.strictEqual(source.properties.srcSet, 'https://cdn.example.com/images/hero.webp');
