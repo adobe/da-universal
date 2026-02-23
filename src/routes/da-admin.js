@@ -20,6 +20,7 @@ import { getAemCtx, getAEMHtml } from '../utils/aemCtx.js';
 import { daResp, get401, get404 } from '../responses/index.js';
 import { BRANCH_NOT_FOUND_HTML_MESSAGE, DEFAULT_HTML_TEMPLATE, UNAUTHORIZED_HTML_MESSAGE } from '../utils/constants.js';
 import { getSiteConfig } from '../storage/config.js';
+import { restoreAbsoluteImages } from '../ue/rewrite-images.js';
 
 async function getFileBody(data) {
   const text = await data.text();
@@ -147,6 +148,9 @@ export async function daSourcePost({ req, env, daCtx }) {
     // clean up UE data attributes
     bodyNode = unwrapParagraphs(bodyNode);
     bodyNode = removeUEAttributes(bodyNode);
+
+    // restore absolute image URLs for content.da.live
+    restoreAbsoluteImages(bodyNode, daCtx);
 
     minifyWhitespace(bodyNode);
 

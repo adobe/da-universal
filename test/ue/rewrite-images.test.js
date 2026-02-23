@@ -15,36 +15,38 @@
 import assert from 'assert';
 import { describe, it } from 'mocha';
 import { h } from 'hastscript';
-import rewrite from '../../src/ue/rewrite-images.js';
+import { makeImagesRelative, restoreAbsoluteImages } from '../../src/ue/rewrite-images.js';
 
 describe('rewrite-images', () => {
   const daCtx = { org: 'myorg', site: 'mysite' };
 
   describe('img src rewriting', () => {
-    it('rewrites img src with content.da.live prefix to a relative path', () => {
+    it('rewrites img src with content.da.live prefix to a relative path and stores host', () => {
       const bodyTree = h('body', {}, [
         h('main', {}, [
           h('img', { src: 'https://content.da.live/myorg/mysite/media/image.png' }),
         ]),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      makeImagesRelative(bodyTree, daCtx);
 
       const img = bodyTree.children[0].children[0];
       assert.strictEqual(img.properties.src, '/media/image.png');
+      assert.strictEqual(img.properties.dataDaImgHost, 'content.da.live');
     });
 
-    it('rewrites img src with stage-content.da.live prefix to a relative path', () => {
+    it('rewrites img src with stage-content.da.live prefix to a relative path and stores host', () => {
       const bodyTree = h('body', {}, [
         h('main', {}, [
           h('img', { src: 'https://stage-content.da.live/myorg/mysite/media/photo.jpg' }),
         ]),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      makeImagesRelative(bodyTree, daCtx);
 
       const img = bodyTree.children[0].children[0];
       assert.strictEqual(img.properties.src, '/media/photo.jpg');
+      assert.strictEqual(img.properties.dataDaImgHost, 'stage-content.da.live');
     });
 
     it('returns "/" when the URL matches the prefix exactly with no trailing path', () => {
@@ -52,10 +54,11 @@ describe('rewrite-images', () => {
         h('img', { src: 'https://content.da.live/myorg/mysite' }),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      makeImagesRelative(bodyTree, daCtx);
 
       const img = bodyTree.children[0];
       assert.strictEqual(img.properties.src, '/');
+      assert.strictEqual(img.properties.dataDaImgHost, 'content.da.live');
     });
 
     it('does not rewrite img src with an unrelated host', () => {
@@ -63,10 +66,11 @@ describe('rewrite-images', () => {
         h('img', { src: 'https://cdn.example.com/images/photo.jpg' }),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      makeImagesRelative(bodyTree, daCtx);
 
       const img = bodyTree.children[0];
       assert.strictEqual(img.properties.src, 'https://cdn.example.com/images/photo.jpg');
+      assert.strictEqual(img.properties.dataDaImgHost, undefined);
     });
 
     it('does not rewrite img src that partially matches a content host', () => {
@@ -74,15 +78,16 @@ describe('rewrite-images', () => {
         h('img', { src: 'https://content.da.live/otherorg/othersite/media/image.png' }),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      makeImagesRelative(bodyTree, daCtx);
 
       const img = bodyTree.children[0];
       assert.strictEqual(img.properties.src, 'https://content.da.live/otherorg/othersite/media/image.png');
+      assert.strictEqual(img.properties.dataDaImgHost, undefined);
     });
   });
 
   describe('source srcSet rewriting', () => {
-    it('rewrites source srcSet inside a picture element', () => {
+    it('rewrites source srcSet inside a picture element and stores host', () => {
       const bodyTree = h('body', {}, [
         h('picture', {}, [
           h('source', { srcSet: 'https://content.da.live/myorg/mysite/media/hero.webp' }),
@@ -90,26 +95,29 @@ describe('rewrite-images', () => {
         ]),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      makeImagesRelative(bodyTree, daCtx);
 
       const picture = bodyTree.children[0];
       const source = picture.children[0];
       const img = picture.children[1];
       assert.strictEqual(source.properties.srcSet, '/media/hero.webp');
+      assert.strictEqual(source.properties.dataDaImgHost, 'content.da.live');
       assert.strictEqual(img.properties.src, '/media/hero.png');
+      assert.strictEqual(img.properties.dataDaImgHost, 'content.da.live');
     });
 
-    it('rewrites source srcSet with stage-content.da.live prefix', () => {
+    it('rewrites source srcSet with stage-content.da.live prefix and stores host', () => {
       const bodyTree = h('body', {}, [
         h('picture', {}, [
           h('source', { srcSet: 'https://stage-content.da.live/myorg/mysite/media/hero.webp' }),
         ]),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      makeImagesRelative(bodyTree, daCtx);
 
       const source = bodyTree.children[0].children[0];
       assert.strictEqual(source.properties.srcSet, '/media/hero.webp');
+      assert.strictEqual(source.properties.dataDaImgHost, 'stage-content.da.live');
     });
 
     it('does not rewrite source srcSet with an unrelated host', () => {
@@ -119,10 +127,182 @@ describe('rewrite-images', () => {
         ]),
       ]);
 
-      rewrite(bodyTree, daCtx);
+      makeImagesRelative(bodyTree, daCtx);
 
       const source = bodyTree.children[0].children[0];
       assert.strictEqual(source.properties.srcSet, 'https://cdn.example.com/images/hero.webp');
+      assert.strictEqual(source.properties.dataDaImgHost, undefined);
+    });
+  });
+
+  describe('restoreAbsoluteImages', () => {
+    describe('img src restoration', () => {
+      it('restores relative img src to absolute content.da.live URL when host attribute is set', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, [
+            h('img', { src: '/media/image.png', dataDaImgHost: 'content.da.live' }),
+          ]),
+        ]);
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+
+        const img = bodyTree.children[0].children[0];
+        assert.strictEqual(img.properties.src, 'https://content.da.live/myorg/mysite/media/image.png');
+        assert.strictEqual(img.properties.dataDaImgHost, undefined);
+      });
+
+      it('restores relative img src to absolute stage-content.da.live URL when host attribute is set', () => {
+        const bodyTree = h('body', {}, [
+          h('img', { src: '/media/image.png', dataDaImgHost: 'stage-content.da.live' }),
+        ]);
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+
+        const img = bodyTree.children[0];
+        assert.strictEqual(img.properties.src, 'https://stage-content.da.live/myorg/mysite/media/image.png');
+        assert.strictEqual(img.properties.dataDaImgHost, undefined);
+      });
+
+      it('restores relative img src starting with / to absolute URL', () => {
+        const bodyTree = h('body', {}, [
+          h('img', { src: '/images/photo.jpg' }),
+        ]);
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+
+        const img = bodyTree.children[0];
+        assert.strictEqual(img.properties.src, 'https://content.da.live/myorg/mysite/images/photo.jpg');
+      });
+
+      it('does not modify img src that is already an absolute HTTP URL', () => {
+        const bodyTree = h('body', {}, [
+          h('img', { src: 'https://cdn.example.com/images/photo.jpg' }),
+        ]);
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+
+        const img = bodyTree.children[0];
+        assert.strictEqual(img.properties.src, 'https://cdn.example.com/images/photo.jpg');
+      });
+
+      it('does not modify img src that is a protocol-relative URL', () => {
+        const bodyTree = h('body', {}, [
+          h('img', { src: '//cdn.example.com/images/photo.jpg' }),
+        ]);
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+
+        const img = bodyTree.children[0];
+        assert.strictEqual(img.properties.src, '//cdn.example.com/images/photo.jpg');
+      });
+
+      it('restores img src that is just "/" to absolute URL', () => {
+        const bodyTree = h('body', {}, [
+          h('img', { src: '/' }),
+        ]);
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+
+        const img = bodyTree.children[0];
+        assert.strictEqual(img.properties.src, 'https://content.da.live/myorg/mysite/');
+      });
+    });
+
+    describe('source srcSet restoration', () => {
+      it('restores relative source srcSet to absolute content.da.live URL', () => {
+        const bodyTree = h('body', {}, [
+          h('picture', {}, [
+            h('source', { srcSet: '/media/hero.webp' }),
+            h('img', { src: '/media/hero.png' }),
+          ]),
+        ]);
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+
+        const picture = bodyTree.children[0];
+        const source = picture.children[0];
+        const img = picture.children[1];
+        assert.strictEqual(source.properties.srcSet, 'https://content.da.live/myorg/mysite/media/hero.webp');
+        assert.strictEqual(img.properties.src, 'https://content.da.live/myorg/mysite/media/hero.png');
+      });
+
+      it('does not modify source srcSet that is already an absolute URL', () => {
+        const bodyTree = h('body', {}, [
+          h('picture', {}, [
+            h('source', { srcSet: 'https://cdn.example.com/images/hero.webp' }),
+          ]),
+        ]);
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+
+        const source = bodyTree.children[0].children[0];
+        assert.strictEqual(source.properties.srcSet, 'https://cdn.example.com/images/hero.webp');
+      });
+    });
+
+    describe('round-trip conversion', () => {
+      it('restores to production domain for images originally on content.da.live', () => {
+        const originalUrl = 'https://content.da.live/myorg/mysite/media/image.png';
+        const bodyTree = h('body', {}, [
+          h('img', { src: originalUrl }),
+        ]);
+
+        makeImagesRelative(bodyTree, daCtx);
+        const img = bodyTree.children[0];
+        assert.strictEqual(img.properties.src, '/media/image.png');
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+        assert.strictEqual(img.properties.src, originalUrl);
+        assert.strictEqual(img.properties.dataDaImgHost, undefined);
+      });
+
+      it('restores to stage domain for images originally on stage-content.da.live', () => {
+        const originalUrl = 'https://stage-content.da.live/myorg/mysite/media/image.png';
+        const bodyTree = h('body', {}, [
+          h('img', { src: originalUrl }),
+        ]);
+
+        makeImagesRelative(bodyTree, daCtx);
+        const img = bodyTree.children[0];
+        assert.strictEqual(img.properties.src, '/media/image.png');
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+        assert.strictEqual(img.properties.src, originalUrl);
+        assert.strictEqual(img.properties.dataDaImgHost, undefined);
+      });
+
+      it('handles picture elements with both source and img in round-trip', () => {
+        const bodyTree = h('body', {}, [
+          h('picture', {}, [
+            h('source', { srcSet: 'https://stage-content.da.live/myorg/mysite/media/hero.webp' }),
+            h('img', { src: 'https://stage-content.da.live/myorg/mysite/media/hero.png' }),
+          ]),
+        ]);
+
+        makeImagesRelative(bodyTree, daCtx);
+        const picture = bodyTree.children[0];
+        const source = picture.children[0];
+        const img = picture.children[1];
+        assert.strictEqual(source.properties.srcSet, '/media/hero.webp');
+        assert.strictEqual(img.properties.src, '/media/hero.png');
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+        assert.strictEqual(source.properties.srcSet, 'https://stage-content.da.live/myorg/mysite/media/hero.webp');
+        assert.strictEqual(source.properties.dataDaImgHost, undefined);
+        assert.strictEqual(img.properties.src, 'https://stage-content.da.live/myorg/mysite/media/hero.png');
+        assert.strictEqual(img.properties.dataDaImgHost, undefined);
+      });
+
+      it('falls back to production domain when no host data attribute is present', () => {
+        const bodyTree = h('body', {}, [
+          h('img', { src: '/media/image.png' }),
+        ]);
+
+        restoreAbsoluteImages(bodyTree, daCtx);
+
+        const img = bodyTree.children[0];
+        assert.strictEqual(img.properties.src, 'https://content.da.live/myorg/mysite/media/image.png');
+      });
     });
   });
 });

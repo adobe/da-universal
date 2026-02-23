@@ -17,23 +17,45 @@ function stripContentPrefix(url, org, site) {
   for (const host of CONTENT_HOSTS) {
     const prefix = `https://${host}/${org}/${site}`;
     if (url.startsWith(prefix)) {
-      return url.slice(prefix.length) || '/';
+      return { path: url.slice(prefix.length) || '/', host };
     }
   }
   return null;
 }
 
-export default function rewrite(bodyTree, daCtx) {
+function addContentPrefix(url, org, site, host = CONTENT_HOSTS[0]) {
+  if (!url.startsWith('http') && !url.startsWith('//')) {
+    return `https://${host}/${org}/${site}${url}`;
+  }
+  return url;
+}
+
+export function makeImagesRelative(bodyTree, daCtx) {
   const { org, site } = daCtx;
   const elements = selectAll('img, picture > source', bodyTree);
   const propByTag = { img: 'src', source: 'srcSet' };
   elements.forEach((el) => {
     const prop = propByTag[el.tagName];
     if (prop && el.properties[prop]) {
-      const rewritten = stripContentPrefix(el.properties[prop], org, site);
-      if (rewritten !== null) {
-        el.properties[prop] = rewritten;
+      const result = stripContentPrefix(el.properties[prop], org, site);
+      if (result !== null) {
+        el.properties[prop] = result.path;
+        el.properties.dataDaImgHost = result.host;
       }
+    }
+  });
+}
+
+export function restoreAbsoluteImages(bodyTree, daCtx) {
+  const { org, site } = daCtx;
+  const elements = selectAll('img, picture > source', bodyTree);
+  const propByTag = { img: 'src', source: 'srcSet' };
+  elements.forEach((el) => {
+    const prop = propByTag[el.tagName];
+    if (prop && el.properties[prop]) {
+      const host = el.properties.dataDaImgHost;
+      el.properties[prop] = addContentPrefix(el.properties[prop], org, site, host);
+      delete el.properties.dataDaImgHost;
     }
   });
 }
