@@ -12,7 +12,7 @@
     "lint": "eslint ."
   },
   "devDependencies": {
-    "@adobe/eslint-config-helix": "3.0.6",
+    "@adobe/eslint-config-helix": "3.0.21",
     "c8": "^11.0.0",
     "eslint": "9.39.3",
     "esmock": "^2.7.0",
