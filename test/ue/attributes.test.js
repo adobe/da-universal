@@ -141,11 +141,13 @@ describe('UE attributes', () => {
 
         attributes.injectUEAttributes(bodyTree, ueConfig);
 
-        const image = select('main > div > picture', bodyTree);
-        assert.equal(image.properties['data-aue-resource'], 'urn:ab:section-0/asset-0');
-        assert.equal(image.properties['data-aue-type'], 'media');
-        assert.equal(image.properties['data-aue-label'], 'Image');
-        assert.equal(image.properties['data-aue-component'], 'image');
+        const picture = select('main > div > picture', bodyTree);
+        assert.equal(picture.properties['data-aue-resource'], 'urn:ab:section-0/asset-0');
+        assert.equal(picture.properties['data-aue-label'], 'Image');
+        assert.equal(picture.properties['data-aue-component'], 'image');
+        const img = select('img', picture);
+        assert.equal(img.properties['data-aue-type'], 'media');
+        assert.equal(img.properties['data-aue-prop'], 'image');
       });
 
       it('handles whitespace text nodes in wrapParagraphs', () => {
@@ -588,11 +590,12 @@ describe('UE attributes', () => {
         // Picture instrumentation
         const picture = select('picture', cell);
         assert.ok(picture, 'Picture element exists');
-        assert.equal(picture.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-0/cell-0/image-0');
-        assert.equal(picture.properties['data-aue-label'], 'Image');
-        assert.equal(picture.properties['data-aue-prop'], 'image');
-        assert.equal(picture.properties['data-aue-type'], 'media');
+        assert.equal(picture.properties['data-aue-resource'], 'urn:ab:section-0/columns-0/row-0/cell-0/asset-0');
         assert.equal(picture.properties['data-aue-component'], 'image');
+        assert.equal(picture.properties['data-aue-label'], 'Image');
+        const img = select('img', picture);
+        assert.equal(img.properties['data-aue-type'], 'media');
+        assert.equal(img.properties['data-aue-prop'], 'image');
 
         // Richtext instrumentation
         const richtext = select('div.richtext', cell);

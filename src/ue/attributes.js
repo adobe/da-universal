@@ -158,15 +158,20 @@ function addColumnBlockInstrumentation(sIndex, block, bIndex, ueConfig) {
       // add instrumentation to children of cell
       if (cellFilterDef?.components?.length > 0) {
         // handle images
-        const images = selectAll(':scope>picture', cell);
-        images.forEach((picture, iIndex) => {
+        const pictures = selectAll(':scope>picture', cell);
+        pictures.forEach((picture, iIndex) => {
           addAttributes(picture, {
-            'data-aue-resource': `urn:ab:section-${sIndex}/columns-${bIndex}/row-${rIndex}/cell-${cIndex}/image-${iIndex}`,
+            'data-aue-resource': `urn:ab:section-${sIndex}/columns-${bIndex}/row-${rIndex}/cell-${cIndex}/asset-${iIndex}`,
             'data-aue-label': 'Image',
             'data-aue-component': 'image',
-            'data-aue-prop': 'image',
-            'data-aue-type': 'media',
           });
+          const img = select('img', picture);
+          if (img) {
+            addAttributes(img, {
+              'data-aue-type': 'media',
+              'data-aue-prop': 'image',
+            });
+          }
         });
 
         const wrappedCell = wrapParagraphs(cell);
@@ -286,21 +291,20 @@ export function injectUEAttributes(bodyTree, ueConfig) {
       });
 
       // handle images
-      const images = selectAll(':scope>picture', section);
-      images.forEach((picture, iIndex) => {
+      const pictures = selectAll(':scope>picture', section);
+      pictures.forEach((picture, iIndex) => {
         addAttributes(picture, {
           'data-aue-resource': `urn:ab:section-${sIndex}/asset-${iIndex}`,
           'data-aue-label': 'Image',
-          'data-aue-prop': 'image',
-          'data-aue-type': 'media',
           'data-aue-component': 'image',
         });
-        // TODO wait for SITES-27973
-        // const img = select('img', picture);
-        // addAttributes(img, {
-        //   'data-aue-prop': 'image',
-        //   'data-aue-type': 'media'
-        // });
+        const img = select('img', picture);
+        if (img) {
+          addAttributes(img, {
+            'data-aue-type': 'media',
+            'data-aue-prop': 'image',
+          });
+        }
       });
 
       // handle blocks
