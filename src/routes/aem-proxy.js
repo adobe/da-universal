@@ -10,10 +10,12 @@
  * governing permissions and limitations under the License.
  */
 import { getAemCtx } from '../utils/aemCtx.js';
+import { applyQuickEditTransform, shouldApplyQuickEdit } from '../utils/quick-edit.js';
 
 export async function handleAEMProxyRequest({ req, env, daCtx }) {
+  const requestUrl = new URL(req.url);
   const aemCtx = getAemCtx(env, daCtx);
-  const { search } = new URL(req.url);
+  const { search } = requestUrl;
   const aemUrl = new URL(`${daCtx.aemPathname}${search}`, aemCtx.previewUrl);
   // eslint-disable-next-line no-param-reassign
   req = new Request(aemUrl, req);
@@ -24,10 +26,21 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
     req.headers.set('Authorization', `token ${daCtx.siteToken}`);
   }
 
+  // Request uncompressed body when we might transform HTML (quick-edit)
+  if (requestUrl.searchParams.has('quick-edit')) {
+    req.headers.delete('Accept-Encoding');
+  }
+
   console.log(`-> ${aemUrl.toString()}`);
   let response = await fetch(req);
   console.log(`<- ${aemUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
-  response = new Response(response.body, response);
+
+  if (shouldApplyQuickEdit(requestUrl, response)) {
+    response = await applyQuickEditTransform(response);
+  } else {
+    response = new Response(response.body, response);
+  }
+
   response.headers.set('Access-Control-Allow-Origin', aemUrl.origin);
   return response;
 }
