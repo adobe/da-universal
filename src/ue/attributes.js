@@ -349,7 +349,7 @@ export function injectUEAttributes(bodyTree, ueConfig) {
         }
 
         // check for component filter and apply it to child items
-        if (filterDef?.components?.length > 0) {
+        if (filterDef?.components) {
           addAttributes(block, {
             'data-aue-component': blockName,
             'data-aue-type': 'container',
