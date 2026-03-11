@@ -388,7 +388,9 @@ describe('UE attributes', () => {
               {
                 components: [
                   { id: 'section', title: 'Section' },
-                  { id: 'table', title: 'Table', model: 'table', filter: 'table' },
+                  {
+                    id: 'table', title: 'Table', model: 'table', filter: 'table',
+                  },
                 ],
               },
             ],
