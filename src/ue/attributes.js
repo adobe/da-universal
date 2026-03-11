@@ -341,8 +341,15 @@ export function injectUEAttributes(bodyTree, ueConfig) {
 
         addBlockFieldAttributes(ueConfig, block);
 
-        // apply block flter and child items
-        if (filterDef) {
+        // apply block filter
+        if (filterDef?.id) {
+          addAttributes(block, {
+            'data-aue-filter': filterDef.id,
+          });
+        }
+
+        // check for component filter and apply it to child items
+        if (filterDef?.components?.length > 0) {
           addAttributes(block, {
             'data-aue-component': blockName,
             'data-aue-type': 'container',
