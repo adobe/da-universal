@@ -354,6 +354,10 @@ describe('UE attributes', () => {
 
         attributes.injectUEAttributes(bodyTree, ueConfig);
 
+        const block = select('main > div > div', bodyTree);
+        assert.equal(block.properties['data-aue-filter'], 'cards');
+        assert.equal(block.properties['data-aue-type'], 'container');
+
         const blockItems = selectAll('main > div > div > div', bodyTree);
         assert.equal(blockItems[0].properties['data-aue-resource'], 'urn:ab:section-0/block-0/item-0');
         assert.equal(blockItems[0].properties['data-aue-type'], 'component');
@@ -362,6 +366,58 @@ describe('UE attributes', () => {
         assert.equal(blockItems[1].properties['data-aue-resource'], 'urn:ab:section-0/block-0/item-1');
         assert.equal(blockItems[1].properties['data-aue-type'], 'component');
         assert.equal(blockItems[1].properties['data-aue-label'], 'Card');
+      });
+
+      it('handles filter with no components (RTE-only filter)', () => {
+        const bodyTree = h('body', {}, [
+          h('main', {}, [
+            h('div', {}, [
+              h('div', { className: ['table'] }, [
+                h('div', {}, [
+                  h('div', {}, [h('p', {}, 'Cell 1')]),
+                  h('div', {}, [h('p', {}, 'Cell 2')]),
+                ]),
+              ]),
+            ]),
+          ]),
+        ]);
+
+        const ueConfig = {
+          'component-definition': {
+            groups: [
+              {
+                components: [
+                  { id: 'section', title: 'Section' },
+                  {
+                    id: 'table', title: 'Table', model: 'table', filter: 'table',
+                  },
+                ],
+              },
+            ],
+          },
+          'component-filter': [
+            {
+              id: 'table',
+              rte: { toolbar: { insert: ['table'], sections: ['insert'] } },
+            },
+          ],
+          'component-model': [
+            {
+              id: 'table',
+              fields: [
+                { component: 'richtext', name: 'table', label: 'Table Content' },
+              ],
+            },
+          ],
+        };
+
+        attributes.injectUEAttributes(bodyTree, ueConfig);
+
+        const block = select('main > div > div', bodyTree);
+        assert.equal(block.properties['data-aue-resource'], 'urn:ab:section-0/block-0');
+        assert.equal(block.properties['data-aue-type'], 'component');
+        assert.equal(block.properties['data-aue-filter'], 'table');
+        assert.equal(block.properties['data-aue-component'], 'table');
       });
 
       it('adds UE attributes to block fields based on fields and model definition', () => {
