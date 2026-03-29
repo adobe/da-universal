@@ -232,11 +232,12 @@ describe('GET handler', () => {
         '../../src/routes/da-admin.js': { daSourceGet: async () => new Response() },
         '../../src/routes/aem-proxy.js': {
           handleAEMProxyRequest: async () => new Response('preview-content', { status: 200 }),
+          handlePreviewProxyRequest: async () => new Response('preview-proxy-content', { status: 200 }),
         },
       })).default;
     });
 
-    it('proxies to AEM when dapreview=on', async () => {
+    it('calls handlePreviewProxyRequest when dapreview=on', async () => {
       const req = new Request('https://main--site--org.ue.da.live/folder/content?dapreview=on');
       const daCtx = getDaCtx(req);
       const env = {};
@@ -244,10 +245,10 @@ describe('GET handler', () => {
       const res = await getHandler({ req, env, daCtx });
 
       assert.strictEqual(res.status, 200);
-      assert.strictEqual(await res.text(), 'preview-content');
+      assert.strictEqual(await res.text(), 'preview-proxy-content');
     });
 
-    it('proxies to AEM for preview host', async () => {
+    it('calls handlePreviewProxyRequest for preview host', async () => {
       const req = new Request('https://main--site--org.preview.da.live/folder/content');
       const daCtx = getDaCtx(req);
       const env = {};
@@ -255,7 +256,7 @@ describe('GET handler', () => {
       const res = await getHandler({ req, env, daCtx });
 
       assert.strictEqual(res.status, 200);
-      assert.strictEqual(await res.text(), 'preview-content');
+      assert.strictEqual(await res.text(), 'preview-proxy-content');
     });
   });
 

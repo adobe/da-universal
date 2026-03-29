@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 import { get404, getRobots } from '../responses/index.js';
-import { handleAEMProxyRequest } from '../routes/aem-proxy.js';
+import { handleAEMProxyRequest, handlePreviewProxyRequest } from '../routes/aem-proxy.js';
 import { getCookie } from '../routes/cookie.js';
 import { daSourceGet } from '../routes/da-admin.js';
 
@@ -62,7 +62,7 @@ export default async function getHandler({ req, env, daCtx }) {
   const isPreviewHost = url.hostname.endsWith('.preview.da.live') || url.hostname.endsWith('.stage-preview.da.live');
 
   if (url.searchParams.get('dapreview') === 'on' || isPreviewHost) {
-    return handleAEMProxyRequest({ req, env, daCtx });
+    return handlePreviewProxyRequest({ req, env, daCtx });
   }
 
   // default route to DA admin for all the content requests
