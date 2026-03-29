@@ -229,15 +229,21 @@ describe('GET handler', () => {
 
     beforeEach(async () => {
       getHandler = (await esmock('../../src/handlers/get.js', {
-        '../../src/routes/da-admin.js': { daSourceGet: async () => new Response() },
+        '../../src/routes/da-admin.js': {
+          daSourceGet: async ({ isDaPreviewProxy }) => {
+            if (isDaPreviewProxy) {
+              return new Response('preview-proxy-content', { status: 200 });
+            }
+            return new Response('ue-content', { status: 200 });
+          },
+        },
         '../../src/routes/aem-proxy.js': {
-          handleAEMProxyRequest: async () => new Response('preview-content', { status: 200 }),
-          handlePreviewProxyRequest: async () => new Response('preview-proxy-content', { status: 200 }),
+          handleAEMProxyRequest: async () => new Response('aem-proxy-content', { status: 200 }),
         },
       })).default;
     });
 
-    it('calls handlePreviewProxyRequest when dapreview=on', async () => {
+    it('calls daSourceGet with isDaPreviewProxy when dapreview=on', async () => {
       const req = new Request('https://main--site--org.ue.da.live/folder/content?dapreview=on');
       const daCtx = getDaCtx(req);
       const env = {};
@@ -248,7 +254,7 @@ describe('GET handler', () => {
       assert.strictEqual(await res.text(), 'preview-proxy-content');
     });
 
-    it('calls handlePreviewProxyRequest for preview host', async () => {
+    it('calls daSourceGet with isDaPreviewProxy for preview host', async () => {
       const req = new Request('https://main--site--org.preview.da.live/folder/content');
       const daCtx = getDaCtx(req);
       const env = {};
