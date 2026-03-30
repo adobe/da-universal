@@ -21,7 +21,7 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
 
   // Add site token if available
   if (daCtx.siteToken) {
-    req.headers.set('Authorization', `token ${daCtx.siteToken}`);
+    req.headers.set('Authorization', daCtx.siteToken);
   }
 
   console.log(`-> ${aemUrl.toString()}`);
