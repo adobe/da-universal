@@ -25,7 +25,7 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
   }
 
   console.log(`-> ${aemUrl.toString()}`);
-  let response = await fetch(req);
+  let response = await fetch(req, { cf: { cacheTtl: 0 } });
   console.log(`<- ${aemUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
   response = new Response(response.body, response);
   response.headers.set('Access-Control-Allow-Origin', aemUrl.origin);
