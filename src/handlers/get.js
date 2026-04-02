@@ -62,7 +62,9 @@ export default async function getHandler({ req, env, daCtx }) {
   const isPreviewHost = url.hostname.endsWith('.preview.da.live') || url.hostname.endsWith('.stage-preview.da.live');
 
   if (url.searchParams.get('dapreview') === 'on' || isPreviewHost) {
-    return handleAEMProxyRequest({ req, env, daCtx });
+    return daSourceGet({
+      req, env, daCtx, isDaPreviewProxy: true,
+    });
   }
 
   // default route to DA admin for all the content requests
