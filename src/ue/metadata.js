@@ -11,7 +11,21 @@
  */
 
 import { select } from 'hast-util-select';
+import { visit } from 'unist-util-visit';
 import { readBlockConfig } from '../utils/hast.js';
+
+export function removeMetadataBlock(bodyTree) {
+  const metaBlock = select('div.metadata', bodyTree);
+  if (!metaBlock) return;
+  visit(bodyTree, (node) => {
+    if (node.children) {
+      const idx = node.children.indexOf(metaBlock);
+      if (idx !== -1) {
+        node.children.splice(idx, 1);
+      }
+    }
+  });
+}
 
 export function extractLocalMetadata(bodyTree) {
   const metaBlock = select('div.metadata', bodyTree);
