@@ -44,8 +44,8 @@ export function withAemAuth(aemCtx, init = {}) {
 }
 
 export async function getAEMHtml(aemCtx, path) {
-  const { liveUrl } = aemCtx;
-  const resp = await fetch(`${liveUrl}${path}`, withAemAuth(aemCtx));
+  const { previewUrl } = aemCtx;
+  const resp = await fetch(`${previewUrl}${path}`, withAemAuth(aemCtx));
   if (!resp.ok) return undefined;
   const headHtml = await resp.text();
   return headHtml;

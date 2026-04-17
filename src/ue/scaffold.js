@@ -101,7 +101,7 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
 }
 
 export async function getUEConfig(aemCtx) {
-  const { liveUrl: host } = aemCtx;
+  const { previewUrl: host } = aemCtx;
   const jsonUrls = [
     {
       type: 'component-definition',

@@ -66,7 +66,7 @@ describe('AEM context', () => {
 
   describe('getAEMHtml function', () => {
     const mockAemCtx = {
-      liveUrl: 'https://main--site--org.aem.live',
+      previewUrl: 'https://main--site--org.aem.page',
     };
 
     beforeEach(async () => {

@@ -156,7 +156,7 @@ export class Modifiers {
 }
 
 export async function fetchBulkMetadata(aemCtx) {
-  const url = new URL('/metadata.json', aemCtx.liveUrl);
+  const url = new URL('/metadata.json', aemCtx.previewUrl);
   const response = await fetch(url, withAemAuth(aemCtx));
 
   if (response.ok) {
