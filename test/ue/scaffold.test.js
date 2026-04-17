@@ -257,19 +257,19 @@ describe('UE scaffold', () => {
 
     beforeEach(() => {
       aemCtx = {
-        liveUrl: 'https://main--site--org.aem.live',
+        previewUrl: 'https://main--site--org.aem.page',
       };
 
       // Mock fetch
       fetchMock = async (url) => {
         const mockData = {
-          'https://main--site--org.aem.live/component-definition.json': {
+          'https://main--site--org.aem.page/component-definition.json': {
             components: ['def1', 'def2'],
           },
-          'https://main--site--org.aem.live/component-models.json': {
+          'https://main--site--org.aem.page/component-models.json': {
             models: ['model1', 'model2'],
           },
-          'https://main--site--org.aem.live/component-filters.json': {
+          'https://main--site--org.aem.page/component-filters.json': {
             filters: ['filter1', 'filter2'],
           },
         };
