@@ -43,10 +43,19 @@ export function withAemAuth(aemCtx, init = {}) {
   return { ...init, headers };
 }
 
+/**
+ * Fetches HTML content from the AEM preview host.
+ *
+ * @param {Object} aemCtx The AEM context
+ * @param {string} path The path to fetch (e.g. `/head.html`)
+ * @returns {Promise<{ status: number, body: string|undefined }>} The HTTP status
+ *   code from the AEM response, and the response body as text when the request
+ *   was successful (undefined otherwise).
+ */
 export async function getAEMHtml(aemCtx, path) {
   const { previewUrl } = aemCtx;
   const resp = await fetch(`${previewUrl}${path}`, withAemAuth(aemCtx));
-  if (!resp.ok) return undefined;
-  const headHtml = await resp.text();
-  return headHtml;
+  if (!resp.ok) return { status: resp.status, body: undefined };
+  const body = await resp.text();
+  return { status: resp.status, body };
 }

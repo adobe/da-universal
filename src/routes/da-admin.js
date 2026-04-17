@@ -17,7 +17,9 @@ import putHelper from '../helpers/source.js';
 import { removeUEAttributes, unwrapParagraphs } from '../ue/attributes.js';
 import { prepareHtml } from '../ue/ue.js';
 import { getAemCtx, getAEMHtml } from '../utils/aemCtx.js';
-import { daResp, get401, get404 } from '../responses/index.js';
+import {
+  daResp, get401, get403, get404,
+} from '../responses/index.js';
 import { BRANCH_NOT_FOUND_HTML_MESSAGE, DEFAULT_HTML_TEMPLATE, UNAUTHORIZED_HTML_MESSAGE } from '../utils/constants.js';
 import { getSiteConfig } from '../storage/config.js';
 import { restoreAbsoluteImages } from '../ue/rewrite-images.js';
@@ -55,7 +57,7 @@ async function getPageTemplate(env, daCtx, aemCtx) {
   }
 
   const templatePath = matchingTemplates[0].template;
-  const templateHtml = await getAEMHtml(aemCtx, templatePath);
+  const { body: templateHtml } = await getAEMHtml(aemCtx, templatePath);
   if (templateHtml) {
     return templateHtml;
   }
@@ -90,8 +92,15 @@ export async function daSourceGet({ req, env, daCtx }) {
 
   // get the AEM parts (head.html)
   const aemCtx = getAemCtx(env, daCtx);
-  const headHtml = await getAEMHtml(aemCtx, '/head.html');
+  const { status: headStatus, body: headHtml } = await getAEMHtml(aemCtx, '/head.html');
   if (!headHtml) {
+    // propagate auth-related failures from AEM instead of masking them as 404
+    if (headStatus === 401) {
+      return get401(UNAUTHORIZED_HTML_MESSAGE);
+    }
+    if (headStatus === 403) {
+      return get403();
+    }
     return get404(BRANCH_NOT_FOUND_HTML_MESSAGE);
   }
 

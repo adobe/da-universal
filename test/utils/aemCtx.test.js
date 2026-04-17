@@ -71,24 +71,50 @@ describe('AEM context', () => {
 
     beforeEach(async () => {
       // Mock global fetch
-      global.fetch = async (url) => ({
-        ok: url.includes('success'),
-        text: async () => '<html>test content</html>',
-      });
+      global.fetch = async (url) => {
+        if (url.includes('success')) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () => '<html>test content</html>',
+          };
+        }
+        if (url.includes('unauthorized')) {
+          return { ok: false, status: 401, text: async () => '' };
+        }
+        if (url.includes('forbidden')) {
+          return { ok: false, status: 403, text: async () => '' };
+        }
+        return { ok: false, status: 404, text: async () => '' };
+      };
     });
 
     afterEach(() => {
       delete global.fetch;
     });
 
-    it('should return HTML content for successful request', async () => {
-      const html = await getAEMHtml(mockAemCtx, '/success-path');
-      assert.strictEqual(html, '<html>test content</html>');
+    it('should return HTML content and status 200 for successful request', async () => {
+      const result = await getAEMHtml(mockAemCtx, '/success-path');
+      assert.strictEqual(result.status, 200);
+      assert.strictEqual(result.body, '<html>test content</html>');
     });
 
-    it('should return undefined for failed request', async () => {
-      const html = await getAEMHtml(mockAemCtx, '/fail-path');
-      assert.strictEqual(html, undefined);
+    it('should return undefined body and status for failed request', async () => {
+      const result = await getAEMHtml(mockAemCtx, '/fail-path');
+      assert.strictEqual(result.status, 404);
+      assert.strictEqual(result.body, undefined);
+    });
+
+    it('should propagate 401 status for unauthorized request', async () => {
+      const result = await getAEMHtml(mockAemCtx, '/unauthorized-path');
+      assert.strictEqual(result.status, 401);
+      assert.strictEqual(result.body, undefined);
+    });
+
+    it('should propagate 403 status for forbidden request', async () => {
+      const result = await getAEMHtml(mockAemCtx, '/forbidden-path');
+      assert.strictEqual(result.status, 403);
+      assert.strictEqual(result.body, undefined);
     });
   });
 });

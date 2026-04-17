@@ -58,3 +58,5 @@ export const DEFAULT_HTML_TEMPLATE = '<body><header></header><main><div></div></
 export const BRANCH_NOT_FOUND_HTML_MESSAGE = '<html><body><h1>Not found: Unable to retrieve AEM branch</h1></body></html>';
 
 export const DEFAULT_UNAUTHORIZED_HTML_MESSAGE = '<html><body><h1>401: Unauthorized</h1></body></html>';
+
+export const FORBIDDEN_HTML_MESSAGE = '<html><body><h1>403: Forbidden</h1></body></html>';
