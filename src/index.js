@@ -24,6 +24,7 @@ export default {
 
     if (url.pathname === '/favicon.ico') return get404();
     if (url.pathname === '/robots.txt') return getRobots();
+    if (url.pathname.startsWith('/.rum/')) return new Response(null, { status: 200 });
 
     const daCtx = getDaCtx(req);
 
