@@ -17,8 +17,8 @@ export const TRUSTED_ORIGINS = [
 ];
 
 export const TRUSTED_ORIGINS_PATTERNS = [
+  /^https?:\/\/localhost(:\d+)?$/,
   /^https:\/\/[a-zA-Z0-9]+--da-live--adobe\.aem\.(live|page)$/,
-  /^https:\/\/main--exp-workspace--hannessolo\.aem\.(live|page)$/, // TODO temp for demo, remove
 ];
 
 /**
