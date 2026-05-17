@@ -15,7 +15,8 @@ import { toHtml } from 'hast-util-to-html';
 import { minifyWhitespace } from 'hast-util-minify-whitespace';
 import putHelper from '../helpers/source.js';
 import { removeUEAttributes, unwrapParagraphs } from '../ue/attributes.js';
-import { prepareHtml } from '../ue/ue.js';
+import { prepareUEHtml } from '../ue/ue.js';
+import { prepareDAProxyHtml } from '../preview/proxy.js';
 import { getAemCtx, getAEMHtml } from '../utils/aemCtx.js';
 import { daResp, get401, get404 } from '../responses/index.js';
 import { BRANCH_NOT_FOUND_HTML_MESSAGE, DEFAULT_HTML_TEMPLATE, UNAUTHORIZED_HTML_MESSAGE } from '../utils/constants.js';
@@ -63,7 +64,9 @@ async function getPageTemplate(env, daCtx, aemCtx) {
   return DEFAULT_HTML_TEMPLATE;
 }
 
-export async function daSourceGet({ req, env, daCtx }) {
+export async function daSourceGet({
+  req, env, daCtx, isDaPreviewProxy,
+}) {
   const {
     org, site, path, ext, authToken,
   } = daCtx;
@@ -88,12 +91,7 @@ export async function daSourceGet({ req, env, daCtx }) {
     return response;
   }
 
-  // get the AEM parts (head.html)
   const aemCtx = getAemCtx(env, daCtx);
-  const headHtml = await getAEMHtml(aemCtx, '/head.html');
-  if (!headHtml) {
-    return get404(BRANCH_NOT_FOUND_HTML_MESSAGE);
-  }
 
   // get the content from DA admin
   const adminUrl = new URL(
@@ -106,19 +104,57 @@ export async function daSourceGet({ req, env, daCtx }) {
     method: 'GET',
     headers,
   });
-  let body;
   console.log(`-> ${adminUrl.toString()}`);
   const daAdminResp = await env.daadmin.fetch(req);
   console.log(`<- ${adminUrl.toString()}. ${daAdminResp.status} ${daAdminResp.statusText}`, { status: daAdminResp.status, statusText: daAdminResp.statusText });
+
+  if (isDaPreviewProxy) {
+    if (!daAdminResp || daAdminResp.status !== 200) {
+      return new Response(daAdminResp.body, daAdminResp);
+    }
+
+    // fetch the full AEM preview page
+    const aemPageUrl = new URL(daCtx.aemPathname, aemCtx.previewUrl);
+    const aemReqHeaders = new Headers();
+    if (daCtx.siteToken) {
+      aemReqHeaders.set('Authorization', `token ${daCtx.siteToken}`);
+    }
+    console.log(`-> ${aemPageUrl.toString()}`);
+    const aemPageResp = await fetch(aemPageUrl, { headers: aemReqHeaders });
+    console.log(`<- ${aemPageUrl.toString()}. ${aemPageResp.status} ${aemPageResp.statusText}`);
+
+    if (!aemPageResp.ok) {
+      return get404(BRANCH_NOT_FOUND_HTML_MESSAGE);
+    }
+
+    const aemPageHtml = await aemPageResp.text();
+    const daBodyHtml = await daAdminResp.text();
+    const body = prepareDAProxyHtml(daCtx, aemPageHtml, daBodyHtml);
+
+    return daResp({
+      status: 200,
+      body,
+      contentLength: new TextEncoder().encode(body).byteLength,
+      contentType: 'text/html; charset=utf-8',
+    });
+  }
+
+  // get the AEM head.html
+  const headHtml = await getAEMHtml(aemCtx, '/head.html');
+  if (!headHtml) {
+    return get404(BRANCH_NOT_FOUND_HTML_MESSAGE);
+  }
+
+  let body;
   if (daAdminResp && daAdminResp.status === 200) {
     // enrich stored content with HTML header and UE attributes
     const originalBodyHtml = await daAdminResp.text();
-    const responseHtml = await prepareHtml(daCtx, aemCtx, originalBodyHtml, headHtml);
+    const responseHtml = await prepareUEHtml(daCtx, aemCtx, originalBodyHtml, headHtml);
     body = responseHtml;
   } else {
     // enrich default template with HTML header and UE attributes
     const templateHtml = await getPageTemplate(env, daCtx, aemCtx, headHtml);
-    const responseHtml = await prepareHtml(daCtx, aemCtx, templateHtml, headHtml);
+    const responseHtml = await prepareUEHtml(daCtx, aemCtx, templateHtml, headHtml);
     body = responseHtml;
   }
 

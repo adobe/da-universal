@@ -74,7 +74,7 @@ function injectMetadata(metadata, headNode) {
   });
 }
 
-export async function prepareHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
+export async function prepareUEHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
   // get the HTML document tree
   const documentTree = getHtmlDoc();
 
