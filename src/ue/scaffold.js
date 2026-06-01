@@ -12,6 +12,7 @@
 
 import { fromHtml } from 'hast-util-from-html';
 import { h } from 'hastscript';
+import { withAemAuth } from '../utils/aemCtx.js';
 
 export function getHtmlDoc() {
   const htmlDocStr = '<!DOCTYPE html><html><head></head><body></body></html>';
@@ -100,7 +101,7 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
 }
 
 export async function getUEConfig(aemCtx) {
-  const { liveUrl: host } = aemCtx;
+  const { previewUrl: host } = aemCtx;
   const jsonUrls = [
     {
       type: 'component-definition',
@@ -116,8 +117,9 @@ export async function getUEConfig(aemCtx) {
     },
   ];
 
+  const fetchInit = withAemAuth(aemCtx);
   const responses = await Promise.all(
-    jsonUrls.map(({ type, url }) => fetch(url)
+    jsonUrls.map(({ type, url }) => fetch(url, fetchInit)
       .then((response) => response
         .json()
         .then((data) => ({ type, data }))

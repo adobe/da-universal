@@ -23,7 +23,7 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
 
   // Add site token if available
   if (daCtx.siteToken) {
-    req.headers.set('Authorization', `token ${daCtx.siteToken}`);
+    req.headers.set('Authorization', daCtx.siteToken);
   }
 
   // Request uncompressed body when we might transform HTML (quick-edit)
@@ -32,7 +32,7 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
   }
 
   console.log(`-> ${aemUrl.toString()}`);
-  let response = await fetch(req);
+  let response = await fetch(req, { cf: { cacheTtl: 0 } });
   console.log(`<- ${aemUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
 
   if (shouldApplyQuickEdit(requestUrl, response)) {

@@ -56,11 +56,16 @@ function getAuthToken(req) {
 }
 
 function getSiteToken(req) {
+  const siteTokenHeader = req.headers.get('x-site-token');
+  if (siteTokenHeader) {
+    return siteTokenHeader;
+  }
+
   const cookies = req.headers.get('Cookie');
   if (cookies) {
     const siteTokenMatch = cookies.match(/site_token=([^;]+)/);
     if (siteTokenMatch && siteTokenMatch[1]) {
-      return siteTokenMatch[1];
+      return `token ${siteTokenMatch[1]}`;
     }
   }
   return undefined;

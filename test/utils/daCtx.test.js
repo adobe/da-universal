@@ -147,6 +147,41 @@ describe('DA context', () => {
     });
   });
 
+  describe('siteToken', () => {
+    it('should return header value as-is when x-site-token header is present', () => {
+      const req = new Request('https://main--site--org.ue.da.live/folder/content', {
+        headers: { 'x-site-token': 'token abc123' },
+      });
+      daCtx = getDaCtx(req);
+      assert.strictEqual(daCtx.siteToken, 'token abc123');
+    });
+
+    it('should prepend token to cookie value when falling back to cookie', () => {
+      const req = new Request('https://main--site--org.ue.da.live/folder/content', {
+        headers: { Cookie: 'site_token=abc123' },
+      });
+      daCtx = getDaCtx(req);
+      assert.strictEqual(daCtx.siteToken, 'token abc123');
+    });
+
+    it('should prefer header over cookie', () => {
+      const req = new Request('https://main--site--org.ue.da.live/folder/content', {
+        headers: {
+          'x-site-token': 'token from-header',
+          Cookie: 'site_token=from-cookie',
+        },
+      });
+      daCtx = getDaCtx(req);
+      assert.strictEqual(daCtx.siteToken, 'token from-header');
+    });
+
+    it('should return undefined when no token is present', () => {
+      const req = new Request('https://main--site--org.ue.da.live/folder/content');
+      daCtx = getDaCtx(req);
+      assert.strictEqual(daCtx.siteToken, undefined);
+    });
+  });
+
   describe('ue-service query parameter', () => {
     it('should set ueService when ue-service query parameter is present as string', () => {
       const req = new Request('https://main--site--org.ue.da.live/folder/content?ue-service=local');

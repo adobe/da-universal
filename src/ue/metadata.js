@@ -12,6 +12,7 @@
 
 import { select } from 'hast-util-select';
 import { readBlockConfig } from '../utils/hast.js';
+import { withAemAuth } from '../utils/aemCtx.js';
 
 export function extractLocalMetadata(bodyTree) {
   const metaBlock = select('div.metadata', bodyTree);
@@ -155,8 +156,8 @@ export class Modifiers {
 }
 
 export async function fetchBulkMetadata(aemCtx) {
-  const url = new URL('/metadata.json', aemCtx.liveUrl);
-  const response = await fetch(url);
+  const url = new URL('/metadata.json', aemCtx.previewUrl);
+  const response = await fetch(url, withAemAuth(aemCtx));
 
   if (response.ok) {
     const json = await response.json();

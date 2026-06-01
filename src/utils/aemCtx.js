@@ -11,7 +11,9 @@
  */
 
 export function getAemCtx(env, daCtx) {
-  const { org, site, ref } = daCtx;
+  const {
+    org, site, ref, siteToken,
+  } = daCtx;
 
   const obj = {
     previewHostname: `${ref}--${site}--${org}.aem.page`,
@@ -20,14 +22,30 @@ export function getAemCtx(env, daCtx) {
     liveUrl: `https://${ref}--${site}--${org}.aem.live`,
     ueHostname: env.UE_HOST,
     ueService: env.UE_SERVICE,
+    siteToken,
   };
 
   return obj;
 }
 
+/**
+ * Merges AEM authentication (site token as Authorization header) into the
+ * given fetch init options. Required when the AEM site is behind auth.
+ * @param {Object} aemCtx The AEM context
+ * @param {RequestInit} [init] Additional fetch init options to merge
+ * @returns {RequestInit}
+ */
+export function withAemAuth(aemCtx, init = {}) {
+  const headers = new Headers(init.headers);
+  if (aemCtx?.siteToken) {
+    headers.set('Authorization', aemCtx.siteToken);
+  }
+  return { ...init, headers };
+}
+
 export async function getAEMHtml(aemCtx, path) {
-  const { liveUrl } = aemCtx;
-  const resp = await fetch(`${liveUrl}${path}`);
+  const { previewUrl } = aemCtx;
+  const resp = await fetch(`${previewUrl}${path}`, withAemAuth(aemCtx));
   if (!resp.ok) return undefined;
   const headHtml = await resp.text();
   return headHtml;
