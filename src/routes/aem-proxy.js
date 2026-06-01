@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 import { getAemCtx } from '../utils/aemCtx.js';
-import { applyQuickEditTransform, shouldApplyQuickEdit } from '../utils/quick-edit.js';
+import { applyQuickEditToScript, isQuickEditScriptPath } from '../utils/quick-edit.js';
 
 export async function handleAEMProxyRequest({ req, env, daCtx }) {
   const requestUrl = new URL(req.url);
@@ -26,8 +26,14 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
     req.headers.set('Authorization', daCtx.siteToken);
   }
 
-  // Request uncompressed body when we might transform HTML (quick-edit)
-  if (requestUrl.searchParams.has('quick-edit')) {
+  // We inject the quick-edit bootstrap into scripts/scripts.js as it is served,
+  // rather than touching the HTML page (inlining ran scripts.js twice). The JS
+  // request carries no quick-edit param, so detect it by path and gate at
+  // runtime inside the appended bootstrap.
+  const isScript = isQuickEditScriptPath(requestUrl.pathname);
+
+  // Request an uncompressed body when we are going to transform it.
+  if (isScript) {
     req.headers.delete('Accept-Encoding');
   }
 
@@ -35,9 +41,15 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
   let response = await fetch(req, { cf: { cacheTtl: 0 } });
   console.log(`<- ${aemUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
 
-  if (shouldApplyQuickEdit(requestUrl, response)) {
-    response = await applyQuickEditTransform(response);
+  const contentType = response.headers.get('Content-Type') || '';
+  const isJsResponse = contentType.toLowerCase().includes('javascript');
+  if (isScript && response.ok && isJsResponse) {
+    console.log('[quick-edit] scripts/scripts.js detected, attempting bootstrap injection');
+    response = await applyQuickEditToScript(response);
   } else {
+    if (isScript) {
+      console.log(`[quick-edit] skip scripts.js injection (ok=${response.ok}, content-type=${contentType})`);
+    }
     response = new Response(response.body, response);
   }
 
