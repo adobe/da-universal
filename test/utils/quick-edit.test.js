@@ -28,19 +28,64 @@ loadPage();
 `;
 
 describe('quick-edit script transform', () => {
-  describe('isQuickEditScriptPath', () => {
-    it('matches /scripts/scripts.js', () => {
-      assert.strictEqual(quickEdit.isQuickEditScriptPath('/scripts/scripts.js'), true);
+  describe('findEntryScriptPath', () => {
+    it('finds /scripts/scripts.js from a script tag', () => {
+      const html = '<head><script src="/scripts/scripts.js" type="module"></script></head>';
+      assert.strictEqual(quickEdit.findEntryScriptPath(html), '/scripts/scripts.js');
     });
 
-    it('matches nested roots like /nx2/scripts/scripts.js', () => {
-      assert.strictEqual(quickEdit.isQuickEditScriptPath('/nx2/scripts/scripts.js'), true);
+    it('finds a nested/subfolder entry script', () => {
+      const html = '<script src="/nx2/scripts/scripts.js" type="module"></script>';
+      assert.strictEqual(quickEdit.findEntryScriptPath(html), '/nx2/scripts/scripts.js');
     });
 
-    it('does not match other scripts', () => {
-      assert.strictEqual(quickEdit.isQuickEditScriptPath('/scripts/utils.js'), false);
-      assert.strictEqual(quickEdit.isQuickEditScriptPath('/scripts/scripts.css'), false);
-      assert.strictEqual(quickEdit.isQuickEditScriptPath('/foo/scripts.js'), false);
+    it('normalizes a full URL src to its pathname', () => {
+      const html = '<script src="https://host.example/foo/scripts.js"></script>';
+      assert.strictEqual(quickEdit.findEntryScriptPath(html), '/foo/scripts.js');
+    });
+
+    it('strips a query string from the src', () => {
+      const html = '<script src="/scripts/scripts.js?v=2"></script>';
+      assert.strictEqual(quickEdit.findEntryScriptPath(html), '/scripts/scripts.js');
+    });
+
+    it('ignores unrelated scripts and picks the scripts.js entry', () => {
+      const html = '<script src="/vendor/analytics.js"></script>'
+        + '<script src="/scripts/utils.js"></script>'
+        + '<script src="/scripts/scripts.js"></script>';
+      assert.strictEqual(quickEdit.findEntryScriptPath(html), '/scripts/scripts.js');
+    });
+
+    it('does not match a filename merely ending in scripts.js', () => {
+      const html = '<script src="/scripts/myscripts.js"></script>';
+      assert.strictEqual(quickEdit.findEntryScriptPath(html), undefined);
+    });
+
+    it('returns undefined when there is no entry script', () => {
+      assert.strictEqual(quickEdit.findEntryScriptPath('<head></head>'), undefined);
+    });
+  });
+
+  describe('quick-edit cookie', () => {
+    it('round-trips the entry path through the cookie', () => {
+      const setCookie = quickEdit.buildQuickEditCookie('/scripts/scripts.js');
+      assert.ok(setCookie.startsWith('da-quick-edit=%2Fscripts%2Fscripts.js'));
+      assert.ok(setCookie.includes('HttpOnly'));
+      assert.ok(setCookie.includes('SameSite=None'));
+      assert.ok(setCookie.includes('Secure'));
+      // emulate the browser echoing it back
+      const sent = setCookie.split(';')[0];
+      assert.strictEqual(quickEdit.getQuickEditCookiePath(sent), '/scripts/scripts.js');
+    });
+
+    it('reads the path from a header with other cookies', () => {
+      const header = 'auth_token=abc; da-quick-edit=%2Fnx2%2Fscripts%2Fscripts.js; site_token=xyz';
+      assert.strictEqual(quickEdit.getQuickEditCookiePath(header), '/nx2/scripts/scripts.js');
+    });
+
+    it('returns undefined when the cookie is absent', () => {
+      assert.strictEqual(quickEdit.getQuickEditCookiePath('auth_token=abc'), undefined);
+      assert.strictEqual(quickEdit.getQuickEditCookiePath(null), undefined);
     });
   });
 

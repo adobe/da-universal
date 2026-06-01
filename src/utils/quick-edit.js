@@ -49,15 +49,58 @@ const QUICK_EDIT_BOOTSTRAP = `
 })();
 `;
 
+export const QUICK_EDIT_COOKIE = 'da-quick-edit';
+
 /**
- * Whether the requested path is the project's scripts/scripts.js entry point.
- * Matches both `/scripts/scripts.js` and nested roots like
- * `/nx2/scripts/scripts.js`.
- * @param {string} pathname The request pathname
- * @returns {boolean}
+ * Find the project's entry script path in an HTML document. Looks for a
+ * `<script src="…/scripts.js">` tag and returns its normalized pathname, so it
+ * works regardless of subfolder (`/foo/bar/scripts.js`) and ignores an
+ * unrelated file that merely ends in something else.
+ * @param {string} html The page HTML
+ * @returns {string | undefined} The entry script pathname (e.g. `/scripts/scripts.js`)
  */
-export function isQuickEditScriptPath(pathname) {
-  return /(?:^|\/)scripts\/scripts\.js$/.test(pathname);
+export function findEntryScriptPath(html) {
+  const tagRegex = /<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi;
+  let match = tagRegex.exec(html);
+  while (match !== null) {
+    let pathname;
+    try {
+      pathname = new URL(match[1], 'https://da.local').pathname;
+    } catch {
+      pathname = undefined;
+    }
+    if (pathname && /\/scripts\.js$/.test(pathname)) return pathname;
+    match = tagRegex.exec(html);
+  }
+  return undefined;
+}
+
+/**
+ * Build the Set-Cookie value that remembers the quick-edit entry script path.
+ * Presence of the cookie means "this session wants quick-edit"; the value is
+ * the exact path whose request should receive the bootstrap.
+ * @param {string} path The entry script pathname
+ * @returns {string}
+ */
+export function buildQuickEditCookie(path) {
+  const value = encodeURIComponent(path);
+  return `${QUICK_EDIT_COOKIE}=${value}; Secure; Path=/; HttpOnly; SameSite=None; Partitioned; Max-Age=3600`;
+}
+
+/**
+ * Read the remembered entry script path from a request Cookie header.
+ * @param {string | null} cookieHeader The raw Cookie header
+ * @returns {string | undefined} The stored entry script pathname, if any
+ */
+export function getQuickEditCookiePath(cookieHeader) {
+  if (!cookieHeader) return undefined;
+  const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${QUICK_EDIT_COOKIE}=([^;]+)`));
+  if (!match) return undefined;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
