@@ -28,6 +28,88 @@ loadPage();
 `;
 
 describe('quick-edit script transform', () => {
+  describe('injectImportMap', () => {
+    const countImportMaps = (html) => (html.match(/type\s*=\s*["']importmap["']/gi) || []).length;
+
+    it('injects import map at the start of head', () => {
+      const html = '<html><head><title>Test</title></head><body>Content</body></html>';
+      const out = quickEdit.injectImportMap(html);
+      assert.ok(out.includes('<head><script type="importmap">'));
+      assert.ok(out.includes('"da-lit"'));
+    });
+
+    it('injects before module scripts in head', () => {
+      const html = '<html><head><script src="/scripts/scripts.js" type="module"></script></head></html>';
+      const out = quickEdit.injectImportMap(html);
+      const mapPos = out.indexOf('importmap');
+      const scriptPos = out.indexOf('scripts.js');
+      assert.ok(mapPos < scriptPos, 'import map should precede entry module script');
+    });
+
+    it('prepends import map if no head tag', () => {
+      const html = '<html><body>Content</body></html>';
+      const out = quickEdit.injectImportMap(html);
+      assert.ok(out.startsWith('<script type="importmap">'));
+    });
+
+    it('merges in place and keeps a single import map', () => {
+      const existingMap = {
+        imports: { 'existing-package': 'https://example.com/existing.js' },
+      };
+      const html = `<html><head><script type="importmap">${JSON.stringify(existingMap)}</script></head><body></body></html>`;
+      const out = quickEdit.injectImportMap(html);
+      assert.strictEqual(countImportMaps(out), 1);
+      assert.ok(out.includes('"existing-package"'));
+      assert.ok(out.includes('"da-y-wrapper"'));
+    });
+
+    it('merges and overwrites with quick-edit imports', () => {
+      const existingMap = {
+        imports: {
+          'da-lit': 'https://old.com/lit.js',
+          other: 'https://other.com/other.js',
+        },
+      };
+      const html = `<html><head><script type="importmap">${JSON.stringify(existingMap)}</script></head></html>`;
+      const out = quickEdit.injectImportMap(html);
+      assert.strictEqual(countImportMaps(out), 1);
+      assert.ok(out.includes('"da-lit":"https://da.live/deps/lit/dist/index.js"'));
+      assert.ok(out.includes('"other":"https://other.com/other.js"'));
+    });
+
+    it('preserves nonce and scopes on merge', () => {
+      const existingMap = {
+        imports: { 'da-parser': '/deps/da-parser/dist/index.js' },
+        scopes: { '/blocks/': { 'local-dep': './dep.js' } },
+      };
+      const html = `<html><head><script nonce="aem" type="importmap">${JSON.stringify(existingMap)}</script></head></html>`;
+      const out = quickEdit.injectImportMap(html);
+      assert.ok(out.includes('nonce="aem"'));
+      assert.ok(out.includes('"scopes"'));
+      assert.ok(out.includes('"da-parser"'));
+      assert.ok(out.includes('"da-y-wrapper"'));
+    });
+
+    it('is idempotent when quick-edit entries are already present', () => {
+      const map = {
+        imports: {
+          'da-lit': 'https://da.live/deps/lit/dist/index.js',
+          'da-y-wrapper': 'https://da.live/deps/da-y-wrapper/dist/index.js',
+        },
+      };
+      const html = `<html><head><script type="importmap">${JSON.stringify(map)}</script></head></html>`;
+      assert.strictEqual(quickEdit.injectImportMap(html), html);
+    });
+
+    it('replaces invalid existing import map in place', () => {
+      const html = '<html><head><script nonce="x" type="importmap">invalid json</script></head></html>';
+      const out = quickEdit.injectImportMap(html);
+      assert.strictEqual(countImportMaps(out), 1);
+      assert.ok(out.includes('nonce="x"'));
+      assert.ok(out.includes('"da-lit"'));
+    });
+  });
+
   describe('findEntryScriptPath', () => {
     it('finds /scripts/scripts.js from a script tag', () => {
       const html = '<head><script src="/scripts/scripts.js" type="module"></script></head>';

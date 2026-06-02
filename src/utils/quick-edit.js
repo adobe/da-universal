@@ -17,6 +17,8 @@ const QUICK_EDIT_IMPORT_MAP = {
   },
 };
 
+const IMPORT_MAP_SCRIPT_RE = /<script\b([^>]*\btype\s*=\s*["']importmap["'][^>]*)>\s*([^<]*)\s*<\/script>/is;
+
 // Appended to the bottom of the project's scripts/scripts.js. Because it runs
 // inside that module, `loadPage` is already in scope (no import needed) and the
 // module is only ever evaluated once (no double execution from inlining).
@@ -26,13 +28,6 @@ const QUICK_EDIT_BOOTSTRAP = `
 ;(() => {
   const params = new URLSearchParams(window.location.search);
   if (!params.has('quick-edit')) return;
-
-  if (!document.querySelector('script[type="importmap"]')) {
-    const el = document.createElement('script');
-    el.type = 'importmap';
-    el.textContent = ${JSON.stringify(JSON.stringify(QUICK_EDIT_IMPORT_MAP))};
-    document.head.appendChild(el);
-  }
 
   document.body.classList.add('quick-edit');
 
@@ -50,6 +45,78 @@ const QUICK_EDIT_BOOTSTRAP = `
 `;
 
 export const QUICK_EDIT_COOKIE = 'da-quick-edit';
+
+/** @param {object} map */
+function quickEditSatisfied(map) {
+  const imports = map?.imports;
+  if (!imports) return false;
+  return Object.entries(QUICK_EDIT_IMPORT_MAP.imports)
+    .every(([key, url]) => imports[key] === url);
+}
+
+/**
+ * Merge import maps; quick-edit `imports` win on conflict. Other top-level keys
+ * (e.g. `scopes`) are preserved from the existing map.
+ * @param {object} existing
+ * @param {object} overlay
+ */
+function mergeImportMaps(existing, overlay) {
+  return {
+    ...existing,
+    imports: { ...(existing.imports || {}), ...(overlay.imports || {}) },
+  };
+}
+
+/** @param {string} attrs Opening-tag attributes (includes type="importmap"). */
+function importMapScriptTag(attrs, map) {
+  const body = JSON.stringify(map);
+  return attrs.trim()
+    ? `<script ${attrs.trim()}>${body}</script>`
+    : `<script type="importmap">${body}</script>`;
+}
+
+/** Insert snippet at the start of `<head>`, or before `</head>`, or prepend. */
+function insertInHead(html, snippet) {
+  const headOpen = html.match(/<head[^>]*>/i);
+  if (headOpen) {
+    const at = headOpen.index + headOpen[0].length;
+    return html.slice(0, at) + snippet + html.slice(at);
+  }
+  const headClose = html.match(/<\/head>/i);
+  if (headClose) {
+    return html.slice(0, headClose.index) + snippet + headClose[0]
+      + html.slice(headClose.index + headClose[0].length);
+  }
+  return snippet + html;
+}
+
+/**
+ * Inject or update the quick-edit import map in the document `<head>`.
+ * Replaces an existing import map in place (preserving attributes such as
+ * `nonce`). No-ops when the map already includes the quick-edit entries.
+ * @param {string} html
+ * @returns {string}
+ */
+export function injectImportMap(html) {
+  const existing = html.match(IMPORT_MAP_SCRIPT_RE);
+
+  if (existing) {
+    let parsed;
+    try {
+      parsed = JSON.parse(existing[2]);
+    } catch {
+      parsed = {};
+    }
+    if (quickEditSatisfied(parsed)) return html;
+
+    const merged = mergeImportMaps(parsed, QUICK_EDIT_IMPORT_MAP);
+    const tag = importMapScriptTag(existing[1], merged);
+    return html.replace(existing[0], tag);
+  }
+
+  const tag = importMapScriptTag('', QUICK_EDIT_IMPORT_MAP);
+  return insertInHead(html, tag);
+}
 
 /**
  * Find the project's entry script path in an HTML document. Looks for a
@@ -133,19 +200,7 @@ export function hasLoadPageFn(code) {
  * @returns {string} The (possibly unchanged) source
  */
 export function transformScriptForQuickEdit(code) {
-  console.log(`[quick-edit] transform scripts.js: source length=${code.length}`);
-
-  if (alreadyImportsQuickEdit(code)) {
-    console.log('[quick-edit] skip: scripts.js already imports quick-edit itself');
-    return code;
-  }
-
-  if (!hasLoadPageFn(code)) {
-    console.log('[quick-edit] skip: scripts.js has no loadPage function');
-    return code;
-  }
-
-  console.log('[quick-edit] loadPage detected, appending quick-edit bootstrap');
+  if (alreadyImportsQuickEdit(code) || !hasLoadPageFn(code)) return code;
   return `${code}\n${QUICK_EDIT_BOOTSTRAP}\n`;
 }
 

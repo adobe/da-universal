@@ -15,6 +15,7 @@ import {
   buildQuickEditCookie,
   findEntryScriptPath,
   getQuickEditCookiePath,
+  injectImportMap,
 } from '../utils/quick-edit.js';
 
 export async function handleAEMProxyRequest({ req, env, daCtx }) {
@@ -71,7 +72,11 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
     } else {
       console.log('[quick-edit] doc load: no <script src="…/scripts.js"> found in html');
     }
-    response = new Response(html, {
+    const modifiedHtml = injectImportMap(html);
+    if (modifiedHtml !== html) {
+      console.log('[quick-edit] doc load: import map injected into HTML');
+    }
+    response = new Response(modifiedHtml, {
       status: response.status,
       statusText: response.statusText,
       headers,
