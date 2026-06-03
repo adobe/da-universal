@@ -21,7 +21,7 @@ import { selectAll } from 'hast-util-select';
 function makeRow(key, value) {
   return h('div', {}, [
     h('div', {}, [{ type: 'text', value: key }]),
-    h('div', {}, [{ type: 'text', value: value }]),
+    h('div', {}, [{ type: 'text', value }]),
   ]);
 }
 
