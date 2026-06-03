@@ -38,7 +38,7 @@ describe('extractSectionMetadata', () => {
   let toBlockCSSClassNames;
 
   before(async () => {
-    ({ default: extractSectionMetadata, toBlockCSSClassNames } = await esmock('../../src/ue/extract-section-metadata.js'));
+    ({ default: extractSectionMetadata, toBlockCSSClassNames } = await esmock('../../src/ue/section-metadata.js'));
   });
 
   describe('toBlockCSSClassNames', () => {
