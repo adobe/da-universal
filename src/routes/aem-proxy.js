@@ -91,6 +91,6 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
     response = new Response(response.body, response);
   }
 
-  response.headers.set('Access-Control-Allow-Origin', aemUrl.origin);
+  response.headers.set('Access-Control-Allow-Origin', '*');
   return response;
 }
