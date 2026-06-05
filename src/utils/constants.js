@@ -39,7 +39,7 @@ export function isTrustedOrigin(origin) {
 
 export const DEFAULT_CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type, x-site-token',
   'Access-Control-Allow-Credentials': 'true',
 };
 
