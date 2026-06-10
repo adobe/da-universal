@@ -124,14 +124,5 @@ describe('worker fetch handler', () => {
       assert.strictEqual(res.headers.get('Access-Control-Allow-Headers'), 'Authorization, Content-Type, x-site-token');
     });
 
-    it('applies CORS to early-return paths (/.rum/)', async () => {
-      const req = new Request('https://main--site--org.ue.da.live/.rum/100', {
-        headers: { Origin: 'https://da.live' },
-      });
-      const res = await worker.fetch(req, {});
-
-      assert.strictEqual(res.headers.get('Access-Control-Allow-Origin'), 'https://da.live');
-      assert.strictEqual(res.headers.get('Access-Control-Allow-Credentials'), 'true');
-    });
   });
 });

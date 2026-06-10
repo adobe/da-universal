@@ -19,7 +19,8 @@ import postHandlers from './handlers/post.js';
 import unknownHandler from './handlers/unknown.js';
 import optionsHandler from './handlers/options.js';
 
-function withCorsHeaders(response, origin) {
+function withCorsHeaders(response, req) {
+  const origin = req.headers.get('Origin');
   const headers = new Headers(response.headers);
   if (isTrustedOrigin(origin)) {
     headers.set('Access-Control-Allow-Origin', origin);
@@ -40,11 +41,10 @@ function withCorsHeaders(response, origin) {
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
-    const origin = req.headers.get('Origin');
 
-    if (url.pathname === '/favicon.ico') return withCorsHeaders(get404(), origin);
-    if (url.pathname === '/robots.txt') return withCorsHeaders(getRobots(), origin);
-    if (url.pathname.startsWith('/.rum/')) return withCorsHeaders(new Response(null, { status: 200 }), origin);
+    if (url.pathname === '/favicon.ico') return get404();
+    if (url.pathname === '/robots.txt') return getRobots();
+    if (url.pathname.startsWith('/.rum/')) return new Response(null, { status: 200 });
 
     const daCtx = getDaCtx(req);
 
@@ -65,6 +65,6 @@ export default {
       default:
         resp = unknownHandler();
     }
-    return withCorsHeaders(resp, origin);
+    return withCorsHeaders(resp, req);
   },
 };
