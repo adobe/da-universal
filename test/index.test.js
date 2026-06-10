@@ -123,6 +123,5 @@ describe('worker fetch handler', () => {
       assert.strictEqual(res.headers.get('Access-Control-Allow-Methods'), 'GET, HEAD, POST, OPTIONS');
       assert.strictEqual(res.headers.get('Access-Control-Allow-Headers'), 'Authorization, Content-Type, x-site-token');
     });
-
   });
 });
