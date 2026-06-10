@@ -37,12 +37,6 @@ export function isTrustedOrigin(origin) {
   return TRUSTED_ORIGINS_PATTERNS.some((pattern) => pattern.test(origin));
 }
 
-export const DEFAULT_CORS_HEADERS = {
-  'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type, x-site-token',
-  'Access-Control-Allow-Credentials': 'true',
-};
-
 export const UNAUTHORIZED_HTML_MESSAGE = `
 <html>
 <head>

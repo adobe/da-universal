@@ -15,7 +15,6 @@ export function daResp({
   body, status, contentType, contentLength,
 }) {
   const headers = new Headers();
-  headers.append('Access-Control-Allow-Origin', '*');
 
   if (contentType) {
     headers.append('Content-Type', contentType);

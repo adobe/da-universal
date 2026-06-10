@@ -10,6 +10,7 @@
  * governing permissions and limitations under the License.
  */
 import { getDaCtx } from './utils/daCtx.js';
+import { isTrustedOrigin } from './utils/constants.js';
 
 import getHandler from './handlers/get.js';
 import { get404, getRobots } from './responses/index.js';
@@ -18,13 +19,32 @@ import postHandlers from './handlers/post.js';
 import unknownHandler from './handlers/unknown.js';
 import optionsHandler from './handlers/options.js';
 
+function withCorsHeaders(response, origin) {
+  const headers = new Headers(response.headers);
+  if (isTrustedOrigin(origin)) {
+    headers.set('Access-Control-Allow-Origin', origin);
+    headers.set('Access-Control-Allow-Credentials', 'true');
+  } else {
+    headers.set('Access-Control-Allow-Origin', '*');
+    headers.delete('Access-Control-Allow-Credentials');
+  }
+  headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS');
+  headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, x-site-token');
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
+    const origin = req.headers.get('Origin');
 
-    if (url.pathname === '/favicon.ico') return get404();
-    if (url.pathname === '/robots.txt') return getRobots();
-    if (url.pathname.startsWith('/.rum/')) return new Response(null, { status: 200 });
+    if (url.pathname === '/favicon.ico') return withCorsHeaders(get404(), origin);
+    if (url.pathname === '/robots.txt') return withCorsHeaders(getRobots(), origin);
+    if (url.pathname.startsWith('/.rum/')) return withCorsHeaders(new Response(null, { status: 200 }), origin);
 
     const daCtx = getDaCtx(req);
 
@@ -45,6 +65,6 @@ export default {
       default:
         resp = unknownHandler();
     }
-    return resp;
+    return withCorsHeaders(resp, origin);
   },
 };
