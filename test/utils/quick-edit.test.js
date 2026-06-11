@@ -110,6 +110,25 @@ describe('quick-edit script transform', () => {
     });
   });
 
+  describe('prepareQuickEditDocument', () => {
+    it('injects import map and finds entry script', () => {
+      const html = '<html><head><script src="/scripts/scripts.js" type="module"></script></head><body></body></html>';
+      const { html: out, entryPath } = quickEdit.prepareQuickEditDocument(html);
+      assert.strictEqual(entryPath, '/scripts/scripts.js');
+      assert.ok(out.includes('importmap'));
+      assert.ok(out.includes('"da-lit"'));
+    });
+  });
+
+  describe('QUICK_EDIT_404_HTML', () => {
+    it('includes the minimal scaffold and entry script', () => {
+      assert.ok(quickEdit.QUICK_EDIT_404_HTML.includes('<header></header>'));
+      assert.ok(quickEdit.QUICK_EDIT_404_HTML.includes('<main>'));
+      assert.ok(quickEdit.QUICK_EDIT_404_HTML.includes('<footer></footer>'));
+      assert.ok(quickEdit.QUICK_EDIT_404_HTML.includes('/scripts/scripts.js'));
+    });
+  });
+
   describe('findEntryScriptPath', () => {
     it('finds /scripts/scripts.js from a script tag', () => {
       const html = '<head><script src="/scripts/scripts.js" type="module"></script></head>';

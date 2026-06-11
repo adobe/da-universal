@@ -13,10 +13,33 @@ import { getAemCtx } from '../utils/aemCtx.js';
 import {
   applyQuickEditToScript,
   buildQuickEditCookie,
-  findEntryScriptPath,
   getQuickEditCookiePath,
-  injectImportMap,
+  prepareQuickEditDocument,
+  QUICK_EDIT_404_HTML,
 } from '../utils/quick-edit.js';
+
+function buildQuickEditDocumentResponse(html, response) {
+  const { html: modifiedHtml, entryPath } = prepareQuickEditDocument(html);
+  const headers = new Headers(response.headers);
+  // Body has been decoded to text; drop headers that describe the encoded form.
+  headers.delete('Content-Encoding');
+  headers.delete('Content-Length');
+  headers.set('Content-Type', 'text/html; charset=utf-8');
+  if (entryPath) {
+    console.log(`[quick-edit] doc load: entry script ${entryPath} found, setting cookie`);
+    headers.append('Set-Cookie', buildQuickEditCookie(entryPath));
+  } else {
+    console.log('[quick-edit] doc load: no <script src="…/scripts.js"> found in html');
+  }
+  if (modifiedHtml !== html) {
+    console.log('[quick-edit] doc load: import map injected into HTML');
+  }
+  return new Response(modifiedHtml, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
 
 export async function handleAEMProxyRequest({ req, env, daCtx }) {
   const requestUrl = new URL(req.url);
@@ -58,29 +81,13 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
   const isHtml = contentType.includes('text/html');
   const isJs = contentType.includes('javascript');
 
-  if (wantsQuickEdit && isHtml && response.ok) {
-    // Initial quick-edit document: remember the entry script location.
+  const isQuickEditDoc = wantsQuickEdit && !isJs;
+  if (isQuickEditDoc && response.status === 404) {
+    console.log('[quick-edit] doc load: upstream 404, using minimal scaffold');
+    response = buildQuickEditDocumentResponse(QUICK_EDIT_404_HTML, response);
+  } else if (isQuickEditDoc && isHtml && response.ok) {
     const html = await response.text();
-    const entryPath = findEntryScriptPath(html);
-    const headers = new Headers(response.headers);
-    // Body has been decoded to text; drop headers that describe the encoded form.
-    headers.delete('Content-Encoding');
-    headers.delete('Content-Length');
-    if (entryPath) {
-      console.log(`[quick-edit] doc load: entry script ${entryPath} found, setting cookie`);
-      headers.append('Set-Cookie', buildQuickEditCookie(entryPath));
-    } else {
-      console.log('[quick-edit] doc load: no <script src="…/scripts.js"> found in html');
-    }
-    const modifiedHtml = injectImportMap(html);
-    if (modifiedHtml !== html) {
-      console.log('[quick-edit] doc load: import map injected into HTML');
-    }
-    response = new Response(modifiedHtml, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
+    response = buildQuickEditDocumentResponse(html, response);
   } else if (isEntryScript && response.ok && isJs) {
     console.log(`[quick-edit] entry script ${daCtx.aemPathname} matched cookie, attempting bootstrap injection`);
     response = await applyQuickEditToScript(response);

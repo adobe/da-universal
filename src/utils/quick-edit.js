@@ -46,6 +46,16 @@ const QUICK_EDIT_BOOTSTRAP = `
 
 export const QUICK_EDIT_COOKIE = 'da-quick-edit';
 
+/** Minimal page scaffold for quick-edit when the upstream document 404s. */
+export const QUICK_EDIT_404_HTML = `<html><head><script src="/scripts/scripts.js" type="module"></script></head><body>
+    <header></header>
+    <main>
+      <div></div>
+    </main>
+    <footer></footer>
+  </body>
+</html>`;
+
 /** @param {object} map */
 function quickEditSatisfied(map) {
   const imports = map?.imports;
@@ -97,6 +107,18 @@ function insertInHead(html, snippet) {
  * @param {string} html
  * @returns {string}
  */
+/**
+ * Apply quick-edit document transforms: discover entry script, inject import map.
+ * @param {string} html
+ * @returns {{ html: string, entryPath: string | undefined }}
+ */
+export function prepareQuickEditDocument(html) {
+  return {
+    html: injectImportMap(html),
+    entryPath: findEntryScriptPath(html),
+  };
+}
+
 export function injectImportMap(html) {
   const existing = html.match(IMPORT_MAP_SCRIPT_RE);
 
