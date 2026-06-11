@@ -120,12 +120,15 @@ describe('quick-edit script transform', () => {
     });
   });
 
-  describe('QUICK_EDIT_404_HTML', () => {
-    it('includes the minimal scaffold and entry script', () => {
-      assert.ok(quickEdit.QUICK_EDIT_404_HTML.includes('<header></header>'));
-      assert.ok(quickEdit.QUICK_EDIT_404_HTML.includes('<main>'));
-      assert.ok(quickEdit.QUICK_EDIT_404_HTML.includes('<footer></footer>'));
-      assert.ok(quickEdit.QUICK_EDIT_404_HTML.includes('/scripts/scripts.js'));
+  describe('buildQuickEdit404Html', () => {
+    it('includes the minimal scaffold and injects head.html content', () => {
+      const head = '<meta name="cms" content="edge-delivery" /><script src="/scripts/scripts.js" type="module"></script>';
+      const out = quickEdit.buildQuickEdit404Html(head);
+      assert.ok(out.includes('<header></header>'));
+      assert.ok(out.includes('<main>'));
+      assert.ok(out.includes('<footer></footer>'));
+      assert.ok(out.includes('edge-delivery'));
+      assert.ok(out.includes('/scripts/scripts.js'));
     });
   });
 

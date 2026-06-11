@@ -46,8 +46,13 @@ const QUICK_EDIT_BOOTSTRAP = `
 
 export const QUICK_EDIT_COOKIE = 'da-quick-edit';
 
-/** Minimal page scaffold for quick-edit when the upstream document 404s. */
-export const QUICK_EDIT_404_HTML = `<html><head><script src="/scripts/scripts.js" type="module"></script></head><body>
+/**
+ * Build the minimal page scaffold for quick-edit when the upstream document 404s.
+ * @param {string} [headHtml] Resolved AEM head.html fragment
+ * @returns {string}
+ */
+export function buildQuickEdit404Html(headHtml = '') {
+  return `<html><head>${headHtml}</head><body>
     <header></header>
     <main>
       <div></div>
@@ -55,6 +60,7 @@ export const QUICK_EDIT_404_HTML = `<html><head><script src="/scripts/scripts.js
     <footer></footer>
   </body>
 </html>`;
+}
 
 /** @param {object} map */
 function quickEditSatisfied(map) {

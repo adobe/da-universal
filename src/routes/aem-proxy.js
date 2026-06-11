@@ -9,13 +9,13 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { getAemCtx } from '../utils/aemCtx.js';
+import { getAemCtx, getAEMHtml, resolveAemHeadHtmlForLocalhost } from '../utils/aemCtx.js';
 import {
   applyQuickEditToScript,
+  buildQuickEdit404Html,
   buildQuickEditCookie,
   getQuickEditCookiePath,
   prepareQuickEditDocument,
-  QUICK_EDIT_404_HTML,
 } from '../utils/quick-edit.js';
 
 function buildQuickEditDocumentResponse(html, response) {
@@ -84,7 +84,12 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
   const isQuickEditDoc = wantsQuickEdit && !isJs;
   if (isQuickEditDoc && response.status === 404) {
     console.log('[quick-edit] doc load: upstream 404, using minimal scaffold');
-    response = buildQuickEditDocumentResponse(QUICK_EDIT_404_HTML, response);
+    const rawHead = await getAEMHtml(aemCtx, '/head.html');
+    if (!rawHead) {
+      console.log('[quick-edit] doc load: head.html not found on origin');
+    }
+    const headHtml = resolveAemHeadHtmlForLocalhost(rawHead || '', daCtx);
+    response = buildQuickEditDocumentResponse(buildQuickEdit404Html(headHtml), response);
   } else if (isQuickEditDoc && isHtml && response.ok) {
     const html = await response.text();
     response = buildQuickEditDocumentResponse(html, response);

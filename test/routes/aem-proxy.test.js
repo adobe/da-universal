@@ -20,10 +20,19 @@ describe('AEM proxy quick-edit', () => {
   let fetchCalls;
   const env = { UE_HOST: 'test-host', UE_SERVICE: 'test-service' };
 
+  const HEAD_HTML = '<meta name="cms" content="edge-delivery" /><script nonce="aem" src="/scripts/scripts.js" type="module"></script>';
+
   beforeEach(async () => {
     fetchCalls = [];
     globalThis.fetch = async (req) => {
-      fetchCalls.push(req);
+      const url = typeof req === 'string' ? req : req.url;
+      fetchCalls.push(url);
+      if (url.includes('/head.html')) {
+        return new Response(HEAD_HTML, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
       return new Response('<html><body>not found</body></html>', {
         status: 404,
         statusText: 'Not Found',
@@ -47,7 +56,9 @@ describe('AEM proxy quick-edit', () => {
 
     assert.strictEqual(res.status, 404);
     const html = await res.text();
-    assert.ok(html.includes('importmap'));
+    assert.ok(fetchCalls.some((url) => url.includes('/head.html')));
+    assert.ok(html.includes('edge-delivery'));
+    assert.ok(html.includes('nonce="aem"'));
     assert.ok(html.includes('<header></header>'));
     assert.ok(html.includes('<main>'));
     assert.ok(html.includes('<footer></footer>'));
