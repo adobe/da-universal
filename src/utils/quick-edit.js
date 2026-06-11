@@ -113,18 +113,6 @@ function insertInHead(html, snippet) {
  * @param {string} html
  * @returns {string}
  */
-/**
- * Apply quick-edit document transforms: discover entry script, inject import map.
- * @param {string} html
- * @returns {{ html: string, entryPath: string | undefined }}
- */
-export function prepareQuickEditDocument(html) {
-  return {
-    html: injectImportMap(html),
-    entryPath: findEntryScriptPath(html),
-  };
-}
-
 export function injectImportMap(html) {
   const existing = html.match(IMPORT_MAP_SCRIPT_RE);
 
@@ -168,6 +156,18 @@ export function findEntryScriptPath(html) {
     match = tagRegex.exec(html);
   }
   return undefined;
+}
+
+/**
+ * Apply quick-edit document transforms: discover entry script, inject import map.
+ * @param {string} html
+ * @returns {{ html: string, entryPath: string | undefined }}
+ */
+export function prepareQuickEditDocument(html) {
+  return {
+    html: injectImportMap(html),
+    entryPath: findEntryScriptPath(html),
+  };
 }
 
 /**
