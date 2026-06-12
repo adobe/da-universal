@@ -46,6 +46,22 @@ const QUICK_EDIT_BOOTSTRAP = `
 
 export const QUICK_EDIT_COOKIE = 'da-quick-edit';
 
+/**
+ * Build the minimal page scaffold for quick-edit when the upstream document 404s.
+ * @param {string} [headHtml] Resolved AEM head.html fragment
+ * @returns {string}
+ */
+export function buildQuickEdit404Html(headHtml = '') {
+  return `<html><head>${headHtml}</head><body>
+    <header></header>
+    <main>
+      <div></div>
+    </main>
+    <footer></footer>
+  </body>
+</html>`;
+}
+
 /** @param {object} map */
 function quickEditSatisfied(map) {
   const imports = map?.imports;
@@ -140,6 +156,18 @@ export function findEntryScriptPath(html) {
     match = tagRegex.exec(html);
   }
   return undefined;
+}
+
+/**
+ * Apply quick-edit document transforms: discover entry script, inject import map.
+ * @param {string} html
+ * @returns {{ html: string, entryPath: string | undefined }}
+ */
+export function prepareQuickEditDocument(html) {
+  return {
+    html: injectImportMap(html),
+    entryPath: findEntryScriptPath(html),
+  };
 }
 
 /**
