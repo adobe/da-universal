@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 import { daResp, get401 } from '../responses/index.js';
-import { DEFAULT_CORS_HEADERS, isTrustedOrigin } from '../utils/constants.js';
+import { isTrustedOrigin } from '../utils/constants.js';
 
 async function exchangeSiteToken(org, site, accessToken) {
   try {
@@ -75,11 +75,6 @@ export async function getCookie({ req, daCtx }) {
           respHeaders.append('Set-Cookie', `site_token=${siteTokenData.siteToken}; Secure; Path=/; HttpOnly; SameSite=None; Partitioned; Max-Age=${maxAge}`);
         }
       }
-
-      respHeaders.append('Access-Control-Allow-Origin', req.headers.get('Origin'));
-      Object.entries(DEFAULT_CORS_HEADERS).forEach(([key, value]) => {
-        respHeaders.append(key, value);
-      });
 
       return new Response('cookie set', { headers: respHeaders });
     }

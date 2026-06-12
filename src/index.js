@@ -10,6 +10,7 @@
  * governing permissions and limitations under the License.
  */
 import { getDaCtx } from './utils/daCtx.js';
+import { isTrustedOrigin } from './utils/constants.js';
 
 import getHandler from './handlers/get.js';
 import { get404, getRobots } from './responses/index.js';
@@ -17,6 +18,25 @@ import headHandler from './handlers/head.js';
 import postHandlers from './handlers/post.js';
 import unknownHandler from './handlers/unknown.js';
 import optionsHandler from './handlers/options.js';
+
+function withCorsHeaders(response, req) {
+  const origin = req.headers.get('Origin');
+  const headers = new Headers(response.headers);
+  if (isTrustedOrigin(origin)) {
+    headers.set('Access-Control-Allow-Origin', origin);
+    headers.set('Access-Control-Allow-Credentials', 'true');
+  } else {
+    headers.set('Access-Control-Allow-Origin', '*');
+    headers.delete('Access-Control-Allow-Credentials');
+  }
+  headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS');
+  headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, x-site-token');
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
 
 export default {
   async fetch(req, env) {
@@ -45,6 +65,6 @@ export default {
       default:
         resp = unknownHandler();
     }
-    return resp;
+    return withCorsHeaders(resp, req);
   },
 };
