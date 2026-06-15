@@ -11,7 +11,7 @@
  */
 
 import { daResp } from '../responses/index.js';
-import { DEFAULT_CORS_HEADERS, isTrustedOrigin } from '../utils/constants.js';
+import { isTrustedOrigin } from '../utils/constants.js';
 
 export default async function optionsHandler({ req }) {
   const { headers } = req;
@@ -23,13 +23,7 @@ export default async function optionsHandler({ req }) {
     && headers.get('Access-Control-Request-Method') !== null
     && headers.get('Access-Control-Request-Headers') !== null
   ) {
-    const respHeaders = { ...DEFAULT_CORS_HEADERS };
-    respHeaders['Access-Control-Allow-Origin'] = req.headers.get('Origin');
-
-    return new Response(null, {
-      status: 204,
-      headers: respHeaders,
-    });
+    return new Response(null, { status: 204 });
   } else {
     return new Response(null, {
       headers: {
