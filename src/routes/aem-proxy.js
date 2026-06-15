@@ -9,7 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { getAemCtx, getAEMHtml, resolveAemHeadHtmlForLocalhost } from '../utils/aemCtx.js';
+import { getAemCtx, getAEMHtml, fixUrlsWhenLocalDev } from '../utils/aemCtx.js';
 import {
   applyQuickEditToScript,
   buildQuickEdit404Html,
@@ -88,7 +88,7 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
     if (!rawHead) {
       console.log('[quick-edit] doc load: head.html not found on origin');
     }
-    const headHtml = resolveAemHeadHtmlForLocalhost(rawHead || '', daCtx);
+    const headHtml = fixUrlsWhenLocalDev(rawHead || '', daCtx);
     response = buildQuickEditDocumentResponse(buildQuickEdit404Html(headHtml), response);
   } else if (isQuickEditDoc && isHtml && response.ok) {
     const html = await response.text();

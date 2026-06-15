@@ -33,7 +33,7 @@ function injectAEMHtmlHeadEntries(daCtx, headNode, headHtmlStr) {
   const { org, site, orgSiteInPath } = daCtx;
   const aemHeadHtmlTree = fromHtml(headHtmlStr, { fragment: true });
 
-  // TODO: reuse resolveAemHeadHtmlForLocalhost from aemCtx.js instead of duplicating.
+  // TODO: reuse fixUrlsWhenLocalDev from aemCtx.js instead of duplicating.
   if (orgSiteInPath) {
     const headScriptsAndLinks = selectAll(
       'script[src], link[href]',

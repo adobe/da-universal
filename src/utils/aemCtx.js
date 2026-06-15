@@ -62,7 +62,7 @@ export async function getAEMHtml(aemCtx, path) {
  * @param {object} daCtx
  * @returns {string}
  */
-export function resolveAemHeadHtmlForLocalhost(headHtml, daCtx) {
+export function fixUrlsWhenLocalDev(headHtml, daCtx) {
   if (!headHtml) return '';
   const { org, site, orgSiteInPath } = daCtx;
   if (!orgSiteInPath) return headHtml;

@@ -10,6 +10,8 @@
  * governing permissions and limitations under the License.
  */
 
+import { DEFAULT_HTML_TEMPLATE } from './constants.js';
+
 const QUICK_EDIT_IMPORT_MAP = {
   imports: {
     'da-lit': 'https://da.live/deps/lit/dist/index.js',
@@ -52,14 +54,7 @@ export const QUICK_EDIT_COOKIE = 'da-quick-edit';
  * @returns {string}
  */
 export function buildQuickEdit404Html(headHtml = '') {
-  return `<html><head>${headHtml}</head><body>
-    <header></header>
-    <main>
-      <div></div>
-    </main>
-    <footer></footer>
-  </body>
-</html>`;
+  return `<html><head>${headHtml}</head>${DEFAULT_HTML_TEMPLATE}</html>`;
 }
 
 /** @param {object} map */
