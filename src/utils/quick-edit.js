@@ -10,6 +10,12 @@
  * governing permissions and limitations under the License.
  */
 
+import { fromHtml } from 'hast-util-from-html';
+import { toHtml } from 'hast-util-to-html';
+import { select, selectAll } from 'hast-util-select';
+
+import { h } from 'hastscript';
+
 import { DEFAULT_HTML_TEMPLATE } from './constants.js';
 
 const QUICK_EDIT_IMPORT_MAP = {
@@ -18,8 +24,6 @@ const QUICK_EDIT_IMPORT_MAP = {
     'da-y-wrapper': 'https://da.live/deps/da-y-wrapper/dist/index.js',
   },
 };
-
-const IMPORT_MAP_SCRIPT_RE = /<script\b([^>]*\btype\s*=\s*["']importmap["'][^>]*)>\s*([^<]*)\s*<\/script>/is;
 
 // Appended to the bottom of the project's scripts/scripts.js. Because it runs
 // inside that module, `loadPage` is already in scope (no import needed) and the
@@ -48,15 +52,6 @@ const QUICK_EDIT_BOOTSTRAP = `
 
 export const QUICK_EDIT_COOKIE = 'da-quick-edit';
 
-/**
- * Build the minimal page scaffold for quick-edit when the upstream document 404s.
- * @param {string} [headHtml] Resolved AEM head.html fragment
- * @returns {string}
- */
-export function buildQuickEdit404Html(headHtml = '') {
-  return `<html><head>${headHtml}</head>${DEFAULT_HTML_TEMPLATE}</html>`;
-}
-
 /** @param {object} map */
 function quickEditSatisfied(map) {
   const imports = map?.imports;
@@ -78,91 +73,120 @@ function mergeImportMaps(existing, overlay) {
   };
 }
 
-/** @param {string} attrs Opening-tag attributes (includes type="importmap"). */
-function importMapScriptTag(attrs, map) {
-  const body = JSON.stringify(map);
-  return attrs.trim()
-    ? `<script ${attrs.trim()}>${body}</script>`
-    : `<script type="importmap">${body}</script>`;
-}
-
-/** Insert snippet at the start of `<head>`, or before `</head>`, or prepend. */
-function insertInHead(html, snippet) {
-  const headOpen = html.match(/<head[^>]*>/i);
-  if (headOpen) {
-    const at = headOpen.index + headOpen[0].length;
-    return html.slice(0, at) + snippet + html.slice(at);
-  }
-  const headClose = html.match(/<\/head>/i);
-  if (headClose) {
-    return html.slice(0, headClose.index) + snippet + headClose[0]
-      + html.slice(headClose.index + headClose[0].length);
-  }
-  return snippet + html;
-}
+// ─── hast tree helpers ────────────────────────────────────────────────────────
 
 /**
- * Inject or update the quick-edit import map in the document `<head>`.
- * Replaces an existing import map in place (preserving attributes such as
- * `nonce`). No-ops when the map already includes the quick-edit entries.
- * @param {string} html
- * @returns {string}
+ * Walk the tree and return the pathname of the first `<script src="…/scripts.js">`.
+ * @param {import('hast').Root} tree
+ * @returns {string | undefined}
  */
-export function injectImportMap(html) {
-  const existing = html.match(IMPORT_MAP_SCRIPT_RE);
-
-  if (existing) {
-    let parsed;
+function findEntryScriptInTree(tree) {
+  for (const node of selectAll('script[src]', tree)) {
     try {
-      parsed = JSON.parse(existing[2]);
-    } catch {
-      parsed = {};
-    }
-    if (quickEditSatisfied(parsed)) return html;
-
-    const merged = mergeImportMaps(parsed, QUICK_EDIT_IMPORT_MAP);
-    const tag = importMapScriptTag(existing[1], merged);
-    return html.replace(existing[0], tag);
-  }
-
-  const tag = importMapScriptTag('', QUICK_EDIT_IMPORT_MAP);
-  return insertInHead(html, tag);
-}
-
-/**
- * Find the project's entry script path in an HTML document. Looks for a
- * `<script src="…/scripts.js">` tag and returns its normalized pathname, so it
- * works regardless of subfolder (`/foo/bar/scripts.js`) and ignores an
- * unrelated file that merely ends in something else.
- * @param {string} html The page HTML
- * @returns {string | undefined} The entry script pathname (e.g. `/scripts/scripts.js`)
- */
-export function findEntryScriptPath(html) {
-  const tagRegex = /<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi;
-  let match = tagRegex.exec(html);
-  while (match !== null) {
-    let pathname;
-    try {
-      pathname = new URL(match[1], 'https://da.local').pathname;
-    } catch {
-      pathname = undefined;
-    }
-    if (pathname && /\/scripts\.js$/.test(pathname)) return pathname;
-    match = tagRegex.exec(html);
+      const { pathname } = new URL(String(node.properties.src), 'https://da.local');
+      if (/\/scripts\.js$/.test(pathname)) return pathname;
+    } catch { /* ignore */ }
   }
   return undefined;
 }
 
 /**
- * Apply quick-edit document transforms: discover entry script, inject import map.
+ * Inject or update the quick-edit import map in the tree.
+ * Returns true when the tree was modified, false when already satisfied.
+ * @param {import('hast').Root} tree
+ * @returns {boolean}
+ */
+function injectImportMap(tree) {
+  const existing = select('script[type="importmap"]', tree);
+  if (existing) {
+    const text = (existing.children ?? []).find((c) => c.type === 'text')?.value ?? '';
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = {};
+    }
+    if (quickEditSatisfied(parsed)) return false;
+    const merged = mergeImportMaps(parsed, QUICK_EDIT_IMPORT_MAP);
+    existing.children = [{ type: 'text', value: JSON.stringify(merged) }];
+    return true;
+  }
+  const node = h('script', { type: 'importmap' }, JSON.stringify(QUICK_EDIT_IMPORT_MAP));
+  const head = select('head', tree);
+  if (head) {
+    head.children.unshift(node);
+  } else {
+    tree.children = [node, ...(tree.children ?? [])];
+  }
+  return true;
+}
+
+/**
+ * Add the CSP nonce attribute to every `<script>` element that lacks one.
+ * @param {import('hast').Root} tree
+ * @param {string | undefined} nonce
+ */
+function applyNonceInTree(tree, nonce) {
+  if (!nonce) return;
+  for (const node of selectAll('script', tree)) {
+    node.properties ??= {};
+    node.properties.nonce = nonce;
+  }
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Extract the CSP nonce value from a Content-Security-Policy header.
+ * Matches the `'nonce-VALUE'` token in the script-src directive only.
+ * @param {string | null} cspHeader
+ * @returns {string | undefined}
+ */
+export function extractCspNonce(cspHeader) {
+  if (!cspHeader) return undefined;
+  const directive = cspHeader.match(/(?:^|;)\s*script-src\s+([^;]*)/i);
+  if (!directive) return undefined;
+  const nonce = directive[1].match(/'nonce-([^']+)'/);
+  return nonce ? nonce[1] : undefined;
+}
+
+/**
+ * Build the minimal page scaffold for quick-edit when the upstream document 404s.
+ * Extracts the CSP nonce from the response and applies it to all script tags.
+ * @param {string} [headHtml] Resolved AEM head.html fragment
+ * @param {Response} [response] Upstream response — used to read the CSP header
+ * @returns {string}
+ */
+export function buildQuickEdit404Html(headHtml = '', response = undefined) {
+  const nonce = extractCspNonce(response?.headers?.get('Content-Security-Policy'));
+  const tree = fromHtml(`<html><head>${headHtml}</head>${DEFAULT_HTML_TEMPLATE}</html>`);
+  injectImportMap(tree);
+  applyNonceInTree(tree, nonce);
+  return toHtml(tree, { allowDangerousHtml: true });
+}
+
+/**
+ * Find the project's entry script path in an HTML document. Looks for a
+ * `<script src="…/scripts.js">` tag and returns its normalized pathname.
+ * @param {string} html The page HTML
+ * @returns {string | undefined}
+ */
+export function findEntryScriptPath(html) {
+  return findEntryScriptInTree(fromHtml(html, { fragment: true }));
+}
+
+/**
+ * Apply quick-edit document transforms: discover entry script, inject import map, apply nonce.
  * @param {string} html
+ * @param {string | undefined} [nonce] CSP nonce to stamp onto all script tags
  * @returns {{ html: string, entryPath: string | undefined }}
  */
-export function prepareQuickEditDocument(html) {
-  return {
-    html: injectImportMap(html),
-    entryPath: findEntryScriptPath(html),
-  };
+export function prepareQuickEditDocument(html, nonce) {
+  const tree = fromHtml(html);
+  const entryPath = findEntryScriptInTree(tree);
+  injectImportMap(tree);
+  applyNonceInTree(tree, nonce);
+  return { html: toHtml(tree, { allowDangerousHtml: true }), entryPath };
 }
 
 /**

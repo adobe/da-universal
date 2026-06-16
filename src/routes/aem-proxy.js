@@ -14,12 +14,14 @@ import {
   applyQuickEditToScript,
   buildQuickEdit404Html,
   buildQuickEditCookie,
+  extractCspNonce,
   getQuickEditCookiePath,
   prepareQuickEditDocument,
 } from '../utils/quick-edit.js';
 
 function buildQuickEditDocumentResponse(html, response) {
-  const { html: modifiedHtml, entryPath } = prepareQuickEditDocument(html);
+  const nonce = extractCspNonce(response.headers.get('Content-Security-Policy'));
+  const { html: finalHtml, entryPath } = prepareQuickEditDocument(html, nonce);
   const headers = new Headers(response.headers);
   // Body has been decoded to text; drop headers that describe the encoded form.
   headers.delete('Content-Encoding');
@@ -31,10 +33,10 @@ function buildQuickEditDocumentResponse(html, response) {
   } else {
     console.log('[quick-edit] doc load: no <script src="…/scripts.js"> found in html');
   }
-  if (modifiedHtml !== html) {
-    console.log('[quick-edit] doc load: import map injected into HTML');
+  if (nonce) {
+    console.log('[quick-edit] doc load: CSP nonce applied to script tags');
   }
-  return new Response(modifiedHtml, {
+  return new Response(finalHtml, {
     status: response.status,
     statusText: response.statusText,
     headers,
@@ -89,7 +91,7 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
       console.log('[quick-edit] doc load: head.html not found on origin');
     }
     const headHtml = fixUrlsWhenLocalDev(rawHead || '', daCtx);
-    response = buildQuickEditDocumentResponse(buildQuickEdit404Html(headHtml), response);
+    response = buildQuickEditDocumentResponse(buildQuickEdit404Html(headHtml, response), response);
   } else if (isQuickEditDoc && isHtml && response.ok) {
     const html = await response.text();
     response = buildQuickEditDocumentResponse(html, response);
