@@ -10,6 +10,8 @@
  * governing permissions and limitations under the License.
  */
 
+import { DEFAULT_HTML_TEMPLATE } from './constants.js';
+
 const QUICK_EDIT_IMPORT_MAP = {
   imports: {
     'da-lit': 'https://da.live/deps/lit/dist/index.js',
@@ -45,6 +47,15 @@ const QUICK_EDIT_BOOTSTRAP = `
 `;
 
 export const QUICK_EDIT_COOKIE = 'da-quick-edit';
+
+/**
+ * Build the minimal page scaffold for quick-edit when the upstream document 404s.
+ * @param {string} [headHtml] Resolved AEM head.html fragment
+ * @returns {string}
+ */
+export function buildQuickEdit404Html(headHtml = '') {
+  return `<html><head>${headHtml}</head>${DEFAULT_HTML_TEMPLATE}</html>`;
+}
 
 /** @param {object} map */
 function quickEditSatisfied(map) {
@@ -140,6 +151,18 @@ export function findEntryScriptPath(html) {
     match = tagRegex.exec(html);
   }
   return undefined;
+}
+
+/**
+ * Apply quick-edit document transforms: discover entry script, inject import map.
+ * @param {string} html
+ * @returns {{ html: string, entryPath: string | undefined }}
+ */
+export function prepareQuickEditDocument(html) {
+  return {
+    html: injectImportMap(html),
+    entryPath: findEntryScriptPath(html),
+  };
 }
 
 /**

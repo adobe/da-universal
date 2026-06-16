@@ -110,6 +110,28 @@ describe('quick-edit script transform', () => {
     });
   });
 
+  describe('prepareQuickEditDocument', () => {
+    it('injects import map and finds entry script', () => {
+      const html = '<html><head><script src="/scripts/scripts.js" type="module"></script></head><body></body></html>';
+      const { html: out, entryPath } = quickEdit.prepareQuickEditDocument(html);
+      assert.strictEqual(entryPath, '/scripts/scripts.js');
+      assert.ok(out.includes('importmap'));
+      assert.ok(out.includes('"da-lit"'));
+    });
+  });
+
+  describe('buildQuickEdit404Html', () => {
+    it('includes the minimal scaffold and injects head.html content', () => {
+      const head = '<meta name="cms" content="edge-delivery" /><script src="/scripts/scripts.js" type="module"></script>';
+      const out = quickEdit.buildQuickEdit404Html(head);
+      assert.ok(out.includes('<header></header>'));
+      assert.ok(out.includes('<main>'));
+      assert.ok(out.includes('<footer></footer>'));
+      assert.ok(out.includes('edge-delivery'));
+      assert.ok(out.includes('/scripts/scripts.js'));
+    });
+  });
+
   describe('findEntryScriptPath', () => {
     it('finds /scripts/scripts.js from a script tag', () => {
       const html = '<head><script src="/scripts/scripts.js" type="module"></script></head>';

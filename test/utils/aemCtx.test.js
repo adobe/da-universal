@@ -19,12 +19,14 @@ import { getDaCtx } from '../../src/utils/daCtx.js';
 describe('AEM context', () => {
   let getAemCtx;
   let getAEMHtml;
+  let fixUrlsWhenLocalDev;
   let aemCtx;
 
   beforeEach(async () => {
     const mod = await esmock('../../src/utils/aemCtx.js');
     getAemCtx = mod.getAemCtx;
     getAEMHtml = mod.getAEMHtml;
+    fixUrlsWhenLocalDev = mod.fixUrlsWhenLocalDev;
   });
 
   describe('AEM context from environment', () => {
@@ -89,6 +91,22 @@ describe('AEM context', () => {
     it('should return undefined for failed request', async () => {
       const html = await getAEMHtml(mockAemCtx, '/fail-path');
       assert.strictEqual(html, undefined);
+    });
+  });
+
+  describe('fixUrlsWhenLocalDev', () => {
+    it('returns head.html unchanged for hosted UE paths', () => {
+      const head = '<script src="/scripts/scripts.js"></script>';
+      const daCtx = getDaCtx(reqs.content);
+      assert.strictEqual(fixUrlsWhenLocalDev(head, daCtx), head);
+    });
+
+    it('prefixes script and link URLs for localhost org/site paths', () => {
+      const head = '<script src="/scripts/scripts.js"></script><link href="/styles/styles.css" rel="stylesheet">';
+      const daCtx = getDaCtx(reqs.localhost);
+      const out = fixUrlsWhenLocalDev(head, daCtx);
+      assert.ok(out.includes('src="/org/site/scripts/scripts.js"'));
+      assert.ok(out.includes('href="/org/site/styles/styles.css"'));
     });
   });
 });

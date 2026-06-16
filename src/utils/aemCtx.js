@@ -9,6 +9,9 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+import { fromHtml } from 'hast-util-from-html';
+import { selectAll } from 'hast-util-select';
+import { toHtml } from 'hast-util-to-html';
 
 export function getAemCtx(env, daCtx) {
   const {
@@ -49,4 +52,29 @@ export async function getAEMHtml(aemCtx, path) {
   if (!resp.ok) return undefined;
   const headHtml = await resp.text();
   return headHtml;
+}
+
+/**
+ * Prefix AEM head.html script/link URLs with /{org}/{site} on localhost dev.
+ * No-op on hosted UE hosts where the site already lives at the URL root.
+ * TODO: reuse with injectAEMHtmlHeadEntries in ue.js (same localhost rewrite).
+ * @param {string} headHtml
+ * @param {object} daCtx
+ * @returns {string}
+ */
+export function fixUrlsWhenLocalDev(headHtml, daCtx) {
+  if (!headHtml) return '';
+  const { org, site, orgSiteInPath } = daCtx;
+  if (!orgSiteInPath) return headHtml;
+
+  const tree = fromHtml(headHtml, { fragment: true });
+  selectAll('script[src], link[href]', tree).forEach((node) => {
+    const attrName = node.tagName === 'script' ? 'src' : 'href';
+    const url = node.properties[attrName];
+    if (!url.startsWith('http') && !url.startsWith(`/${org}/${site}`)) {
+      // eslint-disable-next-line no-param-reassign
+      node.properties[attrName] = `/${org}/${site}${url}`;
+    }
+  });
+  return toHtml(tree, { allowDangerousHtml: true });
 }
