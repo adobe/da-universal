@@ -11,12 +11,42 @@
  */
 
 import { get404, getRobots } from '../responses/index.js';
+import { handleAEMProxyRequest } from '../routes/aem-proxy.js';
+import { daSourceHead } from '../routes/da-admin.js';
 
-// eslint-disable-next-line no-unused-vars
-export default async function headHandler({ env, daCtx }) {
+async function aemHead({ req, env, daCtx }) {
+  const getReq = new Request(req, { method: 'GET' });
+  const resp = await handleAEMProxyRequest({ req: getReq, env, daCtx });
+  return new Response(null, { status: resp.status, headers: resp.headers });
+}
+
+export default async function headHandler({ req, env, daCtx }) {
   const { path } = daCtx;
 
+  if (!daCtx.site) return get404();
   if (path.startsWith('/favicon.ico')) return get404();
   if (path.startsWith('/robots.txt')) return getRobots();
-  return undefined;
+
+  const resourceRegex = /\.(css|js|js\.map|json|xml|woff|woff2|otf|ttf|plain\.html)$/i;
+  if (resourceRegex.test(path)) {
+    return aemHead({ req, env, daCtx });
+  }
+
+  const assetRegex = /\.(png|jpg|jpeg|webp|gif|svg|ico)$/i;
+  if (assetRegex.test(path)) {
+    return aemHead({ req, env, daCtx });
+  }
+
+  const url = new URL(req.url);
+  const isPreviewHost = url.hostname.endsWith('.preview.da.live') || url.hostname.endsWith('.stage-preview.da.live');
+
+  if (
+    url.searchParams.get('dapreview') === 'on'
+    || isPreviewHost
+    || url.searchParams.has('quick-edit')
+  ) {
+    return aemHead({ req, env, daCtx });
+  }
+
+  return daSourceHead({ env, daCtx });
 }

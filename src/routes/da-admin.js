@@ -130,6 +130,26 @@ export async function daSourceGet({ req, env, daCtx }) {
   });
 }
 
+export async function daSourceHead({ env, daCtx }) {
+  const {
+    org, site, path, ext, authToken,
+  } = daCtx;
+
+  if (!authToken) {
+    return get401();
+  }
+
+  const headers = new Headers();
+  headers.set('Authorization', authToken);
+
+  const adminPath = ext !== 'html' ? path : `${path}.${ext}`;
+  const adminUrl = new URL(`/source/${org}/${site}${adminPath}`, env.DA_ADMIN);
+  console.log(`-> HEAD ${adminUrl.toString()}`);
+  const response = await env.daadmin.fetch(adminUrl, { method: 'HEAD', headers });
+  console.log(`<- HEAD ${adminUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+  return new Response(null, { status: response.status, headers: response.headers });
+}
+
 export async function daSourcePost({ req, env, daCtx }) {
   const {
     org, site, path, ext, authToken,
