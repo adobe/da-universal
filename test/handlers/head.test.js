@@ -113,51 +113,97 @@ describe('HEAD handler', () => {
   });
 
   describe('assets', () => {
-    let headHandler;
+    describe('when daSourceHead returns 200', () => {
+      let headHandler;
 
-    beforeEach(async () => {
-      headHandler = (await esmock('../../src/handlers/head.js', {
-        '../../src/routes/da-admin.js': { daSourceHead: async () => new Response(null, { status: 200 }) },
-        '../../src/routes/aem-proxy.js': {
-          handleAEMProxyRequest: async () => new Response('image-data', {
-            status: 200,
-            headers: { 'Content-Type': 'image/png', 'Content-Length': '42' },
-          }),
-        },
-      })).default;
+      beforeEach(async () => {
+        headHandler = (await esmock('../../src/handlers/head.js', {
+          '../../src/routes/da-admin.js': {
+            daSourceHead: async () => new Response(null, {
+              status: 200,
+              headers: { 'Content-Type': 'image/png', 'Content-Length': '42' },
+            }),
+          },
+          '../../src/routes/aem-proxy.js': {
+            handleAEMProxyRequest: async () => new Response(null, { status: 404 }),
+          },
+        })).default;
+      });
+
+      it('returns DA response for .png', async () => {
+        const req = new Request('https://main--site--org.ue.da.live/image.png', { method: 'HEAD' });
+        const daCtx = getDaCtx(req);
+        const env = {};
+
+        const res = await headHandler({ req, env, daCtx });
+
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(await res.text(), '');
+        assert.strictEqual(res.headers.get('Content-Type'), 'image/png');
+        assert.strictEqual(res.headers.get('Content-Length'), '42');
+      });
+
+      it('returns DA response for .svg', async () => {
+        const req = new Request('https://main--site--org.ue.da.live/icon.svg', { method: 'HEAD' });
+        const daCtx = getDaCtx(req);
+        const env = {};
+
+        const res = await headHandler({ req, env, daCtx });
+
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(await res.text(), '');
+      });
     });
 
-    it('proxies to AEM for .png and returns no body', async () => {
-      const req = new Request('https://main--site--org.ue.da.live/image.png', { method: 'HEAD' });
-      const daCtx = getDaCtx(req);
-      const env = {};
+    describe('when daSourceHead fails and AEM proxy succeeds', () => {
+      let headHandler;
 
-      const res = await headHandler({ req, env, daCtx });
+      beforeEach(async () => {
+        headHandler = (await esmock('../../src/handlers/head.js', {
+          '../../src/routes/da-admin.js': {
+            daSourceHead: async () => new Response(null, { status: 404 }),
+          },
+          '../../src/routes/aem-proxy.js': {
+            handleAEMProxyRequest: async () => new Response(null, { status: 200 }),
+          },
+        })).default;
+      });
 
-      assert.strictEqual(res.status, 200);
-      assert.strictEqual(await res.text(), '');
+      it('falls back to AEM response', async () => {
+        const req = new Request('https://main--site--org.ue.da.live/image.png', { method: 'HEAD' });
+        const daCtx = getDaCtx(req);
+        const env = {};
+
+        const res = await headHandler({ req, env, daCtx });
+
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(await res.text(), '');
+      });
     });
 
-    it('proxies to AEM for .svg and returns no body', async () => {
-      const req = new Request('https://main--site--org.ue.da.live/icon.svg', { method: 'HEAD' });
-      const daCtx = getDaCtx(req);
-      const env = {};
+    describe('when both daSourceHead and AEM proxy fail', () => {
+      let headHandler;
 
-      const res = await headHandler({ req, env, daCtx });
+      beforeEach(async () => {
+        headHandler = (await esmock('../../src/handlers/head.js', {
+          '../../src/routes/da-admin.js': {
+            daSourceHead: async () => Promise.reject(new Error('fail')),
+          },
+          '../../src/routes/aem-proxy.js': {
+            handleAEMProxyRequest: async () => Promise.reject(new Error('fail')),
+          },
+        })).default;
+      });
 
-      assert.strictEqual(res.status, 200);
-      assert.strictEqual(await res.text(), '');
-    });
+      it('returns 404', async () => {
+        const req = new Request('https://main--site--org.ue.da.live/image.png', { method: 'HEAD' });
+        const daCtx = getDaCtx(req);
+        const env = {};
 
-    it('forwards headers from AEM proxy response', async () => {
-      const req = new Request('https://main--site--org.ue.da.live/image.png', { method: 'HEAD' });
-      const daCtx = getDaCtx(req);
-      const env = {};
+        const res = await headHandler({ req, env, daCtx });
 
-      const res = await headHandler({ req, env, daCtx });
-
-      assert.strictEqual(res.headers.get('Content-Type'), 'image/png');
-      assert.strictEqual(res.headers.get('Content-Length'), '42');
+        assert.strictEqual(res.status, 404);
+      });
     });
   });
 

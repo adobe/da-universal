@@ -34,7 +34,18 @@ export default async function headHandler({ req, env, daCtx }) {
 
   const assetRegex = /\.(png|jpg|jpeg|webp|gif|svg|ico)$/i;
   if (assetRegex.test(path)) {
-    return aemHead({ req, env, daCtx });
+    const [daSourceHeadRes, aemHeadRes] = await Promise.allSettled([
+      daSourceHead({ env, daCtx }),
+      aemHead({ req, env, daCtx }),
+    ]);
+
+    if (daSourceHeadRes.status === 'fulfilled' && daSourceHeadRes.value.status === 200) {
+      return daSourceHeadRes.value;
+    } else if (aemHeadRes.status === 'fulfilled') {
+      return aemHeadRes.value;
+    } else {
+      return get404();
+    }
   }
 
   const url = new URL(req.url);
