@@ -27,8 +27,13 @@ export default async function headHandler({ req, env, daCtx }) {
   if (path.startsWith('/favicon.ico')) return get404();
   if (path.startsWith('/robots.txt')) return getRobots();
 
-  const aemRegex = /\.(css|js|js\.map|json|xml|woff|woff2|otf|ttf|plain\.html|png|jpg|jpeg|webp|gif|svg|ico)$/i;
-  if (aemRegex.test(path)) {
+  const resourceRegex = /\.(css|js|js\.map|json|xml|woff|woff2|otf|ttf|plain\.html)$/i;
+  if (resourceRegex.test(path)) {
+    return aemHead({ req, env, daCtx });
+  }
+
+  const assetRegex = /\.(png|jpg|jpeg|webp|gif|svg|ico)$/i;
+  if (assetRegex.test(path)) {
     return aemHead({ req, env, daCtx });
   }
 
