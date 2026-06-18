@@ -14,6 +14,8 @@ import { get404, getRobots } from '../responses/index.js';
 import { handleAEMProxyRequest } from '../routes/aem-proxy.js';
 import { daSourceHead } from '../routes/da-admin.js';
 
+// for AEM we reuse the handleAEMProxyRequest for now as GETs are cheap here
+// TODO refine and review for later for a full HEAD requests on AEM
 async function aemHead({ req, env, daCtx }) {
   const getReq = new Request(req, { method: 'GET' });
   const resp = await handleAEMProxyRequest({ req: getReq, env, daCtx });
