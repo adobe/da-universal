@@ -181,6 +181,81 @@ describe('HEAD handler', () => {
       });
     });
 
+    describe('when AEM proxy returns 401', () => {
+      let headHandler;
+
+      beforeEach(async () => {
+        headHandler = (await esmock('../../src/handlers/head.js', {
+          '../../src/routes/da-admin.js': {
+            daSourceHead: async () => new Response(null, { status: 404 }),
+          },
+          '../../src/routes/aem-proxy.js': {
+            handleAEMProxyRequest: async () => new Response(null, { status: 401 }),
+          },
+        })).default;
+      });
+
+      it('passes through 401 so client can authenticate', async () => {
+        const req = new Request('https://main--site--org.ue.da.live/image.png', { method: 'HEAD' });
+        const daCtx = getDaCtx(req);
+        const env = {};
+
+        const res = await headHandler({ req, env, daCtx });
+
+        assert.strictEqual(res.status, 401);
+      });
+    });
+
+    describe('when AEM proxy returns 403', () => {
+      let headHandler;
+
+      beforeEach(async () => {
+        headHandler = (await esmock('../../src/handlers/head.js', {
+          '../../src/routes/da-admin.js': {
+            daSourceHead: async () => new Response(null, { status: 404 }),
+          },
+          '../../src/routes/aem-proxy.js': {
+            handleAEMProxyRequest: async () => new Response(null, { status: 403 }),
+          },
+        })).default;
+      });
+
+      it('passes through 403 so client knows access is denied', async () => {
+        const req = new Request('https://main--site--org.ue.da.live/image.png', { method: 'HEAD' });
+        const daCtx = getDaCtx(req);
+        const env = {};
+
+        const res = await headHandler({ req, env, daCtx });
+
+        assert.strictEqual(res.status, 403);
+      });
+    });
+
+    describe('when AEM proxy returns 5xx', () => {
+      let headHandler;
+
+      beforeEach(async () => {
+        headHandler = (await esmock('../../src/handlers/head.js', {
+          '../../src/routes/da-admin.js': {
+            daSourceHead: async () => new Response(null, { status: 404 }),
+          },
+          '../../src/routes/aem-proxy.js': {
+            handleAEMProxyRequest: async () => new Response(null, { status: 500 }),
+          },
+        })).default;
+      });
+
+      it('returns 404 when AEM has a server error', async () => {
+        const req = new Request('https://main--site--org.ue.da.live/image.png', { method: 'HEAD' });
+        const daCtx = getDaCtx(req);
+        const env = {};
+
+        const res = await headHandler({ req, env, daCtx });
+
+        assert.strictEqual(res.status, 404);
+      });
+    });
+
     describe('when both daSourceHead and AEM proxy fail', () => {
       let headHandler;
 

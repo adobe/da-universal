@@ -43,11 +43,12 @@ export default async function headHandler({ req, env, daCtx }) {
 
     if (daSourceHeadRes.status === 'fulfilled' && daSourceHeadRes.value.status === 200) {
       return daSourceHeadRes.value;
-    } else if (aemHeadRes.status === 'fulfilled') {
-      return aemHeadRes.value;
-    } else {
-      return get404();
     }
+    const aemResponse = aemHeadRes.status === 'fulfilled' ? aemHeadRes.value : null;
+    if (aemResponse && aemResponse.status < 500) {
+      return aemResponse;
+    }
+    return get404();
   }
 
   const url = new URL(req.url);

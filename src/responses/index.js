@@ -36,6 +36,10 @@ export function get401(message = DEFAULT_UNAUTHORIZED_HTML_MESSAGE) {
   return daResp({ body: message, status: 401, contentType: 'text/html' });
 }
 
+export function head401() {
+  return new Response(null, { status: 401 });
+}
+
 export function getRobots() {
   const body = `User-agent: *
 Disallow: /`;
