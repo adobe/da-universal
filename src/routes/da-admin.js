@@ -17,7 +17,9 @@ import putHelper from '../helpers/source.js';
 import { removeUEAttributes, unwrapParagraphs } from '../ue/attributes.js';
 import { prepareHtml } from '../ue/ue.js';
 import { getAemCtx, getAEMHtml } from '../utils/aemCtx.js';
-import { daResp, get401, get404 } from '../responses/index.js';
+import {
+  daResp, get401, get404, head401,
+} from '../responses/index.js';
 import { BRANCH_NOT_FOUND_HTML_MESSAGE, DEFAULT_HTML_TEMPLATE, UNAUTHORIZED_HTML_MESSAGE } from '../utils/constants.js';
 import { getSiteConfig } from '../storage/config.js';
 import { restoreAbsoluteImages } from '../ue/rewrite-images.js';
@@ -128,6 +130,26 @@ export async function daSourceGet({ req, env, daCtx }) {
     contentLength: body.length,
     contentType: 'text/html; charset=utf-8',
   });
+}
+
+export async function daSourceHead({ env, daCtx }) {
+  const {
+    org, site, path, ext, authToken,
+  } = daCtx;
+
+  if (!authToken) {
+    return head401();
+  }
+
+  const headers = new Headers();
+  headers.set('Authorization', authToken);
+
+  const adminPath = ext !== 'html' ? path : `${path}.${ext}`;
+  const adminUrl = new URL(`/source/${org}/${site}${adminPath}`, env.DA_ADMIN);
+  console.log(`-> HEAD ${adminUrl.toString()}`);
+  const response = await env.daadmin.fetch(adminUrl, { method: 'HEAD', headers });
+  console.log(`<- HEAD ${adminUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+  return new Response(null, { status: response.status, headers: response.headers });
 }
 
 export async function daSourcePost({ req, env, daCtx }) {

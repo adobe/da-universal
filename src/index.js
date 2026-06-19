@@ -54,7 +54,7 @@ export default {
         resp = await optionsHandler({ req });
         break;
       case 'HEAD':
-        resp = await headHandler({ env, daCtx });
+        resp = await headHandler({ req, env, daCtx });
         break;
       case 'GET':
         resp = await getHandler({ req, env, daCtx });
