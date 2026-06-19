@@ -40,6 +40,10 @@ export function head401() {
   return new Response(null, { status: 401 });
 }
 
+export function head404() {
+  return new Response(null, { status: 404 });
+}
+
 export function getRobots() {
   const body = `User-agent: *
 Disallow: /`;

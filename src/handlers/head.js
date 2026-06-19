@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 
-import { get404, getRobots } from '../responses/index.js';
+import { getRobots, head404 } from '../responses/index.js';
 import { handleAEMProxyRequest } from '../routes/aem-proxy.js';
 import { daSourceHead } from '../routes/da-admin.js';
 
@@ -25,8 +25,8 @@ async function aemHead({ req, env, daCtx }) {
 export default async function headHandler({ req, env, daCtx }) {
   const { path } = daCtx;
 
-  if (!daCtx.site) return get404();
-  if (path.startsWith('/favicon.ico')) return get404();
+  if (!daCtx.site) return head404();
+  if (path.startsWith('/favicon.ico')) return head404();
   if (path.startsWith('/robots.txt')) return getRobots();
 
   const resourceRegex = /\.(css|js|js\.map|json|xml|woff|woff2|otf|ttf|plain\.html)$/i;
@@ -48,7 +48,7 @@ export default async function headHandler({ req, env, daCtx }) {
     if (aemResponse && aemResponse.status < 500) {
       return aemResponse;
     }
-    return get404();
+    return head404();
   }
 
   const url = new URL(req.url);
