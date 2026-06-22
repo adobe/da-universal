@@ -20,6 +20,7 @@ import { injectUEAttributes } from './attributes.js';
 import { extractLocalMetadata, fetchBulkMetadata } from './metadata.js';
 import rewriteIcons from './rewrite-icons.js';
 import { makeImagesRelative } from './rewrite-images.js';
+import extractSectionMetadata from './section-metadata.js';
 
 /**
  * Injects AEM HTML head entries into the head node of an HTML document.
@@ -101,6 +102,9 @@ export async function prepareHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
 
   // add UE head script and meta tags
   headNode.children.push(...getUEHtmlHeadEntries(daCtx, aemCtx));
+
+  // extract section metadata and apply as data attributes / classes to parent sections
+  extractSectionMetadata(bodyTree);
 
   // rewrite content.da.live images to relative paths
   makeImagesRelative(bodyNode, daCtx);
