@@ -16,8 +16,6 @@ import { select, selectAll } from 'hast-util-select';
 
 import { h } from 'hastscript';
 
-import { DEFAULT_HTML_TEMPLATE } from './constants.js';
-
 const QUICK_EDIT_IMPORT_MAP = {
   imports: {
     'da-lit': 'https://da.live/deps/lit/dist/index.js',
@@ -151,21 +149,6 @@ export function extractCspNonce(cspHeader) {
 }
 
 /**
- * Build the minimal page scaffold for quick-edit when the upstream document 404s.
- * Extracts the CSP nonce from the response and applies it to all script tags.
- * @param {string} [headHtml] Resolved AEM head.html fragment
- * @param {Response} [response] Upstream response — used to read the CSP header
- * @returns {string}
- */
-export function buildQuickEdit404Html(headHtml = '', response = undefined) {
-  const nonce = extractCspNonce(response?.headers?.get('Content-Security-Policy'));
-  const tree = fromHtml(`<html><head>${headHtml}</head>${DEFAULT_HTML_TEMPLATE}</html>`);
-  injectImportMap(tree);
-  applyNonceInTree(tree, nonce);
-  return toHtml(tree, { allowDangerousHtml: true });
-}
-
-/**
  * Find the project's entry script path in an HTML document. Looks for a
  * `<script src="…/scripts.js">` tag and returns its normalized pathname.
  * @param {string} html The page HTML
@@ -176,6 +159,21 @@ export function findEntryScriptPath(html) {
 }
 
 /**
+ * Apply quick-edit document transforms to a hast tree in place: inject the
+ * import map, stamp the CSP nonce onto script tags, and discover the entry
+ * script path (used to set the quick-edit cookie).
+ * @param {import('hast').Root} tree The document tree (mutated in place)
+ * @param {string | undefined} [nonce] CSP nonce to stamp onto all script tags
+ * @returns {string | undefined} The entry script path, if found
+ */
+export function applyQuickEditToDocument(tree, nonce) {
+  const entryPath = findEntryScriptInTree(tree);
+  injectImportMap(tree);
+  applyNonceInTree(tree, nonce);
+  return entryPath;
+}
+
+/**
  * Apply quick-edit document transforms: discover entry script, inject import map, apply nonce.
  * @param {string} html
  * @param {string | undefined} [nonce] CSP nonce to stamp onto all script tags
@@ -183,9 +181,7 @@ export function findEntryScriptPath(html) {
  */
 export function prepareQuickEditDocument(html, nonce) {
   const tree = fromHtml(html);
-  const entryPath = findEntryScriptInTree(tree);
-  injectImportMap(tree);
-  applyNonceInTree(tree, nonce);
+  const entryPath = applyQuickEditToDocument(tree, nonce);
   return { html: toHtml(tree, { allowDangerousHtml: true }), entryPath };
 }
 

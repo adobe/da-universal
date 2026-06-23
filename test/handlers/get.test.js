@@ -224,30 +224,23 @@ describe('GET handler', () => {
     });
   });
 
-  describe('preview', () => {
+  describe('preview / quick-edit', () => {
     let getHandler;
 
     beforeEach(async () => {
+      // HTML always composes via daSourceGet now; the preview / quick-edit / UE
+      // distinction is applied as a layer inside daSourceGet, not routed here.
       getHandler = (await esmock('../../src/handlers/get.js', {
-        '../../src/routes/da-admin.js': { daSourceGet: async () => new Response() },
+        '../../src/routes/da-admin.js': {
+          daSourceGet: async () => new Response('composed-content', { status: 200 }),
+        },
         '../../src/routes/aem-proxy.js': {
-          handleAEMProxyRequest: async () => new Response('preview-content', { status: 200 }),
+          handleAEMProxyRequest: async () => new Response('from-aem', { status: 200 }),
         },
       })).default;
     });
 
-    it('proxies to AEM when dapreview=on', async () => {
-      const req = new Request('https://main--site--org.ue.da.live/folder/content?dapreview=on');
-      const daCtx = getDaCtx(req);
-      const env = {};
-
-      const res = await getHandler({ req, env, daCtx });
-
-      assert.strictEqual(res.status, 200);
-      assert.strictEqual(await res.text(), 'preview-content');
-    });
-
-    it('proxies to AEM for preview host', async () => {
+    it('composes via daSourceGet for preview host', async () => {
       const req = new Request('https://main--site--org.preview.da.live/folder/content');
       const daCtx = getDaCtx(req);
       const env = {};
@@ -255,7 +248,18 @@ describe('GET handler', () => {
       const res = await getHandler({ req, env, daCtx });
 
       assert.strictEqual(res.status, 200);
-      assert.strictEqual(await res.text(), 'preview-content');
+      assert.strictEqual(await res.text(), 'composed-content');
+    });
+
+    it('composes via daSourceGet when quick-edit is requested', async () => {
+      const req = new Request('https://main--site--org.ue.da.live/folder/content?quick-edit');
+      const daCtx = getDaCtx(req);
+      const env = {};
+
+      const res = await getHandler({ req, env, daCtx });
+
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(await res.text(), 'composed-content');
     });
   });
 

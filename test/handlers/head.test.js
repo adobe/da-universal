@@ -294,17 +294,6 @@ describe('HEAD handler', () => {
       })).default;
     });
 
-    it('proxies to AEM when dapreview=on and returns no body', async () => {
-      const req = new Request('https://main--site--org.ue.da.live/folder/content?dapreview=on', { method: 'HEAD' });
-      const daCtx = getDaCtx(req);
-      const env = {};
-
-      const res = await headHandler({ req, env, daCtx });
-
-      assert.strictEqual(res.status, 200);
-      assert.strictEqual(await res.text(), '');
-    });
-
     it('proxies to AEM for preview host and returns no body', async () => {
       const req = new Request('https://main--site--org.preview.da.live/folder/content', { method: 'HEAD' });
       const daCtx = getDaCtx(req);

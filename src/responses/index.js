@@ -12,7 +12,7 @@
 import { DEFAULT_UNAUTHORIZED_HTML_MESSAGE } from '../utils/constants.js';
 
 export function daResp({
-  body, status, contentType, contentLength,
+  body, status, contentType, contentLength, headers: extraHeaders,
 }) {
   const headers = new Headers();
 
@@ -23,6 +23,13 @@ export function daResp({
     headers.append('Content-Length', contentLength);
   } else if (body) {
     headers.append('Content-Length', body.length);
+  }
+
+  if (extraHeaders) {
+    const entries = Array.isArray(extraHeaders)
+      ? extraHeaders
+      : Object.entries(extraHeaders);
+    entries.forEach(([name, value]) => headers.append(name, value));
   }
 
   return new Response(body, { status, headers });

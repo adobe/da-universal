@@ -15,7 +15,7 @@
 import assert from 'assert';
 import { describe, it } from 'mocha';
 import { h } from 'hastscript';
-import { makeImagesRelative, restoreAbsoluteImages } from '../../src/ue/rewrite-images.js';
+import { makeImagesRelative, restoreAbsoluteImages } from '../../src/render/rewrite-images.js';
 
 describe('rewrite-images', () => {
   const daCtx = { org: 'myorg', site: 'mysite' };
