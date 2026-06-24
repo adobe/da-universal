@@ -142,7 +142,6 @@ export async function daSourceGet({ req, env, daCtx }) {
   } else if (isUE) {
     await applyUEInstrumentation(documentTree, daCtx, aemCtx);
   }
-  // preview hosts and local dev return the composed page as-is
 
   const body = serializeHtml(documentTree);
 
