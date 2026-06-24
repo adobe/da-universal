@@ -12,6 +12,8 @@
 
 /* eslint-env mocha */
 import assert from 'assert';
+import { fromHtml } from 'hast-util-from-html';
+import { toHtml } from 'hast-util-to-html';
 import * as quickEdit from '../../src/utils/quick-edit.js';
 
 const SCRIPTS_JS = `import { initIms } from '../blocks/shared/utils.js';
@@ -120,15 +122,25 @@ describe('quick-edit script transform', () => {
     });
   });
 
-  describe('buildQuickEdit404Html', () => {
-    it('includes the minimal scaffold and injects head.html content', () => {
-      const head = '<meta name="cms" content="edge-delivery" /><script src="/scripts/scripts.js" type="module"></script>';
-      const out = quickEdit.buildQuickEdit404Html(head);
-      assert.ok(out.includes('<header></header>'));
-      assert.ok(out.includes('<main>'));
-      assert.ok(out.includes('<footer></footer>'));
-      assert.ok(out.includes('edge-delivery'));
-      assert.ok(out.includes('/scripts/scripts.js'));
+  describe('applyQuickEditToDocument', () => {
+    it('injects the import map, finds the entry script, and stamps the nonce', () => {
+      const tree = fromHtml('<html><head><script src="/scripts/scripts.js" type="module"></script></head><body></body></html>');
+      const entryPath = quickEdit.applyQuickEditToDocument(tree, 'abc123');
+      const out = toHtml(tree, { allowDangerousHtml: true });
+      assert.strictEqual(entryPath, '/scripts/scripts.js');
+      assert.ok(out.includes('<head><script type="importmap"'));
+      assert.ok(out.includes('"da-lit"'));
+      assert.ok(out.includes('nonce="abc123"'));
+    });
+
+    it('returns undefined entry path when there is no entry script', () => {
+      const tree = fromHtml('<html><head></head><body>content</body></html>');
+      const entryPath = quickEdit.applyQuickEditToDocument(tree, undefined);
+      const out = toHtml(tree, { allowDangerousHtml: true });
+      assert.strictEqual(entryPath, undefined);
+      assert.ok(out.includes('"da-y-wrapper"'));
+      // no nonce stamped when none is provided
+      assert.ok(!out.includes('nonce='));
     });
   });
 

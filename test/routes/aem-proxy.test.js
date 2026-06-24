@@ -17,29 +17,9 @@ import { getDaCtx } from '../../src/utils/daCtx.js';
 
 describe('AEM proxy quick-edit', () => {
   let handleAEMProxyRequest;
-  let fetchCalls;
   const env = { UE_HOST: 'test-host', UE_SERVICE: 'test-service' };
 
-  const HEAD_HTML = '<meta name="cms" content="edge-delivery" /><script nonce="aem" src="/scripts/scripts.js" type="module"></script>';
-
   beforeEach(async () => {
-    fetchCalls = [];
-    globalThis.fetch = async (req) => {
-      const url = typeof req === 'string' ? req : req.url;
-      fetchCalls.push(url);
-      if (url.includes('/head.html')) {
-        return new Response(HEAD_HTML, {
-          status: 200,
-          headers: { 'Content-Type': 'text/html' },
-        });
-      }
-      return new Response('<html><body>not found</body></html>', {
-        status: 404,
-        statusText: 'Not Found',
-        headers: { 'Content-Type': 'text/html' },
-      });
-    };
-
     const mod = await esmock('../../src/routes/aem-proxy.js');
     handleAEMProxyRequest = mod.handleAEMProxyRequest;
   });
@@ -48,22 +28,40 @@ describe('AEM proxy quick-edit', () => {
     delete globalThis.fetch;
   });
 
-  it('serves a quick-edit scaffold when the upstream document 404s', async () => {
-    const req = new Request('https://main--site--org.ue.da.live/missing?quick-edit=on');
+  it('appends the bootstrap to the entry script matched by the cookie', async () => {
+    const req = new Request('https://main--site--org.ue.da.live/scripts/scripts.js', {
+      headers: { Cookie: 'da-quick-edit=%2Fscripts%2Fscripts.js' },
+    });
     const daCtx = getDaCtx(req);
+
+    globalThis.fetch = async () => new Response('function loadPage() {}', {
+      status: 200,
+      headers: { 'Content-Type': 'application/javascript' },
+    });
 
     const res = await handleAEMProxyRequest({ req, env, daCtx });
 
-    assert.strictEqual(res.status, 404);
-    const html = await res.text();
-    assert.ok(fetchCalls.some((url) => url.includes('/head.html')));
-    assert.ok(html.includes('edge-delivery'));
-    assert.ok(html.includes('nonce="aem"'));
-    assert.ok(html.includes('<header></header>'));
-    assert.ok(html.includes('<main>'));
-    assert.ok(html.includes('<footer></footer>'));
-    assert.ok(!html.includes('not found'));
-    assert.ok(res.headers.get('Set-Cookie')?.includes('da-quick-edit=%2Fscripts%2Fscripts.js'));
+    assert.strictEqual(res.status, 200);
+    const code = await res.text();
+    assert.ok(code.includes('function loadPage() {}'));
+    assert.ok(code.includes('quick-edit'));
+  });
+
+  it('does not inject for a script that does not match the cookie path', async () => {
+    const req = new Request('https://main--site--org.ue.da.live/scripts/other.js', {
+      headers: { Cookie: 'da-quick-edit=%2Fscripts%2Fscripts.js' },
+    });
+    const daCtx = getDaCtx(req);
+
+    globalThis.fetch = async () => new Response('function loadPage() {}', {
+      status: 200,
+      headers: { 'Content-Type': 'application/javascript' },
+    });
+
+    const res = await handleAEMProxyRequest({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(await res.text(), 'function loadPage() {}');
   });
 
   it('does not synthesize HTML for a 404 entry script request', async () => {

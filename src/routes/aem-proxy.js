@@ -9,39 +9,11 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { getAemCtx, getAEMHtml, fixUrlsWhenLocalDev } from '../utils/aemCtx.js';
+import { getAemCtx } from '../utils/aemCtx.js';
 import {
   applyQuickEditToScript,
-  buildQuickEdit404Html,
-  buildQuickEditCookie,
-  extractCspNonce,
   getQuickEditCookiePath,
-  prepareQuickEditDocument,
 } from '../utils/quick-edit.js';
-
-function buildQuickEditDocumentResponse(html, response) {
-  const nonce = extractCspNonce(response.headers.get('Content-Security-Policy'));
-  const { html: finalHtml, entryPath } = prepareQuickEditDocument(html, nonce);
-  const headers = new Headers(response.headers);
-  // Body has been decoded to text; drop headers that describe the encoded form.
-  headers.delete('Content-Encoding');
-  headers.delete('Content-Length');
-  headers.set('Content-Type', 'text/html; charset=utf-8');
-  if (entryPath) {
-    console.log(`[quick-edit] doc load: entry script ${entryPath} found, setting cookie`);
-    headers.append('Set-Cookie', buildQuickEditCookie(entryPath));
-  } else {
-    console.log('[quick-edit] doc load: no <script src="…/scripts.js"> found in html');
-  }
-  if (nonce) {
-    console.log('[quick-edit] doc load: CSP nonce applied to script tags');
-  }
-  return new Response(finalHtml, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
-}
 
 export async function handleAEMProxyRequest({ req, env, daCtx }) {
   const requestUrl = new URL(req.url);
@@ -58,20 +30,19 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
     req.headers.set('Authorization', daCtx.siteToken);
   }
 
-  // Quick-edit detection is two-phase. On the initial document load
-  // (?quick-edit), we discover the project's entry script from the HTML and
-  // remember its exact path in a cookie. The follow-up script request carries
-  // no param, so we recognize it by matching that cookie — which handles entry
-  // scripts in subfolders and ignores unrelated files named scripts.js.
-  const wantsQuickEdit = requestUrl.searchParams.has('quick-edit');
+  // Quick-edit is two-phase. The document phase (discovering the entry script
+  // and setting the cookie) happens while composing the page in daSourceGet.
+  // The follow-up script request carries no param, so we recognize it here by
+  // matching that cookie — which handles entry scripts in subfolders and
+  // ignores unrelated files named scripts.js — and append the bootstrap.
   const cookiePath = getQuickEditCookiePath(cookieHeader);
   const isEntryScript = !!cookiePath && cookiePath === daCtx.aemPathname;
 
-  // Request an uncompressed body whenever we are going to read it (to scan the
-  // doc for the entry script, or to inject the bootstrap). Otherwise the body
-  // comes back gzip/brotli encoded and re-emitting it with the origin's
-  // Content-Encoding header yields garbled output.
-  if (wantsQuickEdit || isEntryScript) {
+  // Request an uncompressed body when we are going to read it to inject the
+  // bootstrap. Otherwise the body comes back gzip/brotli encoded and
+  // re-emitting it with the origin's Content-Encoding header yields garbled
+  // output.
+  if (isEntryScript) {
     req.headers.delete('Accept-Encoding');
   }
 
@@ -80,22 +51,9 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
   console.log(`<- ${aemUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
 
   const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
-  const isHtml = contentType.includes('text/html');
   const isJs = contentType.includes('javascript');
 
-  const isQuickEditDoc = wantsQuickEdit && !isJs;
-  if (isQuickEditDoc && response.status === 404) {
-    console.log('[quick-edit] doc load: upstream 404, using minimal scaffold');
-    const rawHead = await getAEMHtml(aemCtx, '/head.html');
-    if (!rawHead) {
-      console.log('[quick-edit] doc load: head.html not found on origin');
-    }
-    const headHtml = fixUrlsWhenLocalDev(rawHead || '', daCtx);
-    response = buildQuickEditDocumentResponse(buildQuickEdit404Html(headHtml, response), response);
-  } else if (isQuickEditDoc && isHtml && response.ok) {
-    const html = await response.text();
-    response = buildQuickEditDocumentResponse(html, response);
-  } else if (isEntryScript && response.ok && isJs) {
+  if (isEntryScript && response.ok && isJs) {
     console.log(`[quick-edit] entry script ${daCtx.aemPathname} matched cookie, attempting bootstrap injection`);
     response = await applyQuickEditToScript(response);
   } else {

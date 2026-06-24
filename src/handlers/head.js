@@ -54,11 +54,7 @@ export default async function headHandler({ req, env, daCtx }) {
   const url = new URL(req.url);
   const isPreviewHost = url.hostname.endsWith('.preview.da.live') || url.hostname.endsWith('.stage-preview.da.live');
 
-  if (
-    url.searchParams.get('dapreview') === 'on'
-    || isPreviewHost
-    || url.searchParams.has('quick-edit')
-  ) {
+  if (isPreviewHost || url.searchParams.has('quick-edit')) {
     return aemHead({ req, env, daCtx });
   }
 
