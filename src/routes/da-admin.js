@@ -24,6 +24,33 @@ import { BRANCH_NOT_FOUND_HTML_MESSAGE, DEFAULT_HTML_TEMPLATE, UNAUTHORIZED_HTML
 import { getSiteConfig } from '../storage/config.js';
 import { restoreAbsoluteImages } from '../ue/rewrite-images.js';
 
+const AEM_API = 'https://api.aem.live';
+
+// Worker-lifetime cache: `org/site` → boolean (true = hlx6).
+// Populated lazily by GET requests; consumed by HEAD and POST.
+// Resets on cold start, which is acceptable.
+const hlx6Cache = new Map();
+
+function aemApiSourceUrl(org, site, path) {
+  return `${AEM_API}/${org}/sites/${site}/source${path}`;
+}
+
+// On cache miss, probes api.aem.live source root to detect hlx6.
+// Used by HEAD and POST where parallel GET-based detection isn't possible.
+async function resolveHlx6(org, site, authToken) {
+  const key = `${org}/${site}`;
+  const cached = hlx6Cache.get(key);
+  if (cached !== undefined) return cached;
+
+  const resp = await fetch(aemApiSourceUrl(org, site, '/'), {
+    method: 'HEAD',
+    headers: { Authorization: authToken },
+  });
+  const result = resp.ok;
+  hlx6Cache.set(key, result);
+  return result;
+}
+
 async function getFileBody(data) {
   const text = await data.text();
   return { body: text, type: data.type };
@@ -65,7 +92,7 @@ async function getPageTemplate(env, daCtx, aemCtx) {
   return DEFAULT_HTML_TEMPLATE;
 }
 
-export async function daSourceGet({ req, env, daCtx }) {
+export async function daSourceGet({ env, daCtx }) {
   const {
     org, site, path, ext, authToken,
   } = daCtx;
@@ -78,50 +105,47 @@ export async function daSourceGet({ req, env, daCtx }) {
   const headers = new Headers();
   headers.set('Authorization', authToken);
 
+  const hlx6 = await resolveHlx6(org, site, authToken);
+
   if (ext !== 'html') {
-    /*
-     for non-HTML files, simply proxy the request without processing
-     and ensure that extensions are not duplicated
-    */
-    const adminUrl = new URL(`/source/${org}/${site}${path}`, env.DA_ADMIN);
-    console.log(`-> ${adminUrl.toString()}`);
-    const response = await env.daadmin.fetch(adminUrl, { method: 'GET', headers });
-    console.log(`<- ${adminUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+    const sourceUrl = hlx6
+      ? aemApiSourceUrl(org, site, path)
+      : new URL(`/source/${org}/${site}${path}`, env.DA_ADMIN);
+
+    console.log(`-> GET ${sourceUrl}`);
+    const response = hlx6
+      ? await fetch(String(sourceUrl), { method: 'GET', headers })
+      : await env.daadmin.fetch(sourceUrl, { method: 'GET', headers });
+    console.log(`<- GET ${response.status}: ${sourceUrl}`);
     return response;
   }
 
-  // get the AEM parts (head.html)
   const aemCtx = getAemCtx(env, daCtx);
-  const headHtml = await getAEMHtml(aemCtx, '/head.html');
+  const sourceUrl = hlx6
+    ? aemApiSourceUrl(org, site, `${path}.${ext}`)
+    : new URL(`/source/${org}/${site}${path}.${ext}`, env.DA_ADMIN);
+
+  console.log(`-> GET html ${sourceUrl}`);
+  const [headHtml, sourceResp] = await Promise.all([
+    getAEMHtml(aemCtx, '/head.html'),
+    hlx6
+      ? fetch(String(sourceUrl), { method: 'GET', headers })
+      : env.daadmin.fetch(new Request(String(sourceUrl), { method: 'GET', headers })),
+  ]);
+
   if (!headHtml) {
     return get404(BRANCH_NOT_FOUND_HTML_MESSAGE);
   }
 
-  // get the content from DA admin
-  const adminUrl = new URL(
-    `/source/${org}/${site}${path}.${ext}`,
-    env.DA_ADMIN,
-  );
-
-  // eslint-disable-next-line no-param-reassign
-  req = new Request(adminUrl, {
-    method: 'GET',
-    headers,
-  });
   let body;
-  console.log(`-> ${adminUrl.toString()}`);
-  const daAdminResp = await env.daadmin.fetch(req);
-  console.log(`<- ${adminUrl.toString()}. ${daAdminResp.status} ${daAdminResp.statusText}`, { status: daAdminResp.status, statusText: daAdminResp.statusText });
-  if (daAdminResp && daAdminResp.status === 200) {
+  if (sourceResp.status === 200) {
     // enrich stored content with HTML header and UE attributes
-    const originalBodyHtml = await daAdminResp.text();
-    const responseHtml = await prepareHtml(daCtx, aemCtx, originalBodyHtml, headHtml);
-    body = responseHtml;
+    const originalBodyHtml = await sourceResp.text();
+    body = await prepareHtml(daCtx, aemCtx, originalBodyHtml, headHtml);
   } else {
     // enrich default template with HTML header and UE attributes
-    const templateHtml = await getPageTemplate(env, daCtx, aemCtx, headHtml);
-    const responseHtml = await prepareHtml(daCtx, aemCtx, templateHtml, headHtml);
-    body = responseHtml;
+    const templateHtml = await getPageTemplate(env, daCtx, aemCtx);
+    body = await prepareHtml(daCtx, aemCtx, templateHtml, headHtml);
   }
 
   return daResp({
@@ -145,10 +169,20 @@ export async function daSourceHead({ env, daCtx }) {
   headers.set('Authorization', authToken);
 
   const adminPath = ext !== 'html' ? path : `${path}.${ext}`;
+  const hlx6 = await resolveHlx6(org, site, authToken);
+
+  if (hlx6) {
+    const hlx6Url = aemApiSourceUrl(org, site, adminPath);
+    console.log(`-> HEAD hlx6: ${hlx6Url}`);
+    const response = await fetch(hlx6Url, { method: 'HEAD', headers });
+    console.log(`<- HEAD hlx6 ${response.status}: ${hlx6Url}`);
+    return new Response(null, { status: response.status, headers: response.headers });
+  }
+
   const adminUrl = new URL(`/source/${org}/${site}${adminPath}`, env.DA_ADMIN);
-  console.log(`-> HEAD ${adminUrl.toString()}`);
+  console.log(`-> HEAD da-admin: ${adminUrl}`);
   const response = await env.daadmin.fetch(adminUrl, { method: 'HEAD', headers });
-  console.log(`<- HEAD ${adminUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+  console.log(`<- HEAD da-admin ${response.status}: ${adminUrl}`);
   return new Response(null, { status: response.status, headers: response.headers });
 }
 
@@ -176,14 +210,30 @@ export async function daSourcePost({ req, env, daCtx }) {
 
     minifyWhitespace(bodyNode);
 
-    // create new POST request with the body content
-    const body = new FormData();
     const bodyContent = toHtml(bodyNode);
+
+    const hlx6 = await resolveHlx6(org, site, authToken);
+
+    if (hlx6) {
+      // hlx6 accepts raw body with Content-Type header (no FormData wrapping)
+      const hlx6Url = aemApiSourceUrl(org, site, ext !== 'html' ? path : `${path}.${ext}`);
+      console.log(`-> POST hlx6: ${hlx6Url}`);
+      const response = await fetch(hlx6Url, {
+        method: 'POST',
+        body: bodyContent,
+        headers: { Authorization: authToken, 'Content-Type': 'text/html' },
+      });
+      console.log(`<- POST hlx6 ${response.status}: ${hlx6Url}`);
+      return response;
+    }
+
+    // create new POST request with the body content (da-admin expects FormData)
+    const body = new FormData();
     const data = new Blob([bodyContent], { type: 'text/html' });
     body.set('data', data);
     const headers = { Authorization: authToken };
     const adminUrl = new URL(
-      `/source/${org}/${site}${path}.${ext}`,
+      `/source/${org}/${site}${ext !== 'html' ? path : `${path}.${ext}`}`,
       env.DA_ADMIN,
     );
     // eslint-disable-next-line no-param-reassign
@@ -192,9 +242,9 @@ export async function daSourcePost({ req, env, daCtx }) {
       body,
       headers,
     });
-    console.log(`-> ${adminUrl.toString()}`);
+    console.log(`-> POST da-admin: ${adminUrl}`);
     const response = await env.daadmin.fetch(req);
-    console.log(`<- ${adminUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+    console.log(`<- POST da-admin ${response.status}: ${adminUrl}`);
     return response;
   }
 
