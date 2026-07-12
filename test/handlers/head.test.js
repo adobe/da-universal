@@ -282,19 +282,22 @@ describe('HEAD handler', () => {
     });
   });
 
-  describe('preview', () => {
+  describe('preview / quick-edit', () => {
     let headHandler;
 
     beforeEach(async () => {
+      // HTML always resolves via daSourceHead now; the preview / quick-edit / UE
+      // distinction only affects the GET response body, not HEAD routing.
       headHandler = (await esmock('../../src/handlers/head.js', {
         '../../src/routes/da-admin.js': { daSourceHead: async () => new Response(null, { status: 200 }) },
         '../../src/routes/aem-proxy.js': {
-          handleAEMProxyRequest: async () => new Response('preview', { status: 200 }),
+          // distinct status so a regression to routing through aemHead is caught
+          handleAEMProxyRequest: async () => new Response('from-aem', { status: 400 }),
         },
       })).default;
     });
 
-    it('proxies to AEM for preview host and returns no body', async () => {
+    it('calls daSourceHead for preview host', async () => {
       const req = new Request('https://main--site--org.preview.da.live/folder/content', { method: 'HEAD' });
       const daCtx = getDaCtx(req);
       const env = {};
@@ -305,7 +308,7 @@ describe('HEAD handler', () => {
       assert.strictEqual(await res.text(), '');
     });
 
-    it('proxies to AEM when quick-edit param is present and returns no body', async () => {
+    it('calls daSourceHead when quick-edit param is present', async () => {
       const req = new Request('https://main--site--org.ue.da.live/folder/content?quick-edit', { method: 'HEAD' });
       const daCtx = getDaCtx(req);
       const env = {};
