@@ -18,7 +18,9 @@ import { removeUEAttributes, unwrapParagraphs } from '../ue/attributes.js';
 import { applyUEInstrumentation } from '../ue/ue.js';
 import { composeHtml, serializeHtml } from '../render/compose.js';
 import { getAemCtx, getAEMHtml } from '../utils/aemCtx.js';
-import { applyQuickEditToDocument, buildQuickEditCookie } from '../utils/quick-edit.js';
+import {
+  applyQuickEditToDocument, buildQuickEditCookie, buildQuickEditNotFoundResponse,
+} from '../utils/quick-edit.js';
 import {
   daResp, get401, get404, head401,
 } from '../responses/index.js';
@@ -104,6 +106,11 @@ export async function daSourceGet({ req, env, daCtx }) {
   const aemCtx = getAemCtx(env, daCtx);
   const headHtml = await getAEMHtml(aemCtx, '/head.html');
   if (!headHtml) {
+    // quick-edit still needs a working shell (with the import map) so the editor
+    // can load into this page, even when the AEM branch doesn't exist yet.
+    if (isQuickEdit) {
+      return buildQuickEditNotFoundResponse();
+    }
     return get404(BRANCH_NOT_FOUND_HTML_MESSAGE);
   }
 

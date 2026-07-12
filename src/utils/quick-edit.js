@@ -16,6 +16,9 @@ import { select, selectAll } from 'hast-util-select';
 
 import { h } from 'hastscript';
 
+import { daResp } from '../responses/index.js';
+import { DEFAULT_HTML_TEMPLATE } from './constants.js';
+
 const QUICK_EDIT_IMPORT_MAP = {
   imports: {
     'da-lit': 'https://da.live/deps/lit/dist/index.js',
@@ -183,6 +186,26 @@ export function prepareQuickEditDocument(html, nonce) {
   const tree = fromHtml(html);
   const entryPath = applyQuickEditToDocument(tree, nonce);
   return { html: toHtml(tree, { allowDangerousHtml: true }), entryPath };
+}
+
+/**
+ * Build the quick-edit 404 response for when the AEM branch itself can't be
+ * resolved (e.g. head.html is missing): a minimal page shell with the import
+ * map injected (no entry script), status 404, so the editor can still load
+ * into it. Reuse this anywhere quick-edit needs to degrade the same way.
+ * @returns {Response}
+ */
+export function buildQuickEditNotFoundResponse() {
+  console.log('[quick-edit] doc compose: head.html not found on origin, serving a minimal scaffold');
+  const tree = fromHtml(`<html><head></head>${DEFAULT_HTML_TEMPLATE}</html>`);
+  applyQuickEditToDocument(tree, undefined);
+  const body = toHtml(tree, { allowDangerousHtml: true });
+  return daResp({
+    status: 404,
+    body,
+    contentLength: body.length,
+    contentType: 'text/html; charset=utf-8',
+  });
 }
 
 /**

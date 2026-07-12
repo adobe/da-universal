@@ -144,6 +144,17 @@ describe('quick-edit script transform', () => {
     });
   });
 
+  describe('buildQuickEditNotFoundResponse', () => {
+    it('returns a 404 shell with the import map injected and no entry script', async () => {
+      const res = quickEdit.buildQuickEditNotFoundResponse();
+      assert.strictEqual(res.status, 404);
+      const html = await res.text();
+      assert.ok(html.includes('<script type="importmap"'));
+      assert.ok(html.includes('"da-lit"'));
+      assert.ok(!html.includes('scripts.js'));
+    });
+  });
+
   describe('findEntryScriptPath', () => {
     it('finds /scripts/scripts.js from a script tag', () => {
       const html = '<head><script src="/scripts/scripts.js" type="module"></script></head>';

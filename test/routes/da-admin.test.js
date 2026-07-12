@@ -50,12 +50,16 @@ describe('daSourceGet', () => {
   // record which composition / instrumentation calls happen and with what
   let calls;
 
-  const mockDaSourceGet = async () => {
+  const mockDaSourceGet = async (overrides = {}) => {
+    // 'headHtml' in overrides (rather than a destructured default) so passing
+    // `{ headHtml: undefined }` actually simulates a missing head.html, instead
+    // of being masked by the default parameter value.
+    const headHtml = 'headHtml' in overrides ? overrides.headHtml : '<meta name="from" content="aem" />';
     calls = { compose: [], ue: 0, quickEdit: 0 };
     return (await esmock('../../src/routes/da-admin.js', {
       '../../src/utils/aemCtx.js': {
         getAemCtx: () => ({}),
-        getAEMHtml: async () => '<meta name="from" content="aem" />',
+        getAEMHtml: async () => headHtml,
       },
       '../../src/render/compose.js': {
         composeHtml: async (daCtx, aemCtx, bodyHtml) => {
@@ -146,5 +150,56 @@ describe('daSourceGet', () => {
     // composeHtml still ran (once), but with the template body, not stored content
     assert.strictEqual(calls.compose.length, 1);
     assert.ok(!calls.compose[0].includes('stored'));
+  });
+
+  it('returns a working quick-edit shell when the DA source document is missing', async () => {
+    const daSourceGet = await mockDaSourceGet();
+    const missingEnv = {
+      ...env,
+      daadmin: { fetch: async () => new Response('not found', { status: 404 }) },
+    };
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content?quick-edit');
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourceGet({ req, env: missingEnv, daCtx });
+
+    // status doesn't matter here — what matters is a working shell: the full
+    // compose pipeline (real head.html, template body) ran, quick-edit
+    // instrumentation applied, and the cookie got set from the real head.html
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(calls.compose.length, 1);
+    assert.ok(!calls.compose[0].includes('stored'));
+    assert.strictEqual(calls.quickEdit, 1);
+    assert.ok(res.headers.get('Set-Cookie')?.includes('da-quick-edit=%2Fscripts%2Fscripts.js'));
+    assert.strictEqual(await res.text(), '<html>composed</html>');
+  });
+
+  it('returns a working 404 shell for quick-edit when head.html is missing', async () => {
+    const daSourceGet = await mockDaSourceGet({ headHtml: undefined });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content?quick-edit');
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourceGet({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 404);
+    // the heavy compose pipeline is skipped entirely for this degraded path
+    assert.strictEqual(calls.compose.length, 0);
+    const html = await res.text();
+    assert.ok(html.includes('importmap'));
+    assert.ok(!html.includes('Unable to retrieve AEM branch'));
+  });
+
+  it('still returns branch-not-found for non-quick-edit when head.html is missing', async () => {
+    const daSourceGet = await mockDaSourceGet({ headHtml: undefined });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourceGet({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 404);
+    assert.strictEqual(calls.compose.length, 0);
+    assert.strictEqual(calls.ue, 0);
+    const html = await res.text();
+    assert.ok(html.includes('Unable to retrieve AEM branch'));
   });
 });
