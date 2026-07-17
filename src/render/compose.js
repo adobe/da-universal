@@ -15,11 +15,11 @@ import { fromHtml } from 'hast-util-from-html';
 import { select, selectAll } from 'hast-util-select';
 import { toHtml } from 'hast-util-to-html';
 import { h } from 'hastscript';
-import { getHtmlDoc } from './scaffold.js';
 import { extractLocalMetadata, fetchBulkMetadata } from './metadata.js';
 import rewriteIcons from './rewrite-icons.js';
 import { makeImagesRelative } from './rewrite-images.js';
 import extractSectionMetadata from './section-metadata.js';
+import { DEFAULT_HTML_TEMPLATE } from '../utils/constants.js';
 
 /**
  * Injects AEM HTML head entries into the head node of an HTML document.
@@ -88,7 +88,7 @@ function injectMetadata(metadata, headNode) {
  */
 export async function composeHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
   // get the HTML document tree
-  const documentTree = getHtmlDoc();
+  const documentTree = fromHtml(`<html><head></head>${DEFAULT_HTML_TEMPLATE}</html>`);
 
   // prepare the additional head HTML script and meta tags
   const headNode = select('head', documentTree);
