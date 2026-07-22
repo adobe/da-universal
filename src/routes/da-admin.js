@@ -15,14 +15,18 @@ import { toHtml } from 'hast-util-to-html';
 import { minifyWhitespace } from 'hast-util-minify-whitespace';
 import putHelper from '../helpers/source.js';
 import { removeUEAttributes, unwrapParagraphs } from '../ue/attributes.js';
-import { prepareHtml } from '../ue/ue.js';
+import { applyUEInstrumentation } from '../ue/ue.js';
+import { composeHtml, serializeHtml } from '../render/compose.js';
 import { getAemCtx, getAEMHtml } from '../utils/aemCtx.js';
+import {
+  applyQuickEditToDocument, buildQuickEditCookie, buildQuickEditNotFoundResponse,
+} from '../utils/quick-edit.js';
 import {
   daResp, get401, get404, head401,
 } from '../responses/index.js';
 import { BRANCH_NOT_FOUND_HTML_MESSAGE, DEFAULT_HTML_TEMPLATE, UNAUTHORIZED_HTML_MESSAGE } from '../utils/constants.js';
 import { getSiteConfig } from '../storage/config.js';
-import { restoreAbsoluteImages } from '../ue/rewrite-images.js';
+import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 
 async function getFileBody(data) {
   const text = await data.text();
@@ -75,6 +79,14 @@ export async function daSourceGet({ req, env, daCtx }) {
     return get401(UNAUTHORIZED_HTML_MESSAGE);
   }
 
+  // determine the request type before `req` is reassigned to the admin request.
+  // quick-edit takes precedence; UE is gated on the hostname; everything else
+  // (preview hosts, local dev) renders the composed page as-is.
+  const url = new URL(req.url);
+  const isQuickEdit = url.searchParams.has('quick-edit');
+  const isUE = url.hostname.endsWith('.ue.da.live')
+    || url.hostname.endsWith('.stage-ue.da.live');
+
   const headers = new Headers();
   headers.set('Authorization', authToken);
 
@@ -94,6 +106,11 @@ export async function daSourceGet({ req, env, daCtx }) {
   const aemCtx = getAemCtx(env, daCtx);
   const headHtml = await getAEMHtml(aemCtx, '/head.html');
   if (!headHtml) {
+    // quick-edit still needs a working shell (with the import map) so the editor
+    // can load into this page, even when the AEM branch doesn't exist yet.
+    if (isQuickEdit) {
+      return buildQuickEditNotFoundResponse();
+    }
     return get404(BRANCH_NOT_FOUND_HTML_MESSAGE);
   }
 
@@ -108,27 +125,39 @@ export async function daSourceGet({ req, env, daCtx }) {
     method: 'GET',
     headers,
   });
-  let body;
   console.log(`-> ${adminUrl.toString()}`);
   const daAdminResp = await env.daadmin.fetch(req);
   console.log(`<- ${adminUrl.toString()}. ${daAdminResp.status} ${daAdminResp.statusText}`, { status: daAdminResp.status, statusText: daAdminResp.statusText });
-  if (daAdminResp && daAdminResp.status === 200) {
-    // enrich stored content with HTML header and UE attributes
-    const originalBodyHtml = await daAdminResp.text();
-    const responseHtml = await prepareHtml(daCtx, aemCtx, originalBodyHtml, headHtml);
-    body = responseHtml;
-  } else {
-    // enrich default template with HTML header and UE attributes
-    const templateHtml = await getPageTemplate(env, daCtx, aemCtx, headHtml);
-    const responseHtml = await prepareHtml(daCtx, aemCtx, templateHtml, headHtml);
-    body = responseHtml;
+
+  // use the stored content when available, otherwise fall back to a template
+  const bodyHtml = daAdminResp && daAdminResp.status === 200
+    ? await daAdminResp.text()
+    : await getPageTemplate(env, daCtx, aemCtx, headHtml);
+
+  // compose the page the same way for every request type
+  const documentTree = await composeHtml(daCtx, aemCtx, bodyHtml, headHtml);
+
+  // layer the request-specific instrumentation on top of the composed page
+  const extraHeaders = [];
+  if (isQuickEdit) {
+    // no upstream AEM CSP to satisfy here, so no nonce is applied
+    const entryPath = applyQuickEditToDocument(documentTree, undefined);
+    if (entryPath) {
+      console.log(`[quick-edit] doc compose: entry script ${entryPath} found, setting cookie`);
+      extraHeaders.push(['Set-Cookie', buildQuickEditCookie(entryPath)]);
+    }
+  } else if (isUE) {
+    await applyUEInstrumentation(documentTree, daCtx, aemCtx);
   }
+
+  const body = serializeHtml(documentTree);
 
   return daResp({
     status: 200,
     body,
     contentLength: body.length,
     contentType: 'text/html; charset=utf-8',
+    headers: extraHeaders,
   });
 }
 

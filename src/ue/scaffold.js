@@ -10,14 +10,8 @@
  * governing permissions and limitations under the License.
  */
 
-import { fromHtml } from 'hast-util-from-html';
 import { h } from 'hastscript';
 import { withAemAuth } from '../utils/aemCtx.js';
-
-export function getHtmlDoc() {
-  const htmlDocStr = '<!DOCTYPE html><html><head></head><body></body></html>';
-  return fromHtml(htmlDocStr);
-}
 
 export function getUEHtmlHeadEntries(daCtx, aemCtx) {
   const {

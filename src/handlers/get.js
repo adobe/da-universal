@@ -58,17 +58,8 @@ export default async function getHandler({ req, env, daCtx }) {
     return response;
   }
 
-  const url = new URL(req.url);
-  const isPreviewHost = url.hostname.endsWith('.preview.da.live') || url.hostname.endsWith('.stage-preview.da.live');
-
-  if (
-    url.searchParams.get('dapreview') === 'on'
-    || isPreviewHost
-    || url.searchParams.has('quick-edit')
-  ) {
-    return handleAEMProxyRequest({ req, env, daCtx });
-  }
-
-  // default route to DA admin for all the content requests
+  // all HTML content is composed from the DA source; the preview / quick-edit /
+  // UE distinction is applied as a layer on top of that composition inside
+  // daSourceGet.
   return daSourceGet({ req, env, daCtx });
 }

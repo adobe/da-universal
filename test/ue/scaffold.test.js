@@ -26,19 +26,6 @@ describe('UE scaffold', () => {
     scaffold = await esmock('../../src/ue/scaffold.js');
   });
 
-  describe('getHtmlDoc', () => {
-    it('returns an empty starter document structure', () => {
-      const doc = scaffold.getHtmlDoc();
-      assert.strictEqual(doc.type, 'root');
-      assert.strictEqual(doc.children.length, 2);
-      assert.strictEqual(doc.children[0].type, 'doctype');
-      assert.strictEqual(doc.children[1].tagName, 'html');
-      assert.strictEqual(doc.children[1].children.length, 2);
-      assert.strictEqual(doc.children[1].children[0].tagName, 'head');
-      assert.strictEqual(doc.children[1].children[1].tagName, 'body');
-    });
-  });
-
   describe('getUEHtmlHeadEntries', () => {
     let daCtx;
     let aemCtx;

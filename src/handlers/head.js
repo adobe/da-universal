@@ -51,16 +51,8 @@ export default async function headHandler({ req, env, daCtx }) {
     return head404();
   }
 
-  const url = new URL(req.url);
-  const isPreviewHost = url.hostname.endsWith('.preview.da.live') || url.hostname.endsWith('.stage-preview.da.live');
-
-  if (
-    url.searchParams.get('dapreview') === 'on'
-    || isPreviewHost
-    || url.searchParams.has('quick-edit')
-  ) {
-    return aemHead({ req, env, daCtx });
-  }
-
+  // all HTML content is composed from the DA source; the preview / quick-edit /
+  // UE distinction only affects the GET response body (see daSourceGet) — HEAD
+  // has no body, so it always resolves against the DA source directly.
   return daSourceHead({ env, daCtx });
 }
