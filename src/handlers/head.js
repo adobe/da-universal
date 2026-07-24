@@ -29,7 +29,7 @@ export default async function headHandler({ req, env, daCtx }) {
   if (path.startsWith('/favicon.ico')) return head404();
   if (path.startsWith('/robots.txt')) return getRobots();
 
-  const resourceRegex = /\.(css|js|js\.map|json|xml|woff|woff2|otf|ttf|plain\.html)$/i;
+  const resourceRegex = /\.(css|js|js\.map|json|xml|woff|woff2|otf|ttf|plain\.html|html)$/i;
   if (resourceRegex.test(path)) {
     return aemHead({ req, env, daCtx });
   }

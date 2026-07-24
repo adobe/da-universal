@@ -110,6 +110,18 @@ describe('HEAD handler', () => {
       assert.strictEqual(await res.text(), '');
       assert.strictEqual(aemProxyCallCount, 1);
     });
+
+    it('proxies to AEM for explicit .html and returns no body', async () => {
+      const req = new Request('https://main--site--org.preview.da.live/folder/content.html', { method: 'HEAD' });
+      const daCtx = getDaCtx(req);
+      const env = {};
+
+      const res = await headHandler({ req, env, daCtx });
+
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(await res.text(), '');
+      assert.strictEqual(aemProxyCallCount, 1);
+    });
   });
 
   describe('assets', () => {
