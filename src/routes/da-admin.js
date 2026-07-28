@@ -28,6 +28,76 @@ import { BRANCH_NOT_FOUND_HTML_MESSAGE, DEFAULT_HTML_TEMPLATE, UNAUTHORIZED_HTML
 import { getSiteConfig } from '../storage/config.js';
 import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 
+const AEM_API = 'https://api.aem.live';
+const HLX_ADMIN = 'https://admin.hlx.page';
+const UPGRADE_CACHE_TTL = 5 * 60 * 1000;
+const UPGRADE_ERROR_TTL = 5 * 1000;
+const UPGRADE_PROBE_TIMEOUT = 2 * 1000;
+const sourceBackendCache = new Map();
+
+function aemApiSourceUrl(org, site, path) {
+  return `${AEM_API}/${org}/sites/${site}/source${path}`;
+}
+
+async function probeHlx6(org, site) {
+  const pingUrl = `${HLX_ADMIN}/ping/${org}/${site}`;
+  try {
+    const response = await fetch(pingUrl, {
+      signal: AbortSignal.timeout(UPGRADE_PROBE_TIMEOUT),
+    });
+    if (response.status !== 200) {
+      console.warn(`Unable to determine source backend: ${pingUrl} returned ${response.status}`);
+      return undefined;
+    }
+    return response.headers.get('x-api-upgrade-available') === 'true';
+  } catch (e) {
+    if (e instanceof TypeError || e.name === 'AbortError' || e.name === 'TimeoutError') {
+      console.warn(`Unable to determine source backend: ${pingUrl}`, e);
+      return undefined;
+    }
+    throw e;
+  }
+}
+
+async function resolveHlx6(org, site) {
+  const key = `${org}/${site}`;
+  const now = Date.now();
+  const cached = sourceBackendCache.get(key);
+  if (cached?.expiresAt > now) return cached.value;
+  if (cached?.pending) return cached.pending;
+
+  const staleValue = cached?.value;
+  const pending = probeHlx6(org, site)
+    .then((value) => {
+      if (value === undefined) {
+        sourceBackendCache.set(key, {
+          value: staleValue,
+          expiresAt: Date.now() + UPGRADE_ERROR_TTL,
+        });
+        return staleValue;
+      }
+
+      sourceBackendCache.set(key, {
+        value,
+        expiresAt: Date.now() + UPGRADE_CACHE_TTL,
+      });
+      return value;
+    })
+    .catch((e) => {
+      if (staleValue === undefined) {
+        sourceBackendCache.delete(key);
+      } else {
+        sourceBackendCache.set(key, {
+          value: staleValue,
+          expiresAt: Date.now() + UPGRADE_ERROR_TTL,
+        });
+      }
+      throw e;
+    });
+  sourceBackendCache.set(key, { ...cached, pending });
+  return pending;
+}
+
 async function getFileBody(data) {
   const text = await data.text();
   return { body: text, type: data.type };
@@ -90,21 +160,31 @@ export async function daSourceGet({ req, env, daCtx }) {
   const headers = new Headers();
   headers.set('Authorization', authToken);
 
+  const hlx6Promise = resolveHlx6(org, site);
+
   if (ext !== 'html') {
     /*
      for non-HTML files, simply proxy the request without processing
      and ensure that extensions are not duplicated
     */
-    const adminUrl = new URL(`/source/${org}/${site}${path}`, env.DA_ADMIN);
-    console.log(`-> ${adminUrl.toString()}`);
-    const response = await env.daadmin.fetch(adminUrl, { method: 'GET', headers });
-    console.log(`<- ${adminUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+    const hlx6 = await hlx6Promise;
+    const sourceUrl = hlx6
+      ? aemApiSourceUrl(org, site, path)
+      : new URL(`/source/${org}/${site}${path}`, env.DA_ADMIN);
+    console.log(`-> ${sourceUrl.toString()}`);
+    const response = hlx6
+      ? await fetch(sourceUrl, { method: 'GET', headers })
+      : await env.daadmin.fetch(sourceUrl, { method: 'GET', headers });
+    console.log(`<- ${sourceUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
     return response;
   }
 
   // get the AEM parts (head.html)
   const aemCtx = getAemCtx(env, daCtx);
-  const headHtml = await getAEMHtml(aemCtx, '/head.html');
+  const [headHtml, hlx6] = await Promise.all([
+    getAEMHtml(aemCtx, '/head.html'),
+    hlx6Promise,
+  ]);
   if (!headHtml) {
     // quick-edit still needs a working shell (with the import map) so the editor
     // can load into this page, even when the AEM branch doesn't exist yet.
@@ -114,24 +194,19 @@ export async function daSourceGet({ req, env, daCtx }) {
     return get404(BRANCH_NOT_FOUND_HTML_MESSAGE);
   }
 
-  // get the content from DA admin
-  const adminUrl = new URL(
-    `/source/${org}/${site}${path}.${ext}`,
-    env.DA_ADMIN,
-  );
-
-  // eslint-disable-next-line no-param-reassign
-  req = new Request(adminUrl, {
-    method: 'GET',
-    headers,
-  });
-  console.log(`-> ${adminUrl.toString()}`);
-  const daAdminResp = await env.daadmin.fetch(req);
-  console.log(`<- ${adminUrl.toString()}. ${daAdminResp.status} ${daAdminResp.statusText}`, { status: daAdminResp.status, statusText: daAdminResp.statusText });
+  const sourceUrl = hlx6
+    ? aemApiSourceUrl(org, site, `${path}.${ext}`)
+    : new URL(`/source/${org}/${site}${path}.${ext}`, env.DA_ADMIN);
+  const sourceRequest = new Request(sourceUrl, { method: 'GET', headers });
+  console.log(`-> ${sourceUrl.toString()}`);
+  const sourceResp = hlx6
+    ? await fetch(sourceRequest)
+    : await env.daadmin.fetch(sourceRequest);
+  console.log(`<- ${sourceUrl.toString()}. ${sourceResp.status} ${sourceResp.statusText}`, { status: sourceResp.status, statusText: sourceResp.statusText });
 
   // use the stored content when available, otherwise fall back to a template
-  const bodyHtml = daAdminResp && daAdminResp.status === 200
-    ? await daAdminResp.text()
+  const bodyHtml = sourceResp.status === 200
+    ? await sourceResp.text()
     : await getPageTemplate(env, daCtx, aemCtx, headHtml);
 
   // compose the page the same way for every request type
@@ -174,6 +249,15 @@ export async function daSourceHead({ env, daCtx }) {
   headers.set('Authorization', authToken);
 
   const adminPath = ext !== 'html' ? path : `${path}.${ext}`;
+  const hlx6 = await resolveHlx6(org, site);
+  if (hlx6) {
+    const sourceUrl = aemApiSourceUrl(org, site, adminPath);
+    console.log(`-> HEAD ${sourceUrl}`);
+    const response = await fetch(sourceUrl, { method: 'HEAD', headers });
+    console.log(`<- HEAD ${sourceUrl}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+    return new Response(null, { status: response.status, headers: response.headers });
+  }
+
   const adminUrl = new URL(`/source/${org}/${site}${adminPath}`, env.DA_ADMIN);
   console.log(`-> HEAD ${adminUrl.toString()}`);
   const response = await env.daadmin.fetch(adminUrl, { method: 'HEAD', headers });
@@ -205,9 +289,37 @@ export async function daSourcePost({ req, env, daCtx }) {
 
     minifyWhitespace(bodyNode);
 
+    const bodyContent = toHtml(bodyNode);
+    const hlx6 = await resolveHlx6(org, site);
+    if (hlx6 === undefined) {
+      return new Response('Unable to determine source backend', {
+        status: 503,
+        headers: { 'Retry-After': '5' },
+      });
+    }
+
+    if (hlx6) {
+      const sourceUrl = aemApiSourceUrl(
+        org,
+        site,
+        ext !== 'html' ? path : `${path}.${ext}`,
+      );
+      const headers = {
+        Authorization: authToken,
+        'Content-Type': 'text/html',
+      };
+      console.log(`-> ${sourceUrl}`);
+      const response = await fetch(sourceUrl, {
+        method: 'POST',
+        body: bodyContent,
+        headers,
+      });
+      console.log(`<- ${sourceUrl}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+      return response;
+    }
+
     // create new POST request with the body content
     const body = new FormData();
-    const bodyContent = toHtml(bodyNode);
     const data = new Blob([bodyContent], { type: 'text/html' });
     body.set('data', data);
     const headers = { Authorization: authToken };
