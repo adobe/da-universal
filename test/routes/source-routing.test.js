@@ -36,8 +36,10 @@ function callDetails(input, init = {}) {
 
 describe('source backend routing', () => {
   let originalFetch;
+  let originalWarn;
   let fetchCalls;
   let daAdminCalls;
+  let warnings;
   let fetchResponse;
   let daAdminResponse;
   let composedBodies;
@@ -80,8 +82,10 @@ describe('source backend routing', () => {
 
   beforeEach(() => {
     originalFetch = globalThis.fetch;
+    originalWarn = console.warn;
     fetchCalls = [];
     daAdminCalls = [];
+    warnings = [];
     composedBodies = [];
     fetchResponse = async () => new Response('', { status: 404 });
     daAdminResponse = async () => new Response('', { status: 404 });
@@ -91,6 +95,7 @@ describe('source backend routing', () => {
       fetchCalls.push(details);
       return fetchResponse(details);
     };
+    console.warn = (...args) => warnings.push(args);
     env = {
       DA_ADMIN,
       daadmin: {
@@ -105,6 +110,7 @@ describe('source backend routing', () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    console.warn = originalWarn;
   });
 
   function upgradeResponse(upgraded = true) {
@@ -302,6 +308,7 @@ describe('source backend routing', () => {
     assert.strictEqual(post.headers.get('Content-Type'), 'text/html');
     assert.strictEqual(post.body, '<body><main>edited</main></body>');
     assert.strictEqual(daAdminCalls.length, 0);
+    assert.strictEqual(fetchCalls.filter(({ method }) => method === 'HEAD').length, 0);
   });
 
   it('POSTs FormData to da-admin and does not write to api.aem.live for legacy sites', async () => {
@@ -317,11 +324,101 @@ describe('source backend routing', () => {
     assert.strictEqual(fetchCalls.length, 1);
     assert.strictEqual(daAdminCalls.length, 1);
     assert.strictEqual(daAdminCalls[0].method, 'POST');
+    assert.strictEqual(daAdminCalls.filter(({ method }) => method === 'HEAD').length, 0);
     const body = await daAdminCalls[0].input.clone().formData();
     assert.strictEqual(
       await body.get('data').text(),
       '<body><main>edited</main></body>',
     );
+  });
+
+  [
+    {
+      title: 'uses api.aem.live when only source bus has the document',
+      aemHead: 200,
+      daHead: 404,
+      backend: 'aem',
+    },
+    {
+      title: 'uses da-admin when only legacy DA has the document',
+      aemHead: 404,
+      daHead: 200,
+      backend: 'da',
+    },
+    {
+      title: 'uses da-admin for a new document missing from both backends',
+      aemHead: 404,
+      daHead: 404,
+      backend: 'da',
+    },
+    {
+      title: 'uses api.aem.live when both backends have the document',
+      aemHead: 200,
+      daHead: 200,
+      backend: 'aem',
+      warns: true,
+    },
+  ].forEach(({
+    title, aemHead, daHead, backend, warns,
+  }) => {
+    it(title, async () => {
+      const sourceUrl = `${AEM_API}/${ORG}/sites/${SITE}/source/page.html`;
+      fetchResponse = async ({ url, method }) => {
+        if (url === PING_URL) return new Response('', { status: 500 });
+        if (url === sourceUrl && method === 'HEAD') {
+          return new Response(null, { status: aemHead });
+        }
+        if (url === sourceUrl && method === 'POST') {
+          return new Response('', { status: 201 });
+        }
+        return new Response('', { status: 500 });
+      };
+      daAdminResponse = async ({ method }) => (
+        new Response(null, { status: method === 'HEAD' ? daHead : 200 })
+      );
+      const req = authedRequest('/page', { method: 'POST' });
+      const daCtx = getDaCtx(req);
+      const { daSourcePost } = await loadRoutes();
+
+      const response = await daSourcePost({ req, env, daCtx });
+
+      assert.strictEqual(response.status, backend === 'aem' ? 201 : 200);
+      assert.strictEqual(fetchCalls.filter(({ method }) => method === 'HEAD').length, 1);
+      assert.strictEqual(daAdminCalls.filter(({ method }) => method === 'HEAD').length, 1);
+      assert.strictEqual(
+        fetchCalls.filter(({ method }) => method === 'POST').length,
+        backend === 'aem' ? 1 : 0,
+      );
+      assert.strictEqual(
+        daAdminCalls.filter(({ method }) => method === 'POST').length,
+        backend === 'da' ? 1 : 0,
+      );
+      assert.strictEqual(warnings.length, warns ? 2 : 1);
+    });
+  });
+
+  it('uses da-admin when a backend HEAD fails', async () => {
+    const sourceUrl = `${AEM_API}/${ORG}/sites/${SITE}/source/page.html`;
+    fetchResponse = async ({ url, method }) => {
+      if (url === PING_URL) return new Response('', { status: 500 });
+      if (url === sourceUrl && method === 'HEAD') {
+        throw new Error('Network connection lost.');
+      }
+      return new Response('', { status: 500 });
+    };
+    daAdminResponse = async ({ method }) => (
+      new Response(null, { status: method === 'HEAD' ? 200 : 200 })
+    );
+    const req = authedRequest('/page', { method: 'POST' });
+    const daCtx = getDaCtx(req);
+    const { daSourcePost } = await loadRoutes();
+
+    const response = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(fetchCalls.filter(({ method }) => method === 'POST').length, 0);
+    assert.strictEqual(daAdminCalls.filter(({ method }) => method === 'HEAD').length, 1);
+    assert.strictEqual(daAdminCalls.filter(({ method }) => method === 'POST').length, 1);
   });
 
   [401, 403, 404, 500].forEach((status) => {
@@ -335,10 +432,12 @@ describe('source backend routing', () => {
       const response = await daSourcePost({ req, env, daCtx });
 
       assert.strictEqual(response.status, 200);
-      assert.strictEqual(fetchCalls.length, 1);
+      assert.strictEqual(fetchCalls.length, 2);
       assert.strictEqual(fetchCalls[0].method, 'GET');
-      assert.strictEqual(daAdminCalls.length, 1);
-      assert.strictEqual(daAdminCalls[0].method, 'POST');
+      assert.strictEqual(fetchCalls[1].method, 'HEAD');
+      assert.strictEqual(daAdminCalls.length, 2);
+      assert.strictEqual(daAdminCalls[0].method, 'HEAD');
+      assert.strictEqual(daAdminCalls[1].method, 'POST');
     });
   });
 
@@ -358,10 +457,12 @@ describe('source backend routing', () => {
       const response = await daSourcePost({ req, env, daCtx });
 
       assert.strictEqual(response.status, 200);
-      assert.strictEqual(fetchCalls.length, 1);
+      assert.strictEqual(fetchCalls.length, 2);
       assert.strictEqual(fetchCalls[0].method, 'GET');
-      assert.strictEqual(daAdminCalls.length, 1);
-      assert.strictEqual(daAdminCalls[0].method, 'POST');
+      assert.strictEqual(fetchCalls[1].method, 'HEAD');
+      assert.strictEqual(daAdminCalls.length, 2);
+      assert.strictEqual(daAdminCalls[0].method, 'HEAD');
+      assert.strictEqual(daAdminCalls[1].method, 'POST');
     });
   });
 
