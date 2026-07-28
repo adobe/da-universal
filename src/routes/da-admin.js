@@ -48,11 +48,8 @@ async function probeHlx6(org, site) {
     }
     return response.headers.get('x-api-upgrade-available') === 'true';
   } catch (e) {
-    if (e instanceof TypeError || e.name === 'AbortError' || e.name === 'TimeoutError') {
-      console.warn(`Unable to determine source backend: ${pingUrl}`, e);
-      return undefined;
-    }
-    throw e;
+    console.warn(`Unable to determine source backend: ${pingUrl}`, e);
+    return undefined;
   }
 }
 
