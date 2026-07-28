@@ -421,6 +421,34 @@ describe('source backend routing', () => {
     assert.strictEqual(daAdminCalls.filter(({ method }) => method === 'POST').length, 1);
   });
 
+  it('uses api.aem.live when its HEAD succeeds and da-admin HEAD fails', async () => {
+    const sourceUrl = `${AEM_API}/${ORG}/sites/${SITE}/source/page.html`;
+    fetchResponse = async ({ url, method }) => {
+      if (url === PING_URL) return new Response('', { status: 500 });
+      if (url === sourceUrl && method === 'HEAD') {
+        return new Response(null, { status: 200 });
+      }
+      if (url === sourceUrl && method === 'POST') {
+        return new Response('', { status: 201 });
+      }
+      return new Response('', { status: 500 });
+    };
+    daAdminResponse = async ({ method }) => {
+      if (method === 'HEAD') throw new Error('Network connection lost.');
+      return new Response('', { status: 200 });
+    };
+    const req = authedRequest('/page', { method: 'POST' });
+    const daCtx = getDaCtx(req);
+    const { daSourcePost } = await loadRoutes();
+
+    const response = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(response.status, 201);
+    assert.strictEqual(fetchCalls.filter(({ method }) => method === 'POST').length, 1);
+    assert.strictEqual(daAdminCalls.filter(({ method }) => method === 'HEAD').length, 1);
+    assert.strictEqual(daAdminCalls.filter(({ method }) => method === 'POST').length, 0);
+  });
+
   [401, 403, 404, 500].forEach((status) => {
     it(`POSTs to da-admin when ping returns ${status}`, async () => {
       fetchResponse = async () => new Response('', { status });
