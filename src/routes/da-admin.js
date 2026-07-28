@@ -30,10 +30,7 @@ import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 
 const AEM_API = 'https://api.aem.live';
 const HLX_ADMIN = 'https://admin.hlx.page';
-const UPGRADE_CACHE_TTL = 5 * 60 * 1000;
-const UPGRADE_ERROR_TTL = 5 * 1000;
 const UPGRADE_PROBE_TIMEOUT = 2 * 1000;
-const sourceBackendCache = new Map();
 
 function aemApiSourceUrl(org, site, path) {
   return `${AEM_API}/${org}/sites/${site}/source${path}`;
@@ -57,45 +54,6 @@ async function probeHlx6(org, site) {
     }
     throw e;
   }
-}
-
-async function resolveHlx6(org, site) {
-  const key = `${org}/${site}`;
-  const now = Date.now();
-  const cached = sourceBackendCache.get(key);
-  if (cached?.expiresAt > now) return cached.value;
-  if (cached?.pending) return cached.pending;
-
-  const staleValue = cached?.value;
-  const pending = probeHlx6(org, site)
-    .then((value) => {
-      if (value === undefined) {
-        sourceBackendCache.set(key, {
-          value: staleValue,
-          expiresAt: Date.now() + UPGRADE_ERROR_TTL,
-        });
-        return staleValue;
-      }
-
-      sourceBackendCache.set(key, {
-        value,
-        expiresAt: Date.now() + UPGRADE_CACHE_TTL,
-      });
-      return value;
-    })
-    .catch((e) => {
-      if (staleValue === undefined) {
-        sourceBackendCache.delete(key);
-      } else {
-        sourceBackendCache.set(key, {
-          value: staleValue,
-          expiresAt: Date.now() + UPGRADE_ERROR_TTL,
-        });
-      }
-      throw e;
-    });
-  sourceBackendCache.set(key, { ...cached, pending });
-  return pending;
 }
 
 async function getFileBody(data) {
@@ -160,7 +118,7 @@ export async function daSourceGet({ req, env, daCtx }) {
   const headers = new Headers();
   headers.set('Authorization', authToken);
 
-  const hlx6Promise = resolveHlx6(org, site);
+  const hlx6Promise = probeHlx6(org, site);
 
   if (ext !== 'html') {
     /*
@@ -249,7 +207,7 @@ export async function daSourceHead({ env, daCtx }) {
   headers.set('Authorization', authToken);
 
   const adminPath = ext !== 'html' ? path : `${path}.${ext}`;
-  const hlx6 = await resolveHlx6(org, site);
+  const hlx6 = await probeHlx6(org, site);
   if (hlx6) {
     const sourceUrl = aemApiSourceUrl(org, site, adminPath);
     console.log(`-> HEAD ${sourceUrl}`);
@@ -290,7 +248,7 @@ export async function daSourcePost({ req, env, daCtx }) {
     minifyWhitespace(bodyNode);
 
     const bodyContent = toHtml(bodyNode);
-    const hlx6 = await resolveHlx6(org, site);
+    const hlx6 = await probeHlx6(org, site);
     if (hlx6 === undefined) {
       return new Response('Unable to determine source backend', {
         status: 503,
