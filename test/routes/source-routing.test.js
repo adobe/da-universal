@@ -367,7 +367,6 @@ describe('source backend routing', () => {
     const { daSourceGet } = await loadRoutes();
     const first = await daSourceGet({ req, env, daCtx });
     upgraded = false;
-    upgraded = false;
     const second = await daSourceGet({ req, env, daCtx });
 
     assert.strictEqual(await first.text(), 'source image');
