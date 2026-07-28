@@ -159,6 +159,10 @@ export async function daSourceGet({ req, env, daCtx }) {
     : await env.daadmin.fetch(sourceRequest);
   console.log(`<- ${sourceUrl.toString()}. ${sourceResp.status} ${sourceResp.statusText}`, { status: sourceResp.status, statusText: sourceResp.statusText });
 
+  if (sourceResp.status !== 200 && sourceResp.status !== 404) {
+    return sourceResp;
+  }
+
   // use the stored content when available, otherwise fall back to a template
   const bodyHtml = sourceResp.status === 200
     ? await sourceResp.text()
