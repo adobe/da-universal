@@ -60,19 +60,19 @@ async function resolveUncertainWriteBackend({
   const aemUrl = aemApiSourceUrl(org, site, aemPath);
   const daUrl = new URL(`/source/${org}/${site}${daPath}`, env.DA_ADMIN);
 
-  try {
-    const [aemResponse, daResponse] = await Promise.all([
-      fetch(aemUrl, { method: 'HEAD', headers }),
-      env.daadmin.fetch(daUrl, { method: 'HEAD', headers }),
-    ]);
-    if (aemResponse.status === 200) {
-      if (daResponse.status === 200) {
-        console.warn(`Source document exists in both backends: ${org}/${site}${aemPath}. Using api.aem.live.`);
-      }
-      return true;
+  const [aemResult, daResult] = await Promise.allSettled([
+    fetch(aemUrl, { method: 'HEAD', headers }),
+    env.daadmin.fetch(daUrl, { method: 'HEAD', headers }),
+  ]);
+  if (aemResult.status === 'fulfilled' && aemResult.value.status === 200) {
+    if (daResult.status === 'fulfilled' && daResult.value.status === 200) {
+      console.warn(`Source document exists in both backends: ${org}/${site}${aemPath}. Using api.aem.live.`);
     }
-  } catch (e) {
-    console.warn(`Unable to determine source backend from document HEADs: ${org}/${site}${aemPath}. Using da-admin.`, e);
+    return true;
+  }
+  const failure = [aemResult, daResult].find(({ status }) => status === 'rejected');
+  if (failure) {
+    console.warn(`Unable to determine source backend from document HEADs: ${org}/${site}${aemPath}. Using da-admin.`, failure.reason);
   }
   return false;
 }
