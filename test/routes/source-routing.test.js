@@ -36,7 +36,6 @@ function callDetails(input, init = {}) {
 
 describe('source backend routing', () => {
   let originalFetch;
-  let originalDateNow;
   let fetchCalls;
   let daAdminCalls;
   let fetchResponse;
@@ -81,7 +80,6 @@ describe('source backend routing', () => {
 
   beforeEach(() => {
     originalFetch = globalThis.fetch;
-    originalDateNow = Date.now;
     fetchCalls = [];
     daAdminCalls = [];
     composedBodies = [];
@@ -107,7 +105,6 @@ describe('source backend routing', () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
-    Date.now = originalDateNow;
   });
 
   function upgradeResponse(upgraded = true) {
@@ -358,10 +355,8 @@ describe('source backend routing', () => {
     assert.strictEqual(fetchCalls.filter(({ url }) => url === PING_URL).length, 2);
   });
 
-  it('refreshes the routing decision after five minutes to allow rollback', async () => {
-    let now = 1_000;
+  it('probes before every request so routing changes apply immediately', async () => {
     let upgraded = true;
-    Date.now = () => now;
     fetchResponse = async ({ url }) => {
       if (url === PING_URL) return upgradeResponse(upgraded);
       return new Response('source image', { status: 200 });
@@ -370,10 +365,9 @@ describe('source backend routing', () => {
     const req = authedRequest('/image.png');
     const daCtx = getDaCtx(req);
     const { daSourceGet } = await loadRoutes();
-
     const first = await daSourceGet({ req, env, daCtx });
     upgraded = false;
-    now += 300_001;
+    upgraded = false;
     const second = await daSourceGet({ req, env, daCtx });
 
     assert.strictEqual(await first.text(), 'source image');
@@ -382,10 +376,8 @@ describe('source backend routing', () => {
     assert.strictEqual(daAdminCalls.length, 1);
   });
 
-  it('uses a stale routing decision when a refresh fails', async () => {
-    let now = 1_000;
+  it('does not use a stale routing decision when a later ping fails', async () => {
     let pingStatus = 200;
-    Date.now = () => now;
     fetchResponse = async ({ url }) => {
       if (url === PING_URL) {
         return pingStatus === 200
@@ -394,18 +386,40 @@ describe('source backend routing', () => {
       }
       return new Response('source image', { status: 200 });
     };
+    daAdminResponse = async () => new Response('legacy image', { status: 200 });
     const req = authedRequest('/image.png');
     const daCtx = getDaCtx(req);
     const { daSourceGet } = await loadRoutes();
 
     const first = await daSourceGet({ req, env, daCtx });
     pingStatus = 500;
-    now += 300_001;
     const second = await daSourceGet({ req, env, daCtx });
 
     assert.strictEqual(await first.text(), 'source image');
-    assert.strictEqual(await second.text(), 'source image');
+    assert.strictEqual(await second.text(), 'legacy image');
     assert.strictEqual(fetchCalls.filter(({ url }) => url === PING_URL).length, 2);
+    assert.strictEqual(daAdminCalls.length, 1);
+  });
+
+  it('probes independently for GET, HEAD, and POST', async () => {
+    fetchResponse = async ({ url, method }) => {
+      if (url === PING_URL) return upgradeResponse();
+      if (method === 'HEAD') return new Response(null, { status: 200 });
+      if (method === 'POST') return new Response('', { status: 201 });
+      return new Response('source image', { status: 200 });
+    };
+    const { daSourceGet, daSourceHead, daSourcePost } = await loadRoutes();
+    const getReq = authedRequest('/image.png');
+    const headReq = authedRequest('/image.png', { method: 'HEAD' });
+    const postReq = authedRequest('/page', { method: 'POST' });
+
+    await daSourceGet({ req: getReq, env, daCtx: getDaCtx(getReq) });
+    await daSourceHead({ env, daCtx: getDaCtx(headReq) });
+    await daSourcePost({ req: postReq, env, daCtx: getDaCtx(postReq) });
+
+    const pingCalls = fetchCalls.filter(({ url }) => url === PING_URL);
+    assert.strictEqual(pingCalls.length, 3);
+    assert.ok(pingCalls.every(({ method }) => method === 'GET'));
     assert.strictEqual(daAdminCalls.length, 0);
   });
 });
