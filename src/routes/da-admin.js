@@ -53,6 +53,30 @@ async function probeHlx6(org, site) {
   }
 }
 
+async function resolveUncertainWriteBackend({
+  org, site, aemPath, daPath, authToken, env,
+}) {
+  const headers = new Headers({ Authorization: authToken });
+  const aemUrl = aemApiSourceUrl(org, site, aemPath);
+  const daUrl = new URL(`/source/${org}/${site}${daPath}`, env.DA_ADMIN);
+
+  try {
+    const [aemResponse, daResponse] = await Promise.all([
+      fetch(aemUrl, { method: 'HEAD', headers }),
+      env.daadmin.fetch(daUrl, { method: 'HEAD', headers }),
+    ]);
+    if (aemResponse.status === 200) {
+      if (daResponse.status === 200) {
+        console.warn(`Source document exists in both backends: ${org}/${site}${aemPath}. Using api.aem.live.`);
+      }
+      return true;
+    }
+  } catch (e) {
+    console.warn(`Unable to determine source backend from document HEADs: ${org}/${site}${aemPath}. Using da-admin.`, e);
+  }
+  return false;
+}
+
 async function getFileBody(data) {
   const text = await data.text();
   return { body: text, type: data.type };
@@ -249,13 +273,21 @@ export async function daSourcePost({ req, env, daCtx }) {
     minifyWhitespace(bodyNode);
 
     const bodyContent = toHtml(bodyNode);
-    const hlx6 = await probeHlx6(org, site);
-    if (hlx6) {
-      const sourceUrl = aemApiSourceUrl(
+    const aemPath = ext !== 'html' ? path : `${path}.${ext}`;
+    const daPath = `${path}.${ext}`;
+    let hlx6 = await probeHlx6(org, site);
+    if (hlx6 === undefined) {
+      hlx6 = await resolveUncertainWriteBackend({
         org,
         site,
-        ext !== 'html' ? path : `${path}.${ext}`,
-      );
+        aemPath,
+        daPath,
+        authToken,
+        env,
+      });
+    }
+    if (hlx6) {
+      const sourceUrl = aemApiSourceUrl(org, site, aemPath);
       const headers = {
         Authorization: authToken,
         'Content-Type': 'text/html',
@@ -276,7 +308,7 @@ export async function daSourcePost({ req, env, daCtx }) {
     body.set('data', data);
     const headers = { Authorization: authToken };
     const adminUrl = new URL(
-      `/source/${org}/${site}${path}.${ext}`,
+      `/source/${org}/${site}${daPath}`,
       env.DA_ADMIN,
     );
     // eslint-disable-next-line no-param-reassign
