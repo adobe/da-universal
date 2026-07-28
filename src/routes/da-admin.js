@@ -246,13 +246,6 @@ export async function daSourcePost({ req, env, daCtx }) {
 
     const bodyContent = toHtml(bodyNode);
     const hlx6 = await probeHlx6(org, site);
-    if (hlx6 === undefined) {
-      return new Response('Unable to determine source backend', {
-        status: 503,
-        headers: { 'Retry-After': '5' },
-      });
-    }
-
     if (hlx6) {
       const sourceUrl = aemApiSourceUrl(
         org,
