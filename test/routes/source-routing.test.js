@@ -1,0 +1,385 @@
+/*
+ * Copyright 2026 Adobe. All rights reserved.
+ * This file is licensed to you under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License. You may obtain a copy
+ * of the License at http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTATIONS
+ * OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ */
+
+/* eslint-env mocha */
+import assert from 'assert';
+import esmock from 'esmock';
+import { getDaCtx } from '../../src/utils/daCtx.js';
+
+const ORG = 'org';
+const SITE = 'site';
+const AUTH = 'Bearer test-token';
+const DA_ADMIN = 'https://admin.da.live';
+const HLX_ADMIN = 'https://admin.hlx.page';
+const AEM_API = 'https://api.aem.live';
+const PING_URL = `${HLX_ADMIN}/ping/${ORG}/${SITE}`;
+
+function callDetails(input, init = {}) {
+  const request = input instanceof Request ? input : null;
+  return {
+    input,
+    url: request?.url ?? String(input),
+    method: init.method ?? request?.method ?? 'GET',
+    headers: new Headers(init.headers ?? request?.headers),
+    body: init.body,
+  };
+}
+
+describe('source backend routing', () => {
+  let originalFetch;
+  let originalDateNow;
+  let fetchCalls;
+  let daAdminCalls;
+  let fetchResponse;
+  let daAdminResponse;
+  let composedBodies;
+  let env;
+
+  const authedRequest = (path, init = {}) => new Request(
+    `https://main--${SITE}--${ORG}.preview.da.live${path}`,
+    {
+      ...init,
+      headers: {
+        Authorization: AUTH,
+        ...init.headers,
+      },
+    },
+  );
+
+  const loadRoutes = async () => esmock('../../src/routes/da-admin.js', {
+    '../../src/utils/aemCtx.js': {
+      getAemCtx: () => ({}),
+      getAEMHtml: async () => '<script src="/scripts.js"></script>',
+    },
+    '../../src/render/compose.js': {
+      composeHtml: async (daCtx, aemCtx, bodyHtml) => {
+        composedBodies.push(bodyHtml);
+        return { bodyHtml };
+      },
+      serializeHtml: ({ bodyHtml }) => `<html>${bodyHtml}</html>`,
+    },
+    '../../src/helpers/source.js': {
+      default: async () => ({ data: '<body><main>edited</main></body>' }),
+    },
+    '../../src/ue/attributes.js': {
+      removeUEAttributes: (node) => node,
+      unwrapParagraphs: (node) => node,
+    },
+    '../../src/render/rewrite-images.js': {
+      restoreAbsoluteImages: () => {},
+    },
+  });
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    originalDateNow = Date.now;
+    fetchCalls = [];
+    daAdminCalls = [];
+    composedBodies = [];
+    fetchResponse = async () => new Response('', { status: 404 });
+    daAdminResponse = async () => new Response('', { status: 404 });
+
+    globalThis.fetch = async (input, init) => {
+      const details = callDetails(input, init);
+      fetchCalls.push(details);
+      return fetchResponse(details);
+    };
+    env = {
+      DA_ADMIN,
+      daadmin: {
+        fetch: async (input, init) => {
+          const details = callDetails(input, init);
+          daAdminCalls.push(details);
+          return daAdminResponse(details);
+        },
+      },
+    };
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    Date.now = originalDateNow;
+  });
+
+  function upgradeResponse(upgraded = true) {
+    return new Response('', {
+      status: 200,
+      headers: upgraded ? { 'x-api-upgrade-available': 'true' } : {},
+    });
+  }
+
+  it('GETs a source-bus asset from api.aem.live', async () => {
+    const sourceUrl = `${AEM_API}/${ORG}/sites/${SITE}/source/image.png`;
+    fetchResponse = async ({ url }) => {
+      if (url === PING_URL) return upgradeResponse();
+      if (url === sourceUrl) return new Response('source image', { status: 200 });
+      return new Response('', { status: 500 });
+    };
+    daAdminResponse = async () => new Response('legacy image', { status: 200 });
+    const req = authedRequest('/image.png');
+    const daCtx = getDaCtx(req);
+    const { daSourceGet } = await loadRoutes();
+
+    const response = await daSourceGet({ req, env, daCtx });
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(await response.text(), 'source image');
+    assert.strictEqual(daAdminCalls.length, 0);
+    assert.strictEqual(fetchCalls[0].url, PING_URL);
+    assert.strictEqual(fetchCalls[0].headers.get('Authorization'), null);
+    assert.strictEqual(fetchCalls[1].url, sourceUrl);
+    assert.strictEqual(fetchCalls[1].headers.get('Authorization'), AUTH);
+  });
+
+  it('composes source-bus HTML through the existing preview pipeline', async () => {
+    const sourceUrl = `${AEM_API}/${ORG}/sites/${SITE}/source/page.html`;
+    fetchResponse = async ({ url }) => {
+      if (url === PING_URL) return upgradeResponse();
+      if (url === sourceUrl) {
+        return new Response('<body><main>source page</main></body>', { status: 200 });
+      }
+      return new Response('', { status: 500 });
+    };
+    const req = authedRequest('/page');
+    const daCtx = getDaCtx(req);
+    const { daSourceGet } = await loadRoutes();
+
+    const response = await daSourceGet({ req, env, daCtx });
+
+    assert.strictEqual(response.status, 200);
+    assert.deepStrictEqual(composedBodies, ['<body><main>source page</main></body>']);
+    assert.strictEqual(await response.text(), '<html><body><main>source page</main></body></html>');
+    assert.strictEqual(daAdminCalls.length, 0);
+  });
+
+  it('does not fall back to legacy content when a source-bus resource is missing', async () => {
+    fetchResponse = async ({ url }) => (
+      url === PING_URL ? upgradeResponse() : new Response('', { status: 404 })
+    );
+    daAdminResponse = async () => new Response('legacy image', { status: 200 });
+    const req = authedRequest('/missing.png');
+    const daCtx = getDaCtx(req);
+    const { daSourceGet } = await loadRoutes();
+
+    const response = await daSourceGet({ req, env, daCtx });
+
+    assert.strictEqual(response.status, 404);
+    assert.strictEqual(daAdminCalls.length, 0);
+  });
+
+  it('GETs legacy content when ping has no upgrade header', async () => {
+    fetchResponse = async ({ url }) => (
+      url === PING_URL ? upgradeResponse(false) : new Response('', { status: 500 })
+    );
+    daAdminResponse = async () => new Response('legacy image', { status: 200 });
+    const req = authedRequest('/image.png');
+    const daCtx = getDaCtx(req);
+    const { daSourceGet } = await loadRoutes();
+
+    const response = await daSourceGet({ req, env, daCtx });
+
+    assert.strictEqual(await response.text(), 'legacy image');
+    assert.strictEqual(fetchCalls.length, 1);
+    assert.strictEqual(daAdminCalls.length, 1);
+    assert.strictEqual(
+      daAdminCalls[0].url,
+      `${DA_ADMIN}/source/${ORG}/${SITE}/image.png`,
+    );
+    assert.strictEqual(daAdminCalls[0].headers.get('Authorization'), AUTH);
+  });
+
+  [401, 403, 404, 500].forEach((status) => {
+    it(`falls back to legacy GET when ping returns ${status}`, async () => {
+      fetchResponse = async () => new Response('', { status });
+      daAdminResponse = async () => new Response('legacy image', { status: 200 });
+      const req = authedRequest('/image.png');
+      const daCtx = getDaCtx(req);
+      const { daSourceGet } = await loadRoutes();
+
+      const response = await daSourceGet({ req, env, daCtx });
+
+      assert.strictEqual(await response.text(), 'legacy image');
+      assert.strictEqual(fetchCalls.length, 1);
+      assert.strictEqual(daAdminCalls.length, 1);
+    });
+  });
+
+  it('falls back to legacy GET when ping fails', async () => {
+    fetchResponse = async () => {
+      throw new TypeError('network failure');
+    };
+    daAdminResponse = async () => new Response('legacy image', { status: 200 });
+    const req = authedRequest('/image.png');
+    const daCtx = getDaCtx(req);
+    const { daSourceGet } = await loadRoutes();
+
+    const response = await daSourceGet({ req, env, daCtx });
+
+    assert.strictEqual(await response.text(), 'legacy image');
+    assert.strictEqual(daAdminCalls.length, 1);
+  });
+
+  it('HEADs a source-bus resource through api.aem.live', async () => {
+    const sourceUrl = `${AEM_API}/${ORG}/sites/${SITE}/source/image.png`;
+    fetchResponse = async ({ url }) => {
+      if (url === PING_URL) return upgradeResponse();
+      if (url === sourceUrl) {
+        return new Response(null, {
+          status: 200,
+          headers: { 'Content-Type': 'image/png', 'Content-Length': '42' },
+        });
+      }
+      return new Response('', { status: 500 });
+    };
+    const req = authedRequest('/image.png', { method: 'HEAD' });
+    const daCtx = getDaCtx(req);
+    const { daSourceHead } = await loadRoutes();
+
+    const response = await daSourceHead({ env, daCtx });
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.headers.get('Content-Type'), 'image/png');
+    assert.strictEqual(response.headers.get('Content-Length'), '42');
+    assert.deepStrictEqual(fetchCalls.map(({ method }) => method), ['GET', 'HEAD']);
+    assert.strictEqual(daAdminCalls.length, 0);
+  });
+
+  it('POSTs raw HTML to api.aem.live and does not write to da-admin', async () => {
+    const sourceUrl = `${AEM_API}/${ORG}/sites/${SITE}/source/page.html`;
+    fetchResponse = async ({ url }) => {
+      if (url === PING_URL) return upgradeResponse();
+      if (url === sourceUrl) return new Response('', { status: 201 });
+      return new Response('', { status: 500 });
+    };
+    const req = authedRequest('/page', { method: 'POST' });
+    const daCtx = getDaCtx(req);
+    const { daSourcePost } = await loadRoutes();
+
+    const response = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(response.status, 201);
+    const post = fetchCalls.find(({ method }) => method === 'POST');
+    assert.ok(post);
+    assert.strictEqual(post.url, sourceUrl);
+    assert.strictEqual(post.headers.get('Authorization'), AUTH);
+    assert.strictEqual(post.headers.get('Content-Type'), 'text/html');
+    assert.strictEqual(post.body, '<body><main>edited</main></body>');
+    assert.strictEqual(daAdminCalls.length, 0);
+  });
+
+  it('POSTs FormData to da-admin and does not write to api.aem.live for legacy sites', async () => {
+    fetchResponse = async () => upgradeResponse(false);
+    daAdminResponse = async () => new Response('', { status: 200 });
+    const req = authedRequest('/page', { method: 'POST' });
+    const daCtx = getDaCtx(req);
+    const { daSourcePost } = await loadRoutes();
+
+    const response = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(fetchCalls.length, 1);
+    assert.strictEqual(daAdminCalls.length, 1);
+    assert.strictEqual(daAdminCalls[0].method, 'POST');
+    const body = await daAdminCalls[0].input.clone().formData();
+    assert.strictEqual(
+      await body.get('data').text(),
+      '<body><main>edited</main></body>',
+    );
+  });
+
+  [401, 403, 404, 500].forEach((status) => {
+    it(`returns 503 without writing when POST ping returns ${status}`, async () => {
+      fetchResponse = async () => new Response('', { status });
+      daAdminResponse = async () => new Response('', { status: 200 });
+      const req = authedRequest('/page', { method: 'POST' });
+      const daCtx = getDaCtx(req);
+      const { daSourcePost } = await loadRoutes();
+
+      const response = await daSourcePost({ req, env, daCtx });
+
+      assert.strictEqual(response.status, 503);
+      assert.strictEqual(fetchCalls.length, 1);
+      assert.strictEqual(daAdminCalls.length, 0);
+    });
+  });
+
+  [
+    new TypeError('network failure'),
+    new DOMException('timed out', 'AbortError'),
+  ].forEach((error) => {
+    it(`returns 503 without writing when POST ping fails with ${error.name}`, async () => {
+      fetchResponse = async () => {
+        throw error;
+      };
+      const req = authedRequest('/page', { method: 'POST' });
+      const daCtx = getDaCtx(req);
+      const { daSourcePost } = await loadRoutes();
+
+      const response = await daSourcePost({ req, env, daCtx });
+
+      assert.strictEqual(response.status, 503);
+      assert.strictEqual(fetchCalls.length, 1);
+      assert.strictEqual(daAdminCalls.length, 0);
+    });
+  });
+
+  it('refreshes the routing decision after five minutes to allow rollback', async () => {
+    let now = 1_000;
+    let upgraded = true;
+    Date.now = () => now;
+    fetchResponse = async ({ url }) => {
+      if (url === PING_URL) return upgradeResponse(upgraded);
+      return new Response('source image', { status: 200 });
+    };
+    daAdminResponse = async () => new Response('legacy image', { status: 200 });
+    const req = authedRequest('/image.png');
+    const daCtx = getDaCtx(req);
+    const { daSourceGet } = await loadRoutes();
+
+    const first = await daSourceGet({ req, env, daCtx });
+    upgraded = false;
+    now += 300_001;
+    const second = await daSourceGet({ req, env, daCtx });
+
+    assert.strictEqual(await first.text(), 'source image');
+    assert.strictEqual(await second.text(), 'legacy image');
+    assert.strictEqual(fetchCalls.filter(({ url }) => url === PING_URL).length, 2);
+    assert.strictEqual(daAdminCalls.length, 1);
+  });
+
+  it('uses a stale routing decision when a refresh fails', async () => {
+    let now = 1_000;
+    let pingStatus = 200;
+    Date.now = () => now;
+    fetchResponse = async ({ url }) => {
+      if (url === PING_URL) {
+        return pingStatus === 200
+          ? upgradeResponse()
+          : new Response('', { status: pingStatus });
+      }
+      return new Response('source image', { status: 200 });
+    };
+    const req = authedRequest('/image.png');
+    const daCtx = getDaCtx(req);
+    const { daSourceGet } = await loadRoutes();
+
+    const first = await daSourceGet({ req, env, daCtx });
+    pingStatus = 500;
+    now += 300_001;
+    const second = await daSourceGet({ req, env, daCtx });
+
+    assert.strictEqual(await first.text(), 'source image');
+    assert.strictEqual(await second.text(), 'source image');
+    assert.strictEqual(fetchCalls.filter(({ url }) => url === PING_URL).length, 2);
+    assert.strictEqual(daAdminCalls.length, 0);
+  });
+});
