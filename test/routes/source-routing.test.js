@@ -299,7 +299,7 @@ describe('source backend routing', () => {
   });
 
   [401, 403, 404, 500].forEach((status) => {
-    it(`returns 503 without writing when POST ping returns ${status}`, async () => {
+    it(`POSTs to da-admin when ping returns ${status}`, async () => {
       fetchResponse = async () => new Response('', { status });
       daAdminResponse = async () => new Response('', { status: 200 });
       const req = authedRequest('/page', { method: 'POST' });
@@ -308,9 +308,11 @@ describe('source backend routing', () => {
 
       const response = await daSourcePost({ req, env, daCtx });
 
-      assert.strictEqual(response.status, 503);
+      assert.strictEqual(response.status, 200);
       assert.strictEqual(fetchCalls.length, 1);
-      assert.strictEqual(daAdminCalls.length, 0);
+      assert.strictEqual(fetchCalls[0].method, 'GET');
+      assert.strictEqual(daAdminCalls.length, 1);
+      assert.strictEqual(daAdminCalls[0].method, 'POST');
     });
   });
 
@@ -318,19 +320,22 @@ describe('source backend routing', () => {
     new Error('Network connection lost.'),
     new DOMException('timed out', 'TimeoutError'),
   ].forEach((error) => {
-    it(`returns 503 without writing when POST ping fails with ${error.name}`, async () => {
+    it(`POSTs to da-admin when ping fails with ${error.name}`, async () => {
       fetchResponse = async () => {
         throw error;
       };
+      daAdminResponse = async () => new Response('', { status: 200 });
       const req = authedRequest('/page', { method: 'POST' });
       const daCtx = getDaCtx(req);
       const { daSourcePost } = await loadRoutes();
 
       const response = await daSourcePost({ req, env, daCtx });
 
-      assert.strictEqual(response.status, 503);
+      assert.strictEqual(response.status, 200);
       assert.strictEqual(fetchCalls.length, 1);
-      assert.strictEqual(daAdminCalls.length, 0);
+      assert.strictEqual(fetchCalls[0].method, 'GET');
+      assert.strictEqual(daAdminCalls.length, 1);
+      assert.strictEqual(daAdminCalls[0].method, 'POST');
     });
   });
 
