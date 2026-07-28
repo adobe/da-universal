@@ -213,19 +213,24 @@ describe('source backend routing', () => {
     });
   });
 
-  it('falls back to legacy GET when ping fails', async () => {
-    fetchResponse = async () => {
-      throw new TypeError('network failure');
-    };
-    daAdminResponse = async () => new Response('legacy image', { status: 200 });
-    const req = authedRequest('/image.png');
-    const daCtx = getDaCtx(req);
-    const { daSourceGet } = await loadRoutes();
+  [
+    new TypeError('network failure'),
+    new DOMException('timed out', 'TimeoutError'),
+  ].forEach((error) => {
+    it(`falls back to legacy GET when ping fails with ${error.name}`, async () => {
+      fetchResponse = async () => {
+        throw error;
+      };
+      daAdminResponse = async () => new Response('legacy image', { status: 200 });
+      const req = authedRequest('/image.png');
+      const daCtx = getDaCtx(req);
+      const { daSourceGet } = await loadRoutes();
 
-    const response = await daSourceGet({ req, env, daCtx });
+      const response = await daSourceGet({ req, env, daCtx });
 
-    assert.strictEqual(await response.text(), 'legacy image');
-    assert.strictEqual(daAdminCalls.length, 1);
+      assert.strictEqual(await response.text(), 'legacy image');
+      assert.strictEqual(daAdminCalls.length, 1);
+    });
   });
 
   it('HEADs a source-bus resource through api.aem.live', async () => {
@@ -314,7 +319,7 @@ describe('source backend routing', () => {
 
   [
     new TypeError('network failure'),
-    new DOMException('timed out', 'AbortError'),
+    new DOMException('timed out', 'TimeoutError'),
   ].forEach((error) => {
     it(`returns 503 without writing when POST ping fails with ${error.name}`, async () => {
       fetchResponse = async () => {
@@ -330,6 +335,27 @@ describe('source backend routing', () => {
       assert.strictEqual(fetchCalls.length, 1);
       assert.strictEqual(daAdminCalls.length, 0);
     });
+  });
+
+  it('retries after an unexpected probe error instead of caching the rejection', async () => {
+    let firstProbe = true;
+    fetchResponse = async ({ url }) => {
+      if (url === PING_URL && firstProbe) {
+        firstProbe = false;
+        throw new Error('unexpected failure');
+      }
+      if (url === PING_URL) return upgradeResponse();
+      return new Response('source image', { status: 200 });
+    };
+    const req = authedRequest('/image.png');
+    const daCtx = getDaCtx(req);
+    const { daSourceGet } = await loadRoutes();
+
+    await assert.rejects(() => daSourceGet({ req, env, daCtx }), /unexpected failure/);
+    const response = await daSourceGet({ req, env, daCtx });
+
+    assert.strictEqual(await response.text(), 'source image');
+    assert.strictEqual(fetchCalls.filter(({ url }) => url === PING_URL).length, 2);
   });
 
   it('refreshes the routing decision after five minutes to allow rollback', async () => {
