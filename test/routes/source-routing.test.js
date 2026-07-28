@@ -158,6 +158,32 @@ describe('source backend routing', () => {
     assert.strictEqual(daAdminCalls.length, 0);
   });
 
+  [401, 403, 500, 503].forEach((status) => {
+    it(`returns source-bus HTML status ${status} without composing a page`, async () => {
+      const sourceUrl = `${AEM_API}/${ORG}/sites/${SITE}/source/page.html`;
+      fetchResponse = async ({ url }) => {
+        if (url === PING_URL) return upgradeResponse();
+        if (url === sourceUrl) {
+          return new Response('source failed', {
+            status,
+            headers: { 'X-Error': 'source failed' },
+          });
+        }
+        return new Response('', { status: 500 });
+      };
+      const req = authedRequest('/page');
+      const daCtx = getDaCtx(req);
+      const { daSourceGet } = await loadRoutes();
+
+      const response = await daSourceGet({ req, env, daCtx });
+
+      assert.strictEqual(response.status, status);
+      assert.strictEqual(response.headers.get('X-Error'), 'source failed');
+      assert.strictEqual(await response.text(), 'source failed');
+      assert.deepStrictEqual(composedBodies, []);
+    });
+  });
+
   it('does not fall back to legacy content when a source-bus resource is missing', async () => {
     fetchResponse = async ({ url }) => (
       url === PING_URL ? upgradeResponse() : new Response('', { status: 404 })
