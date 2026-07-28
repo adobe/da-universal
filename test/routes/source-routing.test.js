@@ -211,7 +211,7 @@ describe('source backend routing', () => {
   });
 
   [
-    new TypeError('network failure'),
+    new Error('Network connection lost.'),
     new DOMException('timed out', 'TimeoutError'),
   ].forEach((error) => {
     it(`falls back to legacy GET when ping fails with ${error.name}`, async () => {
@@ -315,7 +315,7 @@ describe('source backend routing', () => {
   });
 
   [
-    new TypeError('network failure'),
+    new Error('Network connection lost.'),
     new DOMException('timed out', 'TimeoutError'),
   ].forEach((error) => {
     it(`returns 503 without writing when POST ping fails with ${error.name}`, async () => {
@@ -334,24 +334,26 @@ describe('source backend routing', () => {
     });
   });
 
-  it('retries after an unexpected probe error instead of caching the rejection', async () => {
+  it('falls back after a probe error and probes again on the next request', async () => {
     let firstProbe = true;
     fetchResponse = async ({ url }) => {
       if (url === PING_URL && firstProbe) {
         firstProbe = false;
-        throw new Error('unexpected failure');
+        throw new Error('internal error; reference = test');
       }
       if (url === PING_URL) return upgradeResponse();
       return new Response('source image', { status: 200 });
     };
+    daAdminResponse = async () => new Response('legacy image', { status: 200 });
     const req = authedRequest('/image.png');
     const daCtx = getDaCtx(req);
     const { daSourceGet } = await loadRoutes();
 
-    await assert.rejects(() => daSourceGet({ req, env, daCtx }), /unexpected failure/);
-    const response = await daSourceGet({ req, env, daCtx });
+    const first = await daSourceGet({ req, env, daCtx });
+    const second = await daSourceGet({ req, env, daCtx });
 
-    assert.strictEqual(await response.text(), 'source image');
+    assert.strictEqual(await first.text(), 'legacy image');
+    assert.strictEqual(await second.text(), 'source image');
     assert.strictEqual(fetchCalls.filter(({ url }) => url === PING_URL).length, 2);
   });
 
