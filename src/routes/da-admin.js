@@ -51,6 +51,13 @@ async function probeHlx6(org, site) {
   }
 }
 
+/**
+ * Resolves the write backend after the site probe fails.
+ * Both backends are HEADed concurrently. A source-bus 200 selects api.aem.live.
+ * Every other result selects da-admin, including a missing document or failed HEAD.
+ *
+ * @returns {Promise<boolean>} true for api.aem.live, false for da-admin
+ */
 async function resolveUncertainWriteBackend({
   org, site, aemPath, daPath, authToken, env,
 }) {
@@ -140,7 +147,10 @@ export async function daSourceGet({ req, env, daCtx }) {
     const hlx6 = await hlx6Promise;
     if (hlx6) {
       const sourceUrl = aemApiSourceUrl(org, site, path);
-      return fetch(sourceUrl, { headers });
+      console.log(`-> ${sourceUrl}`);
+      const response = await fetch(sourceUrl, { headers });
+      console.log(`<- ${sourceUrl}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+      return response;
     }
     const adminUrl = new URL(`/source/${org}/${site}${path}`, env.DA_ADMIN);
     console.log(`-> ${adminUrl.toString()}`);
@@ -167,7 +177,9 @@ export async function daSourceGet({ req, env, daCtx }) {
   let sourceResp;
   if (hlx6) {
     const sourceUrl = aemApiSourceUrl(org, site, `${path}.${ext}`);
+    console.log(`-> ${sourceUrl}`);
     sourceResp = await fetch(sourceUrl, { headers });
+    console.log(`<- ${sourceUrl}. ${sourceResp.status} ${sourceResp.statusText}`, { status: sourceResp.status, statusText: sourceResp.statusText });
   } else {
     const adminUrl = new URL(
       `/source/${org}/${site}${path}.${ext}`,
@@ -231,7 +243,10 @@ export async function daSourceHead({ env, daCtx }) {
   const hlx6 = await probeHlx6(org, site);
   if (hlx6) {
     const sourceUrl = aemApiSourceUrl(org, site, adminPath);
-    return fetch(sourceUrl, { method: 'HEAD', headers });
+    console.log(`-> HEAD ${sourceUrl}`);
+    const response = await fetch(sourceUrl, { method: 'HEAD', headers });
+    console.log(`<- HEAD ${sourceUrl}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+    return response;
   }
 
   const adminUrl = new URL(`/source/${org}/${site}${adminPath}`, env.DA_ADMIN);
@@ -266,6 +281,8 @@ export async function daSourcePost({ req, env, daCtx }) {
     minifyWhitespace(bodyNode);
 
     const bodyContent = toHtml(bodyNode);
+    // api.aem.live keeps explicit file extensions. Preserve da-admin's existing
+    // `${path}.${ext}` construction; HTML paths are the same for both backends.
     const aemPath = ext !== 'html' ? path : `${path}.${ext}`;
     const daPath = `${path}.${ext}`;
     let hlx6 = await probeHlx6(org, site);
@@ -285,11 +302,13 @@ export async function daSourcePost({ req, env, daCtx }) {
         Authorization: authToken,
         'Content-Type': 'text/html',
       };
+      console.log(`-> ${sourceUrl}`);
       const response = await fetch(sourceUrl, {
         method: 'POST',
         body: bodyContent,
         headers,
       });
+      console.log(`<- ${sourceUrl}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
       return response;
     }
 
