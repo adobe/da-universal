@@ -43,12 +43,10 @@ async function probeHlx6(org, site) {
       signal: AbortSignal.timeout(UPGRADE_PROBE_TIMEOUT),
     });
     if (response.status !== 200) {
-      console.warn(`Unable to determine source backend: ${pingUrl} returned ${response.status}`);
       return undefined;
     }
     return response.headers.get('x-api-upgrade-available') === 'true';
-  } catch (e) {
-    console.warn(`Unable to determine source backend: ${pingUrl}`, e);
+  } catch {
     return undefined;
   }
 }
@@ -60,19 +58,12 @@ async function resolveUncertainWriteBackend({
   const aemUrl = aemApiSourceUrl(org, site, aemPath);
   const daUrl = new URL(`/source/${org}/${site}${daPath}`, env.DA_ADMIN);
 
-  const [aemResult, daResult] = await Promise.allSettled([
+  const [aemResult] = await Promise.allSettled([
     fetch(aemUrl, { method: 'HEAD', headers }),
     env.daadmin.fetch(daUrl, { method: 'HEAD', headers }),
   ]);
   if (aemResult.status === 'fulfilled' && aemResult.value.status === 200) {
-    if (daResult.status === 'fulfilled' && daResult.value.status === 200) {
-      console.warn(`Source document exists in both backends: ${org}/${site}${aemPath}. Using api.aem.live.`);
-    }
     return true;
-  }
-  const failure = [aemResult, daResult].find(({ status }) => status === 'rejected');
-  if (failure) {
-    console.warn(`Unable to determine source backend from document HEADs: ${org}/${site}${aemPath}. Using da-admin.`, failure.reason);
   }
   return false;
 }
