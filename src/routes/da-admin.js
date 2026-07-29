@@ -59,11 +59,11 @@ async function probeHlx6(org, site) {
  * @returns {Promise<boolean>} true for api.aem.live, false for da-admin
  */
 async function resolveUncertainWriteBackend({
-  org, site, aemPath, daPath, authToken, env,
+  org, site, sourcePath, authToken, env,
 }) {
   const headers = new Headers({ Authorization: authToken });
-  const aemUrl = aemApiSourceUrl(org, site, aemPath);
-  const daUrl = new URL(`/source/${org}/${site}${daPath}`, env.DA_ADMIN);
+  const aemUrl = aemApiSourceUrl(org, site, sourcePath);
+  const daUrl = new URL(`/source/${org}/${site}${sourcePath}`, env.DA_ADMIN);
 
   const [aemResult] = await Promise.allSettled([
     fetch(aemUrl, { method: 'HEAD', headers }),
@@ -281,23 +281,20 @@ export async function daSourcePost({ req, env, daCtx }) {
     minifyWhitespace(bodyNode);
 
     const bodyContent = toHtml(bodyNode);
-    // api.aem.live keeps explicit file extensions. Preserve da-admin's existing
-    // `${path}.${ext}` construction; HTML paths are the same for both backends.
-    const aemPath = ext !== 'html' ? path : `${path}.${ext}`;
-    const daPath = `${path}.${ext}`;
+    // daCtx.path contains explicit file extensions; append only inferred HTML.
+    const sourcePath = ext !== 'html' ? path : `${path}.${ext}`;
     let hlx6 = await probeHlx6(org, site);
     if (hlx6 === undefined) {
       hlx6 = await resolveUncertainWriteBackend({
         org,
         site,
-        aemPath,
-        daPath,
+        sourcePath,
         authToken,
         env,
       });
     }
     if (hlx6) {
-      const sourceUrl = aemApiSourceUrl(org, site, aemPath);
+      const sourceUrl = aemApiSourceUrl(org, site, sourcePath);
       const headers = {
         Authorization: authToken,
         'Content-Type': 'text/html',
@@ -318,7 +315,7 @@ export async function daSourcePost({ req, env, daCtx }) {
     body.set('data', data);
     const headers = { Authorization: authToken };
     const adminUrl = new URL(
-      `/source/${org}/${site}${daPath}`,
+      `/source/${org}/${site}${sourcePath}`,
       env.DA_ADMIN,
     );
     // eslint-disable-next-line no-param-reassign
