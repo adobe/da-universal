@@ -173,13 +173,8 @@ export async function daSourceGet({ req, env, daCtx }) {
       `/source/${org}/${site}${path}.${ext}`,
       env.DA_ADMIN,
     );
-    // eslint-disable-next-line no-param-reassign
-    req = new Request(adminUrl, {
-      method: 'GET',
-      headers,
-    });
     console.log(`-> ${adminUrl.toString()}`);
-    const daAdminResp = await env.daadmin.fetch(req);
+    const daAdminResp = await env.daadmin.fetch(adminUrl, { headers });
     console.log(`<- ${adminUrl.toString()}. ${daAdminResp.status} ${daAdminResp.statusText}`, { status: daAdminResp.status, statusText: daAdminResp.statusText });
     sourceResp = daAdminResp;
   }
