@@ -147,7 +147,10 @@ describe('source backend routing', () => {
     assert.strictEqual(fetchCalls[0].headers.get('Authorization'), null);
     assert.strictEqual(fetchCalls[1].url, sourceUrl);
     assert.strictEqual(fetchCalls[1].headers.get('Authorization'), AUTH);
-    assert.strictEqual(logs.length, 0);
+    assert.deepStrictEqual(logs.map(([message]) => message), [
+      `-> ${sourceUrl}`,
+      `<- ${sourceUrl}. 200 `,
+    ]);
   });
 
   it('composes source-bus HTML through the existing preview pipeline', async () => {
@@ -169,7 +172,10 @@ describe('source backend routing', () => {
     assert.deepStrictEqual(composedBodies, ['<body><main>source page</main></body>']);
     assert.strictEqual(await response.text(), '<html><body><main>source page</main></body></html>');
     assert.strictEqual(daAdminCalls.length, 0);
-    assert.strictEqual(logs.length, 0);
+    assert.deepStrictEqual(logs.map(([message]) => message), [
+      `-> ${sourceUrl}`,
+      `<- ${sourceUrl}. 200 `,
+    ]);
   });
 
   [401, 403, 500, 503].forEach((status) => {
@@ -293,7 +299,10 @@ describe('source backend routing', () => {
     assert.strictEqual(response.headers.get('Content-Length'), '42');
     assert.deepStrictEqual(fetchCalls.map(({ method }) => method), ['GET', 'HEAD']);
     assert.strictEqual(daAdminCalls.length, 0);
-    assert.strictEqual(logs.length, 0);
+    assert.deepStrictEqual(logs.map(([message]) => message), [
+      `-> HEAD ${sourceUrl}`,
+      `<- HEAD ${sourceUrl}. 200 `,
+    ]);
   });
 
   it('POSTs raw HTML to api.aem.live and does not write to da-admin', async () => {
@@ -318,7 +327,10 @@ describe('source backend routing', () => {
     assert.strictEqual(post.body, '<body><main>edited</main></body>');
     assert.strictEqual(daAdminCalls.length, 0);
     assert.strictEqual(fetchCalls.filter(({ method }) => method === 'HEAD').length, 0);
-    assert.strictEqual(logs.length, 0);
+    assert.deepStrictEqual(logs.map(([message]) => message), [
+      `-> ${sourceUrl}`,
+      `<- ${sourceUrl}. 201 `,
+    ]);
   });
 
   it('POSTs FormData to da-admin and does not write to api.aem.live for legacy sites', async () => {
