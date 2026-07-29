@@ -140,7 +140,7 @@ export async function daSourceGet({ req, env, daCtx }) {
     const hlx6 = await hlx6Promise;
     if (hlx6) {
       const sourceUrl = aemApiSourceUrl(org, site, path);
-      return fetch(sourceUrl, { method: 'GET', headers });
+      return fetch(sourceUrl, { headers });
     }
     const adminUrl = new URL(`/source/${org}/${site}${path}`, env.DA_ADMIN);
     console.log(`-> ${adminUrl.toString()}`);
