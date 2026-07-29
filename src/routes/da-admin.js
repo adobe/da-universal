@@ -138,14 +138,14 @@ export async function daSourceGet({ req, env, daCtx }) {
      and ensure that extensions are not duplicated
     */
     const hlx6 = await hlx6Promise;
-    const sourceUrl = hlx6
-      ? aemApiSourceUrl(org, site, path)
-      : new URL(`/source/${org}/${site}${path}`, env.DA_ADMIN);
-    console.log(`-> ${sourceUrl.toString()}`);
-    const response = hlx6
-      ? await fetch(sourceUrl, { method: 'GET', headers })
-      : await env.daadmin.fetch(sourceUrl, { method: 'GET', headers });
-    console.log(`<- ${sourceUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+    if (hlx6) {
+      const sourceUrl = aemApiSourceUrl(org, site, path);
+      return fetch(sourceUrl, { method: 'GET', headers });
+    }
+    const adminUrl = new URL(`/source/${org}/${site}${path}`, env.DA_ADMIN);
+    console.log(`-> ${adminUrl.toString()}`);
+    const response = await env.daadmin.fetch(adminUrl, { method: 'GET', headers });
+    console.log(`<- ${adminUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
     return response;
   }
 
@@ -164,15 +164,26 @@ export async function daSourceGet({ req, env, daCtx }) {
     return get404(BRANCH_NOT_FOUND_HTML_MESSAGE);
   }
 
-  const sourceUrl = hlx6
-    ? aemApiSourceUrl(org, site, `${path}.${ext}`)
-    : new URL(`/source/${org}/${site}${path}.${ext}`, env.DA_ADMIN);
-  const sourceRequest = new Request(sourceUrl, { method: 'GET', headers });
-  console.log(`-> ${sourceUrl.toString()}`);
-  const sourceResp = hlx6
-    ? await fetch(sourceRequest)
-    : await env.daadmin.fetch(sourceRequest);
-  console.log(`<- ${sourceUrl.toString()}. ${sourceResp.status} ${sourceResp.statusText}`, { status: sourceResp.status, statusText: sourceResp.statusText });
+  let sourceResp;
+  if (hlx6) {
+    const sourceUrl = aemApiSourceUrl(org, site, `${path}.${ext}`);
+    const sourceRequest = new Request(sourceUrl, { method: 'GET', headers });
+    sourceResp = await fetch(sourceRequest);
+  } else {
+    const adminUrl = new URL(
+      `/source/${org}/${site}${path}.${ext}`,
+      env.DA_ADMIN,
+    );
+    // eslint-disable-next-line no-param-reassign
+    req = new Request(adminUrl, {
+      method: 'GET',
+      headers,
+    });
+    console.log(`-> ${adminUrl.toString()}`);
+    const daAdminResp = await env.daadmin.fetch(req);
+    console.log(`<- ${adminUrl.toString()}. ${daAdminResp.status} ${daAdminResp.statusText}`, { status: daAdminResp.status, statusText: daAdminResp.statusText });
+    sourceResp = daAdminResp;
+  }
 
   if (sourceResp.status !== 200 && sourceResp.status !== 404) {
     return sourceResp;
@@ -226,9 +237,7 @@ export async function daSourceHead({ env, daCtx }) {
   const hlx6 = await probeHlx6(org, site);
   if (hlx6) {
     const sourceUrl = aemApiSourceUrl(org, site, adminPath);
-    console.log(`-> HEAD ${sourceUrl}`);
     const response = await fetch(sourceUrl, { method: 'HEAD', headers });
-    console.log(`<- HEAD ${sourceUrl}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
     return new Response(null, { status: response.status, headers: response.headers });
   }
 
@@ -283,13 +292,11 @@ export async function daSourcePost({ req, env, daCtx }) {
         Authorization: authToken,
         'Content-Type': 'text/html',
       };
-      console.log(`-> ${sourceUrl}`);
       const response = await fetch(sourceUrl, {
         method: 'POST',
         body: bodyContent,
         headers,
       });
-      console.log(`<- ${sourceUrl}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
       return response;
     }
 
