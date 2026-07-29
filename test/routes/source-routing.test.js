@@ -356,10 +356,9 @@ describe('source backend routing', () => {
       aemHead: 200,
       daHead: 200,
       backend: 'aem',
-      warns: true,
     },
   ].forEach(({
-    title, aemHead, daHead, backend, warns,
+    title, aemHead, daHead, backend,
   }) => {
     it(title, async () => {
       const sourceUrl = `${AEM_API}/${ORG}/sites/${SITE}/source/page.html`;
@@ -393,7 +392,7 @@ describe('source backend routing', () => {
         daAdminCalls.filter(({ method }) => method === 'POST').length,
         backend === 'da' ? 1 : 0,
       );
-      assert.strictEqual(warnings.length, warns ? 2 : 1);
+      assert.strictEqual(warnings.length, 0);
     });
   });
 
