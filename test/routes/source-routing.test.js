@@ -442,6 +442,36 @@ describe('source backend routing', () => {
     assert.strictEqual(daAdminCalls.filter(({ method }) => method === 'POST').length, 1);
   });
 
+  it('preserves explicit extensions when an uncertain write uses da-admin', async () => {
+    const sourceUrl = `${AEM_API}/${ORG}/sites/${SITE}/source/sheet.json`;
+    const adminUrl = `${DA_ADMIN}/source/${ORG}/${SITE}/sheet.json`;
+    fetchResponse = async ({ url, method }) => {
+      if (url === PING_URL) return new Response('', { status: 500 });
+      if (url === sourceUrl && method === 'HEAD') {
+        return new Response(null, { status: 404 });
+      }
+      return new Response('', { status: 500 });
+    };
+    daAdminResponse = async ({ method }) => (
+      new Response(null, { status: method === 'HEAD' ? 200 : 200 })
+    );
+    const req = authedRequest('/sheet.json', { method: 'POST' });
+    const daCtx = getDaCtx(req);
+    const { daSourcePost } = await loadRoutes();
+
+    const response = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(
+      daAdminCalls.find(({ method }) => method === 'HEAD').url,
+      adminUrl,
+    );
+    assert.strictEqual(
+      daAdminCalls.find(({ method }) => method === 'POST').url,
+      adminUrl,
+    );
+  });
+
   it('uses api.aem.live when its HEAD succeeds and da-admin HEAD fails', async () => {
     const sourceUrl = `${AEM_API}/${ORG}/sites/${SITE}/source/page.html`;
     fetchResponse = async ({ url, method }) => {
