@@ -231,8 +231,7 @@ export async function daSourceHead({ env, daCtx }) {
   const hlx6 = await probeHlx6(org, site);
   if (hlx6) {
     const sourceUrl = aemApiSourceUrl(org, site, adminPath);
-    const response = await fetch(sourceUrl, { method: 'HEAD', headers });
-    return new Response(null, { status: response.status, headers: response.headers });
+    return fetch(sourceUrl, { method: 'HEAD', headers });
   }
 
   const adminUrl = new URL(`/source/${org}/${site}${adminPath}`, env.DA_ADMIN);
