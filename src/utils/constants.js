@@ -13,6 +13,8 @@
 export const TRUSTED_ORIGINS = [
   'https://da.live',
   'https://experience.adobe.com',
+  'https://preview-aemcoder.adobe.io',
+  'https://preview-excat-stage.adobe.io',
   'https://localhost.corp.adobe.com:8080',
 ];
 
