@@ -41,7 +41,7 @@ describe('DA context', () => {
     });
 
     it('should return the correct path names', () => {
-      assert.strictEqual(daCtx.pathname, '/folder/content');
+      assert.strictEqual(daCtx.sourcePath, '/folder/content.html');
       assert.strictEqual(daCtx.aemPathname, '/folder/content');
     });
 
@@ -68,7 +68,7 @@ describe('DA context', () => {
     });
 
     it('should return the correct path names', () => {
-      assert.strictEqual(daCtx.pathname, '/folder/content');
+      assert.strictEqual(daCtx.sourcePath, '/folder/content.html');
       assert.strictEqual(daCtx.aemPathname, '/folder/content');
     });
 
@@ -83,7 +83,7 @@ describe('DA context', () => {
     });
 
     it('should return the correct path names', () => {
-      assert.strictEqual(daCtx.pathname, '/index');
+      assert.strictEqual(daCtx.sourcePath, '/index.html');
       assert.strictEqual(daCtx.aemPathname, '/');
     });
   });
@@ -94,7 +94,7 @@ describe('DA context', () => {
     });
 
     it('should return the correct path names', () => {
-      assert.strictEqual(daCtx.pathname, '/index');
+      assert.strictEqual(daCtx.sourcePath, '/index.html');
       assert.strictEqual(daCtx.aemPathname, '/');
     });
   });
@@ -105,7 +105,7 @@ describe('DA context', () => {
     });
 
     it('should return the correct path names', () => {
-      assert.strictEqual(daCtx.pathname, '/sub-folder/index');
+      assert.strictEqual(daCtx.sourcePath, '/sub-folder/index.html');
       assert.strictEqual(daCtx.aemPathname, '/sub-folder/');
     });
   });
@@ -115,11 +115,10 @@ describe('DA context', () => {
       daCtx = getDaCtx(reqs.nonHtmlFile);
     });
 
-    it('should return the correct pathname with extension', () => {
-      assert.strictEqual(daCtx.pathname, '/folder/content.json');
+    it('should return the correct path names with extension', () => {
+      assert.strictEqual(daCtx.sourcePath, '/folder/content.json');
       assert.strictEqual(daCtx.aemPathname, '/folder/content.json');
       assert.strictEqual(daCtx.ext, 'json');
-      assert.strictEqual(daCtx.name, 'content');
     });
   });
 
@@ -128,11 +127,10 @@ describe('DA context', () => {
       daCtx = getDaCtx(reqs.plainFile);
     });
 
-    it('should return the correct pathname with extension', () => {
-      assert.strictEqual(daCtx.pathname, '/folder/content.plain.html');
+    it('should return the correct path names with extension', () => {
+      assert.strictEqual(daCtx.sourcePath, '/folder/content.plain.html');
       assert.strictEqual(daCtx.aemPathname, '/folder/content.plain.html');
       assert.strictEqual(daCtx.ext, 'html');
-      assert.strictEqual(daCtx.name, 'content.plain');
     });
   });
 

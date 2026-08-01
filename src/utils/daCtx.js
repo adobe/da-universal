@@ -73,8 +73,10 @@ function getSiteToken(req) {
 
 /**
  * Gets Dark Alley Context
- * @param {pathname} pathname
- * @returns {DaCtx} The Dark Alley Context.
+ * @param {Request} req The incoming request.
+ * @returns {Object} The Dark Alley Context, where `path` is the request pathname
+ * (minus the `/org/site` prefix on localhost), `aemPathname` is the path requested
+ * from `*.aem.page`, and `sourcePath` is the path requested from the store.
  */
 export function getDaCtx(req) {
   const { pathname, hostname, searchParams } = new URL(req.url);
@@ -98,33 +100,15 @@ export function getDaCtx(req) {
 
   // Sanitize the remaining path parts
   const pathParts = parts.filter((part) => part !== '');
-  const keyBase = `${site}/${pathParts.join('/')}`;
 
-  // Get the final source name
-  daCtx.filename = pathParts.pop() || '';
-
-  // Handle folders and files under a site
-  const split = daCtx.filename.split('.');
-
-  // DA Content - Add HTML if there is only one part to the split
-  if (split.length === 1) split.push('html');
-  daCtx.isFile = split.length > 1;
-  if (daCtx.isFile) daCtx.ext = split.pop();
-  daCtx.name = split.join('.');
-
-  // Set keys
-  daCtx.key = daCtx?.ext === 'html' ? `${keyBase}.html` : keyBase;
-  daCtx.propsKey = `${daCtx.key}.props`;
+  // Get the final source name and its extension
+  const filename = pathParts.pop() || '';
+  const dotted = filename.includes('.');
+  daCtx.ext = dotted ? filename.split('.').pop() : 'html';
 
   // Set paths for API consumption
   daCtx.aemPathname = path.endsWith('/index') ? path.substring(0, path.length - 5) : path;
-  const daPathBase = [...pathParts, daCtx.name].join('/');
-
-  if (!daCtx.ext || (!daCtx.name.includes('plain') && daCtx.ext === 'html')) {
-    daCtx.pathname = `/${daPathBase}`;
-  } else {
-    daCtx.pathname = `/${daPathBase}.${daCtx.ext}`;
-  }
+  daCtx.sourcePath = `/${[...pathParts, dotted ? filename : `${filename}.html`].join('/')}`;
 
   const query = Object.fromEntries(searchParams.entries());
   if (typeof query['ue-service'] === 'string') {
