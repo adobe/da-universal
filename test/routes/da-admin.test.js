@@ -375,4 +375,44 @@ describe('daSourcePost', () => {
     assert.ok(res instanceof Response);
     assert.deepStrictEqual(fetched, []);
   });
+
+  ['text/html; charset=utf-8', 'text/html;charset=UTF-8', 'TEXT/HTML', 'text/HTML '].forEach((type) => {
+    it(`writes an HTML File declared as "${type}"`, async () => {
+      const { env, fetched } = recorder();
+      const html = new File(['<body>hello</body>'], 'page.html', { type });
+      const req = formReq('https://main--site--org.ue.da.live/page', html);
+      const daCtx = getDaCtx(req);
+
+      const res = await daSourcePost({ req, env, daCtx });
+
+      assert.strictEqual(res.status, 200);
+      assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/page.html']);
+    });
+  });
+
+  ['application/octet-stream', 'text/plain', 'image/svg+xml', 'application/pdf'].forEach((type) => {
+    it(`refuses a File declared as "${type}"`, async () => {
+      const { env, fetched } = recorder();
+      const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'logo.png', { type });
+      const req = formReq('https://main--site--org.ue.da.live/media/logo.png', file);
+      const daCtx = getDaCtx(req);
+
+      const res = await daSourcePost({ req, env, daCtx });
+
+      assert.strictEqual(res.status, 415);
+      assert.deepStrictEqual(fetched, []);
+    });
+  });
+
+  it('writes a File with no declared type', async () => {
+    const { env, fetched } = recorder();
+    const html = new File(['<body>hello</body>'], 'page.html');
+    const req = formReq('https://main--site--org.ue.da.live/page', html);
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/page.html']);
+  });
 });
