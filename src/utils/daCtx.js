@@ -110,10 +110,8 @@ export function getDaCtx(req) {
   daCtx.aemPathname = path.endsWith('/index') ? path.substring(0, path.length - 5) : path;
   daCtx.sourcePath = `/${[...pathParts, dotted ? filename : `${filename}.html`].join('/')}`;
 
-  const query = Object.fromEntries(searchParams.entries());
-  if (typeof query['ue-service'] === 'string') {
-    daCtx.ueService = query['ue-service'];
-  }
+  const ueService = searchParams.get('ue-service');
+  if (ueService !== null) daCtx.ueService = ueService;
 
   daCtx.authToken = getAuthToken(req);
   daCtx.siteToken = getSiteToken(req);
