@@ -30,14 +30,6 @@ import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 
 const HTML_POST_TYPE = 'text/html';
 
-/**
- * Whether a multipart part's type may go through the HTML serializer. Anything else
- * would be read with `.text()` and written back mangled, so it is refused.
- * An empty type is what workerd reports when the client declared none, and is allowed.
- *
- * @param {string} type The part's content type
- * @returns {boolean}
- */
 export function isHtmlPostType(type) {
   if (!type) return true;
   return type.split(';')[0].trim().toLowerCase() === HTML_POST_TYPE;
