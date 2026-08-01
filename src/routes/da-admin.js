@@ -28,9 +28,20 @@ import { BRANCH_NOT_FOUND_HTML_MESSAGE, DEFAULT_HTML_TEMPLATE, UNAUTHORIZED_HTML
 import { getSiteConfig } from '../storage/config.js';
 import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 
-// file content types accepted on an HTML POST. formData() reports octet-stream or
-// text/plain for a part whose type the client left unset, so both stay allowed.
-const HTML_POST_TYPES = ['text/html', 'text/plain', 'application/octet-stream'];
+const HTML_POST_TYPE = 'text/html';
+
+/**
+ * Whether a multipart part's type may go through the HTML serializer. Anything else
+ * would be read with `.text()` and written back mangled, so it is refused.
+ * An empty type is what workerd reports when the client declared none, and is allowed.
+ *
+ * @param {string} type The part's content type
+ * @returns {boolean}
+ */
+export function isHtmlPostType(type) {
+  if (!type) return true;
+  return type.split(';')[0].trim().toLowerCase() === HTML_POST_TYPE;
+}
 
 async function getFileBody(data) {
   const text = await data.text();
@@ -189,7 +200,7 @@ export async function daSourcePost({ req, env, daCtx }) {
   const obj = await putHelper(req, env, daCtx);
   if (obj && obj.data) {
     const isFile = obj.data instanceof File;
-    if (isFile && obj.data.type && !HTML_POST_TYPES.includes(obj.data.type)) {
+    if (isFile && !isHtmlPostType(obj.data.type)) {
       return get415();
     }
     const { body: bodyHtml } = isFile

@@ -16,7 +16,7 @@ import esmock from 'esmock';
 import reqs from '../mocks/req.js';
 
 const { getDaCtx } = await import('../../src/utils/daCtx.js');
-const { daSourceHead, daSourcePost } = await import('../../src/routes/da-admin.js');
+const { daSourceHead, daSourcePost, isHtmlPostType } = await import('../../src/routes/da-admin.js');
 
 const authedReq = (url) => new Request(url, { headers: { Authorization: 'Bearer t' } });
 
@@ -403,16 +403,22 @@ describe('daSourcePost', () => {
       assert.deepStrictEqual(fetched, []);
     });
   });
+});
 
-  it('writes a File with no declared type', async () => {
-    const { env, fetched } = recorder();
-    const html = new File(['<body>hello</body>'], 'page.html');
-    const req = formReq('https://main--site--org.ue.da.live/page', html);
-    const daCtx = getDaCtx(req);
+// workerd and undici disagree on File.type for a multipart part, so the rule is
+// asserted directly. measured in workerd 4.118.0: an absent part Content-Type
+// reports '', and a declared one is preserved verbatim including its case and
+// parameters. undici substitutes application/octet-stream and lowercases.
+describe('isHtmlPostType', () => {
+  ['', 'text/html', 'text/html; charset=utf-8', 'text/html;charset=UTF-8', 'TEXT/HTML', 'text/HTML '].forEach((type) => {
+    it(`accepts ${JSON.stringify(type)}`, () => {
+      assert.strictEqual(isHtmlPostType(type), true);
+    });
+  });
 
-    const res = await daSourcePost({ req, env, daCtx });
-
-    assert.strictEqual(res.status, 200);
-    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/page.html']);
+  ['application/octet-stream', 'text/plain', 'image/png', 'image/svg+xml', 'application/pdf', 'application/json'].forEach((type) => {
+    it(`rejects ${JSON.stringify(type)}`, () => {
+      assert.strictEqual(isHtmlPostType(type), false);
+    });
   });
 });
