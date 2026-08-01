@@ -194,8 +194,15 @@ export async function daSourceHead({ env, daCtx }) {
 
 export async function daSourcePost({ req, env, daCtx }) {
   const {
-    org, site, sourcePath, authToken,
+    org, site, sourcePath, ext, authToken,
   } = daCtx;
+
+  // the body is rewritten as HTML below, so anything but an HTML document would be
+  // written back mangled onto the key GET reads
+  if (ext !== 'html') {
+    console.log(`415 POST ${sourcePath}, not an HTML document`);
+    return get415();
+  }
 
   const obj = await putHelper(req, env, daCtx);
   if (obj && obj.data) {
