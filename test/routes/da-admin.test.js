@@ -369,11 +369,13 @@ describe('daSourcePost to a non-HTML path', () => {
 });
 
 describe('daSourcePost', () => {
+  // on an HTML path, so the path check does not answer first and this exercises
+  // the part-type check
   it('refuses a binary File with 415 and does not write', async () => {
     const { env, fetched } = recorder();
     const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
     const png = new File([bytes], 'logo.png', { type: 'image/png' });
-    const req = formReq('https://main--site--org.ue.da.live/media/logo.png', png);
+    const req = formReq('https://main--site--org.ue.da.live/page', png);
     const daCtx = getDaCtx(req);
 
     const res = await daSourcePost({ req, env, daCtx });
@@ -394,7 +396,22 @@ describe('daSourcePost', () => {
     assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/page.html']);
   });
 
-  it('returns a response when the content type is not a form type', async () => {
+  it('writes a string part', async () => {
+    const { env, fetched } = recorder();
+    const req = new Request('https://main--site--org.ue.da.live/page', {
+      method: 'POST',
+      body: new URLSearchParams({ data: '<body>hello</body>' }),
+      headers: { Authorization: 'Bearer t' },
+    });
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/page.html']);
+  });
+
+  it('refuses 415 with an empty body when the request content type is not a form type', async () => {
     const { env, fetched } = recorder();
     const req = new Request('https://main--site--org.ue.da.live/page', {
       method: 'POST',
@@ -405,36 +422,35 @@ describe('daSourcePost', () => {
 
     const res = await daSourcePost({ req, env, daCtx });
 
-    assert.ok(res instanceof Response);
+    assert.strictEqual(res.status, 415);
+    assert.strictEqual(await res.text(), '');
     assert.deepStrictEqual(fetched, []);
   });
 
-  ['text/html; charset=utf-8', 'text/html;charset=UTF-8', 'TEXT/HTML', 'text/HTML '].forEach((type) => {
-    it(`writes an HTML File declared as "${type}"`, async () => {
-      const { env, fetched } = recorder();
-      const html = new File(['<body>hello</body>'], 'page.html', { type });
-      const req = formReq('https://main--site--org.ue.da.live/page', html);
-      const daCtx = getDaCtx(req);
+  // the full normalization matrix is under isHtmlPostType; these two prove it is
+  // wired into the route. the charset form is what da-admin itself sends back.
+  it('writes an HTML File declared with a charset', async () => {
+    const { env, fetched } = recorder();
+    const html = new File(['<body>hello</body>'], 'page.html', { type: 'text/html; charset=utf-8' });
+    const req = formReq('https://main--site--org.ue.da.live/page', html);
+    const daCtx = getDaCtx(req);
 
-      const res = await daSourcePost({ req, env, daCtx });
+    const res = await daSourcePost({ req, env, daCtx });
 
-      assert.strictEqual(res.status, 200);
-      assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/page.html']);
-    });
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/page.html']);
   });
 
-  ['application/octet-stream', 'text/plain', 'image/svg+xml', 'application/pdf'].forEach((type) => {
-    it(`refuses a File declared as "${type}"`, async () => {
-      const { env, fetched } = recorder();
-      const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'logo.png', { type });
-      const req = formReq('https://main--site--org.ue.da.live/media/logo.png', file);
-      const daCtx = getDaCtx(req);
+  it('refuses a File declared as application/octet-stream on an HTML path', async () => {
+    const { env, fetched } = recorder();
+    const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'logo.png', { type: 'application/octet-stream' });
+    const req = formReq('https://main--site--org.ue.da.live/page', file);
+    const daCtx = getDaCtx(req);
 
-      const res = await daSourcePost({ req, env, daCtx });
+    const res = await daSourcePost({ req, env, daCtx });
 
-      assert.strictEqual(res.status, 415);
-      assert.deepStrictEqual(fetched, []);
-    });
+    assert.strictEqual(res.status, 415);
+    assert.deepStrictEqual(fetched, []);
   });
 });
 
