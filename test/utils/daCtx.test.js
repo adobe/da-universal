@@ -136,6 +136,108 @@ describe('DA context', () => {
     });
   });
 
+  describe('sourcePath', () => {
+    const ctxFor = (pathname) => getDaCtx(
+      new Request(`https://main--site--org.ue.da.live${pathname}`),
+    );
+
+    it('maps / to /index.html', () => {
+      const ctx = ctxFor('/');
+      assert.strictEqual(ctx.sourcePath, '/index.html');
+      assert.strictEqual(ctx.ext, 'html');
+    });
+
+    it('maps /index to /index.html', () => {
+      const ctx = ctxFor('/index');
+      assert.strictEqual(ctx.sourcePath, '/index.html');
+      assert.strictEqual(ctx.ext, 'html');
+    });
+
+    it('maps /folder/ to /folder/index.html', () => {
+      const ctx = ctxFor('/folder/');
+      assert.strictEqual(ctx.sourcePath, '/folder/index.html');
+      assert.strictEqual(ctx.ext, 'html');
+    });
+
+    it('maps /folder to /folder.html', () => {
+      const ctx = ctxFor('/folder');
+      assert.strictEqual(ctx.sourcePath, '/folder.html');
+      assert.strictEqual(ctx.ext, 'html');
+    });
+
+    it('maps /page to /page.html', () => {
+      const ctx = ctxFor('/page');
+      assert.strictEqual(ctx.sourcePath, '/page.html');
+      assert.strictEqual(ctx.ext, 'html');
+    });
+
+    it('maps /page.html to /page.html', () => {
+      const ctx = ctxFor('/page.html');
+      assert.strictEqual(ctx.sourcePath, '/page.html');
+      assert.strictEqual(ctx.ext, 'html');
+    });
+
+    it('maps /Page.HTML to /page.html', () => {
+      const ctx = ctxFor('/Page.HTML');
+      assert.strictEqual(ctx.sourcePath, '/page.html');
+      assert.strictEqual(ctx.ext, 'html');
+    });
+
+    it('maps /x.html.html to /x.html.html', () => {
+      const ctx = ctxFor('/x.html.html');
+      assert.strictEqual(ctx.sourcePath, '/x.html.html');
+      assert.strictEqual(ctx.ext, 'html');
+    });
+
+    it('maps /Media/Logo.PNG to /media/logo.png', () => {
+      const ctx = ctxFor('/Media/Logo.PNG');
+      assert.strictEqual(ctx.sourcePath, '/media/logo.png');
+      assert.strictEqual(ctx.ext, 'png');
+    });
+
+    it('maps /sheet.json to /sheet.json', () => {
+      const ctx = ctxFor('/sheet.json');
+      assert.strictEqual(ctx.sourcePath, '/sheet.json');
+      assert.strictEqual(ctx.ext, 'json');
+    });
+
+    it('maps /a/b.plain.html to /a/b.plain.html', () => {
+      const ctx = ctxFor('/a/b.plain.html');
+      assert.strictEqual(ctx.sourcePath, '/a/b.plain.html');
+      assert.strictEqual(ctx.ext, 'html');
+    });
+
+    it('maps /a//b to /a/b.html', () => {
+      const ctx = ctxFor('/a//b');
+      assert.strictEqual(ctx.sourcePath, '/a/b.html');
+      assert.strictEqual(ctx.ext, 'html');
+    });
+
+    it('maps /.hidden to /.hidden', () => {
+      const ctx = ctxFor('/.hidden');
+      assert.strictEqual(ctx.sourcePath, '/.hidden');
+      assert.strictEqual(ctx.ext, 'hidden');
+    });
+
+    it('maps /page. to /page.', () => {
+      const ctx = ctxFor('/page.');
+      assert.strictEqual(ctx.sourcePath, '/page.');
+      assert.strictEqual(ctx.ext, '');
+    });
+
+    it('maps /explaining to /explaining.html', () => {
+      const ctx = ctxFor('/explaining');
+      assert.strictEqual(ctx.sourcePath, '/explaining.html');
+      assert.strictEqual(ctx.ext, 'html');
+    });
+
+    it('maps /v1.2 to /v1.2', () => {
+      const ctx = ctxFor('/v1.2');
+      assert.strictEqual(ctx.sourcePath, '/v1.2');
+      assert.strictEqual(ctx.ext, '2');
+    });
+  });
+
   describe('Invalid URL context', async () => {
     beforeEach(async () => {
       daCtx = getDaCtx(reqs.invalid);

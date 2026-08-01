@@ -16,7 +16,45 @@ import esmock from 'esmock';
 import reqs from '../mocks/req.js';
 
 const { getDaCtx } = await import('../../src/utils/daCtx.js');
-const { daSourceHead } = await import('../../src/routes/da-admin.js');
+const { daSourceHead, daSourcePost } = await import('../../src/routes/da-admin.js');
+
+const authedReq = (url) => new Request(url, { headers: { Authorization: 'Bearer t' } });
+
+const formReq = (url, data) => {
+  const body = new FormData();
+  body.set('data', data);
+  return new Request(url, { method: 'POST', body, headers: { Authorization: 'Bearer t' } });
+};
+
+// records every URL handed to env.daadmin.fetch, whether it is called with a
+// URL (GET non-HTML, HEAD) or with a Request (GET HTML, POST)
+const recorder = () => {
+  const fetched = [];
+  const env = {
+    DA_ADMIN: 'https://admin.da.live',
+    daadmin: {
+      fetch: async (input) => {
+        fetched.push(input instanceof Request ? input.url : input.href);
+        return new Response('<body>stored</body>', { status: 200 });
+      },
+    },
+  };
+  return { env, fetched };
+};
+
+const mockRoutes = async () => esmock('../../src/routes/da-admin.js', {
+  '../../src/utils/aemCtx.js': {
+    getAemCtx: () => ({}),
+    getAEMHtml: async () => '<meta name="from" content="aem" />',
+  },
+  '../../src/render/compose.js': {
+    composeHtml: async () => ({ tree: true }),
+    serializeHtml: () => '<html>composed</html>',
+  },
+  '../../src/ue/ue.js': {
+    applyUEInstrumentation: async () => {},
+  },
+});
 
 describe('daSourceHead', () => {
   describe('when no authToken is present', () => {
@@ -44,8 +82,6 @@ describe('daSourceGet', () => {
     DA_ADMIN: 'https://admin.da.live',
     daadmin: { fetch: async () => new Response('<body>stored</body>', { status: 200 }) },
   };
-
-  const authedReq = (url) => new Request(url, { headers: { Authorization: 'Bearer t' } });
 
   // record which composition / instrumentation calls happen and with what
   let calls;
@@ -201,5 +237,142 @@ describe('daSourceGet', () => {
     assert.strictEqual(calls.ue, 0);
     const html = await res.text();
     assert.ok(html.includes('Unable to retrieve AEM branch'));
+  });
+});
+
+describe('source URLs', () => {
+  it('GET / reads /index.html', async () => {
+    const { daSourceGet } = await mockRoutes();
+    const { env, fetched } = recorder();
+    const req = authedReq('https://main--site--org.ue.da.live/');
+    const daCtx = getDaCtx(req);
+
+    await daSourceGet({ req, env, daCtx });
+
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/index.html']);
+  });
+
+  it('GET /page.html reads /page.html', async () => {
+    const { daSourceGet } = await mockRoutes();
+    const { env, fetched } = recorder();
+    const req = authedReq('https://main--site--org.ue.da.live/page.html');
+    const daCtx = getDaCtx(req);
+
+    await daSourceGet({ req, env, daCtx });
+
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/page.html']);
+  });
+
+  it('GET /Media/Logo.PNG reads /media/logo.png', async () => {
+    const { daSourceGet } = await mockRoutes();
+    const { env, fetched } = recorder();
+    const req = authedReq('https://main--site--org.ue.da.live/Media/Logo.PNG');
+    const daCtx = getDaCtx(req);
+
+    await daSourceGet({ req, env, daCtx });
+
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/media/logo.png']);
+  });
+
+  it('HEAD / reads /index.html', async () => {
+    const { env, fetched } = recorder();
+    const daCtx = getDaCtx(authedReq('https://main--site--org.ue.da.live/'));
+
+    await daSourceHead({ env, daCtx });
+
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/index.html']);
+  });
+
+  it('HEAD /page.html reads /page.html', async () => {
+    const { env, fetched } = recorder();
+    const daCtx = getDaCtx(authedReq('https://main--site--org.ue.da.live/page.html'));
+
+    await daSourceHead({ env, daCtx });
+
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/page.html']);
+  });
+
+  it('HEAD /Media/Logo.PNG reads /media/logo.png', async () => {
+    const { env, fetched } = recorder();
+    const daCtx = getDaCtx(authedReq('https://main--site--org.ue.da.live/Media/Logo.PNG'));
+
+    await daSourceHead({ env, daCtx });
+
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/media/logo.png']);
+  });
+
+  it('POST / writes /index.html', async () => {
+    const { env, fetched } = recorder();
+    const html = new File(['<body>hello</body>'], 'index.html', { type: 'text/html' });
+    const req = formReq('https://main--site--org.ue.da.live/', html);
+    const daCtx = getDaCtx(req);
+
+    await daSourcePost({ req, env, daCtx });
+
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/index.html']);
+  });
+
+  it('POST /page.html writes /page.html', async () => {
+    const { env, fetched } = recorder();
+    const html = new File(['<body>hello</body>'], 'page.html', { type: 'text/html' });
+    const req = formReq('https://main--site--org.ue.da.live/page.html', html);
+    const daCtx = getDaCtx(req);
+
+    await daSourcePost({ req, env, daCtx });
+
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/page.html']);
+  });
+
+  it('POST /Media/Logo.PNG writes /media/logo.png', async () => {
+    const { env, fetched } = recorder();
+    const html = new File(['<body>hello</body>'], 'logo.html', { type: 'text/html' });
+    const req = formReq('https://main--site--org.ue.da.live/Media/Logo.PNG', html);
+    const daCtx = getDaCtx(req);
+
+    await daSourcePost({ req, env, daCtx });
+
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/media/logo.png']);
+  });
+});
+
+describe('daSourcePost', () => {
+  it('refuses a binary File with 415 and does not write', async () => {
+    const { env, fetched } = recorder();
+    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    const png = new File([bytes], 'logo.png', { type: 'image/png' });
+    const req = formReq('https://main--site--org.ue.da.live/media/logo.png', png);
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 415);
+    assert.deepStrictEqual(fetched, []);
+  });
+
+  it('writes an HTML File', async () => {
+    const { env, fetched } = recorder();
+    const html = new File(['<body>hello</body>'], 'page.html', { type: 'text/html' });
+    const req = formReq('https://main--site--org.ue.da.live/Page', html);
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/page.html']);
+  });
+
+  it('returns a response when the content type is not a form type', async () => {
+    const { env, fetched } = recorder();
+    const req = new Request('https://main--site--org.ue.da.live/page', {
+      method: 'POST',
+      body: '{}',
+      headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
+    });
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourcePost({ req, env, daCtx });
+
+    assert.ok(res instanceof Response);
+    assert.deepStrictEqual(fetched, []);
   });
 });
