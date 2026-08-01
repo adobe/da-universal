@@ -322,16 +322,49 @@ describe('source URLs', () => {
 
     assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/page.html']);
   });
+});
 
-  it('POST /Media/Logo.PNG writes /media/logo.png', async () => {
+// the HTML serializer would rewrite whatever it is given, so a POST is refused
+// unless it addresses an HTML document. sourcePath ends `.html` iff ext is html,
+// so this covers every non-HTML target.
+describe('daSourcePost to a non-HTML path', () => {
+  it('refuses an HTML File and does not write', async () => {
     const { env, fetched } = recorder();
     const html = new File(['<body>hello</body>'], 'logo.html', { type: 'text/html' });
     const req = formReq('https://main--site--org.ue.da.live/Media/Logo.PNG', html);
     const daCtx = getDaCtx(req);
 
-    await daSourcePost({ req, env, daCtx });
+    const res = await daSourcePost({ req, env, daCtx });
 
-    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/media/logo.png']);
+    assert.strictEqual(res.status, 415);
+    assert.deepStrictEqual(fetched, []);
+  });
+
+  // an untyped part is the case the part-type check cannot cover in node, since
+  // undici substitutes application/octet-stream where workerd reports ''. The path
+  // check catches it either way, so this is asserted on a string part, which
+  // carries no type in either runtime.
+  it('refuses a string part, which carries no type at all, and does not write', async () => {
+    const { env, fetched } = recorder();
+    const req = formReq('https://main--site--org.ue.da.live/media/logo.png', '<body>hello</body>');
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 415);
+    assert.deepStrictEqual(fetched, []);
+  });
+
+  it('refuses a POST to a json path', async () => {
+    const { env, fetched } = recorder();
+    const html = new File(['<body>hello</body>'], 'sheet.html', { type: 'text/html' });
+    const req = formReq('https://main--site--org.ue.da.live/sheet.json', html);
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 415);
+    assert.deepStrictEqual(fetched, []);
   });
 });
 
