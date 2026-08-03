@@ -27,12 +27,14 @@ import {
 import {
   BRANCH_NOT_FOUND_HTML_MESSAGE,
   DEFAULT_HTML_TEMPLATE,
+  SOURCE_UNREACHABLE_HTML_MESSAGE,
+  SOURCE_UNREACHABLE_MESSAGE,
   SOURCE_UNRESOLVED_HTML_MESSAGE,
   SOURCE_UNRESOLVED_MESSAGE,
   UNAUTHORIZED_HTML_MESSAGE,
 } from '../utils/constants.js';
 import { getSiteConfig } from '../storage/config.js';
-import resolveContentSource, { UNKNOWN } from '../storage/content-source.js';
+import resolveContentSource, { UNAUTHORIZED, UNKNOWN } from '../storage/content-source.js';
 import getStore from '../storage/store.js';
 import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 
@@ -84,6 +86,21 @@ async function getPageTemplate(env, daCtx, aemCtx) {
   return DEFAULT_HTML_TEMPLATE;
 }
 
+/**
+ * Sends a request to a store and answers 503 when it could not be reached at all.
+ *
+ * A throw escaping a handler reaches withCorsHeaders, which reads `response.headers` and throws
+ * again, so the caller gets an opaque 500 with no CORS headers on it.
+ */
+async function reachStore(store, input, init) {
+  try {
+    return await store.fetch(input, init);
+  } catch (e) {
+    console.warn(`503 ${store.url}, the store could not be reached: ${e.name}: ${e.message}`);
+    return undefined;
+  }
+}
+
 export async function daSourceGet({ req, env, daCtx }) {
   const { ext, authToken } = daCtx;
 
@@ -106,13 +123,17 @@ export async function daSourceGet({ req, env, daCtx }) {
   if (ext !== 'html') {
     // for non-HTML files, simply proxy the request without processing
     const source = await resolveContentSource(env, daCtx);
+    if (source.kind === UNAUTHORIZED) {
+      return daResp({ body: UNAUTHORIZED_HTML_MESSAGE, status: source.status, contentType: 'text/html' });
+    }
     if (source.kind === UNKNOWN) {
       console.warn(`503 GET ${daCtx.sourcePath}, content source unresolved: ${source.reason}`);
       return get503(SOURCE_UNRESOLVED_HTML_MESSAGE);
     }
     const store = getStore(env, daCtx, source);
     console.log(`-> ${store.url.toString()}`);
-    const response = await store.fetch(store.url, { method: 'GET', headers });
+    const response = await reachStore(store, store.url, { method: 'GET', headers });
+    if (!response) return get503(SOURCE_UNREACHABLE_HTML_MESSAGE);
     console.log(`<- ${store.url.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
     return response;
   }
@@ -131,6 +152,9 @@ export async function daSourceGet({ req, env, daCtx }) {
     }
     return get404(BRANCH_NOT_FOUND_HTML_MESSAGE);
   }
+  if (source.kind === UNAUTHORIZED) {
+    return daResp({ body: UNAUTHORIZED_HTML_MESSAGE, status: source.status, contentType: 'text/html' });
+  }
   if (source.kind === UNKNOWN) {
     console.warn(`503 GET ${daCtx.sourcePath}, content source unresolved: ${source.reason}`);
     return get503(SOURCE_UNRESOLVED_HTML_MESSAGE);
@@ -145,7 +169,8 @@ export async function daSourceGet({ req, env, daCtx }) {
     headers,
   });
   console.log(`-> ${store.url.toString()}`);
-  const sourceResp = await store.fetch(req);
+  const sourceResp = await reachStore(store, req);
+  if (!sourceResp) return get503(SOURCE_UNREACHABLE_HTML_MESSAGE);
   console.log(`<- ${store.url.toString()}. ${sourceResp.status} ${sourceResp.statusText}`, { status: sourceResp.status, statusText: sourceResp.statusText });
 
   // only a 404 means "this document is not here". Composing the starter template over anything
@@ -197,6 +222,9 @@ export async function daSourceHead({ env, daCtx }) {
   headers.set('Authorization', authToken);
 
   const source = await resolveContentSource(env, daCtx);
+  if (source.kind === UNAUTHORIZED) {
+    return new Response(null, { status: source.status });
+  }
   if (source.kind === UNKNOWN) {
     console.warn(`503 HEAD ${daCtx.sourcePath}, content source unresolved: ${source.reason}`);
     return head503();
@@ -204,7 +232,8 @@ export async function daSourceHead({ env, daCtx }) {
 
   const store = getStore(env, daCtx, source);
   console.log(`-> HEAD ${store.url.toString()}`);
-  const response = await store.fetch(store.url, { method: 'HEAD', headers });
+  const response = await reachStore(store, store.url, { method: 'HEAD', headers });
+  if (!response) return head503();
   console.log(`<- HEAD ${store.url.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
   return new Response(null, { status: response.status, headers: response.headers });
 }
@@ -246,6 +275,9 @@ export async function daSourcePost({ req, env, daCtx }) {
     // the payload is settled, so the only question left is where it goes. A write is the one
     // operation a wrong guess cannot be walked back from.
     const source = await resolveContentSource(env, daCtx);
+    if (source.kind === UNAUTHORIZED) {
+      return daResp({ body: '', status: source.status, contentType: 'text/plain; charset=utf-8' });
+    }
     if (source.kind === UNKNOWN) {
       console.warn(`503 POST ${sourcePath}, content source unresolved: ${source.reason}`);
       return post503(SOURCE_UNRESOLVED_MESSAGE);
@@ -256,7 +288,8 @@ export async function daSourcePost({ req, env, daCtx }) {
     // eslint-disable-next-line no-param-reassign
     req = new Request(store.url, store.writeInit(bodyContent, authToken));
     console.log(`-> ${store.url.toString()}`);
-    const response = await store.fetch(req);
+    const response = await reachStore(store, req);
+    if (!response) return post503(SOURCE_UNREACHABLE_MESSAGE);
     console.log(`<- ${store.url.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
     return response;
   }

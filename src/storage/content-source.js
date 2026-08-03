@@ -16,6 +16,7 @@ const TIMEOUT_MS = 5 * 1000;
 export const SOURCE_BUS = 'sourcebus';
 export const LEGACY = 'legacy';
 export const UNKNOWN = 'unknown';
+export const UNAUTHORIZED = 'unauthorized';
 
 function unknown(org, site, reason) {
   console.warn(`[source] ${org}/${site} unknown: ${reason}`);
@@ -37,8 +38,9 @@ function unknown(org, site, reason) {
  *
  * @param {Object} env worker env, `AEM_API` is the API host and the source-bus prefix
  * @param {Object} daCtx
- * @returns {Promise<{kind: string, base?: string, reason?: string}>} `sourcebus` with the store
- * base url, `legacy`, or `unknown` with the reason it could not be answered
+ * @returns {Promise<{kind: string, base?: string, status?: number, reason?: string}>} `sourcebus`
+ * with the store base url, `legacy`, `unauthorized` with the status the API gave, or `unknown`
+ * with the reason it could not be answered
  */
 export default async function resolveContentSource(env, daCtx) {
   const { org, site, authToken } = daCtx;
@@ -64,6 +66,13 @@ export default async function resolveContentSource(env, daCtx) {
     response = await fetch(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
   } catch (e) {
     return unknown(org, site, `${url} failed with ${e.name}: ${e.message}`);
+  }
+
+  // an expired or insufficient session is a definite answer, not an unresolved one. Reporting it
+  // as unresolved answers a retryable 503, and the caller re-tries a session that cannot recover.
+  if (response.status === 401 || response.status === 403) {
+    console.warn(`[source] ${org}/${site} not authorized: ${url} answered ${response.status}`);
+    return { kind: UNAUTHORIZED, status: response.status };
   }
 
   if (response.status !== 200) {

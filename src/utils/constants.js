@@ -53,6 +53,10 @@ export const BRANCH_NOT_FOUND_HTML_MESSAGE = '<html><body><h1>Not found: Unable 
 
 export const SOURCE_UNRESOLVED_HTML_MESSAGE = '<html><body><h1>503: Content source unresolved</h1><p>The store that holds this document could not be determined. Please retry.</p></body></html>';
 
+export const SOURCE_UNREACHABLE_HTML_MESSAGE = '<html><body><h1>503: Content store unreachable</h1><p>The store that holds this document did not answer. Please retry.</p></body></html>';
+
+export const SOURCE_UNREACHABLE_MESSAGE = 'The store that holds this document did not answer, so nothing was written. Please retry.';
+
 export const SOURCE_UNRESOLVED_MESSAGE = 'The store that holds this document could not be determined, so the write was refused rather than sent to the wrong one. Please retry.';
 
 export const DEFAULT_UNAUTHORIZED_HTML_MESSAGE = '<html><body><h1>401: Unauthorized</h1></body></html>';

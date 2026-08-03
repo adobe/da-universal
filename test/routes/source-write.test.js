@@ -216,7 +216,9 @@ describe('writing to the store that holds the site', () => {
   describe('when the store cannot be reached at all', () => {
     it('answers 503 rather than throwing', async () => {
       const { daSourcePost, env } = await build({ source: BUS_SOURCE });
-      globalThis.fetch = async () => { throw new TypeError('fetch failed'); };
+      globalThis.fetch = async () => {
+        throw new TypeError('fetch failed');
+      };
       const req = uePost(AT);
 
       const res = await daSourcePost({ req, env, daCtx: getDaCtx(req) });
