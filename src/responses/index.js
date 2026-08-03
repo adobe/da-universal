@@ -43,6 +43,10 @@ export function get401(message = DEFAULT_UNAUTHORIZED_HTML_MESSAGE) {
   return daResp({ body: message, status: 401, contentType: 'text/html' });
 }
 
+export function get415(message = '') {
+  return daResp({ body: message, status: 415, contentType: 'text/html' });
+}
+
 export function head401() {
   return new Response(null, { status: 401 });
 }

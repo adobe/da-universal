@@ -16,7 +16,45 @@ import esmock from 'esmock';
 import reqs from '../mocks/req.js';
 
 const { getDaCtx } = await import('../../src/utils/daCtx.js');
-const { daSourceHead } = await import('../../src/routes/da-admin.js');
+const { daSourceHead, daSourcePost, isHtmlPostType } = await import('../../src/routes/da-admin.js');
+
+const authedReq = (url) => new Request(url, { headers: { Authorization: 'Bearer t' } });
+
+const formReq = (url, data) => {
+  const body = new FormData();
+  body.set('data', data);
+  return new Request(url, { method: 'POST', body, headers: { Authorization: 'Bearer t' } });
+};
+
+// records every URL handed to env.daadmin.fetch, whether it is called with a
+// URL (GET non-HTML, HEAD) or with a Request (GET HTML, POST)
+const recorder = () => {
+  const fetched = [];
+  const env = {
+    DA_ADMIN: 'https://admin.da.live',
+    daadmin: {
+      fetch: async (input) => {
+        fetched.push(input instanceof Request ? input.url : input.href);
+        return new Response('<body>stored</body>', { status: 200 });
+      },
+    },
+  };
+  return { env, fetched };
+};
+
+const mockRoutes = async () => esmock('../../src/routes/da-admin.js', {
+  '../../src/utils/aemCtx.js': {
+    getAemCtx: () => ({}),
+    getAEMHtml: async () => '<meta name="from" content="aem" />',
+  },
+  '../../src/render/compose.js': {
+    composeHtml: async () => ({ tree: true }),
+    serializeHtml: () => '<html>composed</html>',
+  },
+  '../../src/ue/ue.js': {
+    applyUEInstrumentation: async () => {},
+  },
+});
 
 describe('daSourceHead', () => {
   describe('when no authToken is present', () => {
@@ -44,8 +82,6 @@ describe('daSourceGet', () => {
     DA_ADMIN: 'https://admin.da.live',
     daadmin: { fetch: async () => new Response('<body>stored</body>', { status: 200 }) },
   };
-
-  const authedReq = (url) => new Request(url, { headers: { Authorization: 'Bearer t' } });
 
   // record which composition / instrumentation calls happen and with what
   let calls;
@@ -201,5 +237,237 @@ describe('daSourceGet', () => {
     assert.strictEqual(calls.ue, 0);
     const html = await res.text();
     assert.ok(html.includes('Unable to retrieve AEM branch'));
+  });
+});
+
+describe('source URLs', () => {
+  it('GET / reads /index.html', async () => {
+    const { daSourceGet } = await mockRoutes();
+    const { env, fetched } = recorder();
+    const req = authedReq('https://main--site--org.ue.da.live/');
+    const daCtx = getDaCtx(req);
+
+    await daSourceGet({ req, env, daCtx });
+
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/index.html']);
+  });
+
+  it('GET /page.html reads /page.html', async () => {
+    const { daSourceGet } = await mockRoutes();
+    const { env, fetched } = recorder();
+    const req = authedReq('https://main--site--org.ue.da.live/page.html');
+    const daCtx = getDaCtx(req);
+
+    await daSourceGet({ req, env, daCtx });
+
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/page.html']);
+  });
+
+  it('GET /Media/Logo.PNG reads /media/logo.png', async () => {
+    const { daSourceGet } = await mockRoutes();
+    const { env, fetched } = recorder();
+    const req = authedReq('https://main--site--org.ue.da.live/Media/Logo.PNG');
+    const daCtx = getDaCtx(req);
+
+    await daSourceGet({ req, env, daCtx });
+
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/media/logo.png']);
+  });
+
+  it('HEAD / reads /index.html', async () => {
+    const { env, fetched } = recorder();
+    const daCtx = getDaCtx(authedReq('https://main--site--org.ue.da.live/'));
+
+    await daSourceHead({ env, daCtx });
+
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/index.html']);
+  });
+
+  it('HEAD /page.html reads /page.html', async () => {
+    const { env, fetched } = recorder();
+    const daCtx = getDaCtx(authedReq('https://main--site--org.ue.da.live/page.html'));
+
+    await daSourceHead({ env, daCtx });
+
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/page.html']);
+  });
+
+  it('HEAD /Media/Logo.PNG reads /media/logo.png', async () => {
+    const { env, fetched } = recorder();
+    const daCtx = getDaCtx(authedReq('https://main--site--org.ue.da.live/Media/Logo.PNG'));
+
+    await daSourceHead({ env, daCtx });
+
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/media/logo.png']);
+  });
+
+  it('POST / writes /index.html', async () => {
+    const { env, fetched } = recorder();
+    const html = new File(['<body>hello</body>'], 'index.html', { type: 'text/html' });
+    const req = formReq('https://main--site--org.ue.da.live/', html);
+    const daCtx = getDaCtx(req);
+
+    await daSourcePost({ req, env, daCtx });
+
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/index.html']);
+  });
+
+  it('POST /page.html writes /page.html', async () => {
+    const { env, fetched } = recorder();
+    const html = new File(['<body>hello</body>'], 'page.html', { type: 'text/html' });
+    const req = formReq('https://main--site--org.ue.da.live/page.html', html);
+    const daCtx = getDaCtx(req);
+
+    await daSourcePost({ req, env, daCtx });
+
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/page.html']);
+  });
+});
+
+// the HTML serializer would rewrite whatever it is given, so a POST is refused
+// unless it addresses an HTML document. sourcePath ends `.html` iff ext is html,
+// so this covers every non-HTML target.
+describe('daSourcePost to a non-HTML path', () => {
+  it('refuses an HTML File and does not write', async () => {
+    const { env, fetched } = recorder();
+    const html = new File(['<body>hello</body>'], 'logo.html', { type: 'text/html' });
+    const req = formReq('https://main--site--org.ue.da.live/Media/Logo.PNG', html);
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 415);
+    assert.deepStrictEqual(fetched, []);
+  });
+
+  // an untyped part is the case the part-type check cannot cover in node, since
+  // undici substitutes application/octet-stream where workerd reports ''. The path
+  // check catches it either way, so this is asserted on a string part, which
+  // carries no type in either runtime.
+  it('refuses a string part, which carries no type at all, and does not write', async () => {
+    const { env, fetched } = recorder();
+    const req = formReq('https://main--site--org.ue.da.live/media/logo.png', '<body>hello</body>');
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 415);
+    assert.deepStrictEqual(fetched, []);
+  });
+
+  it('refuses a POST to a json path', async () => {
+    const { env, fetched } = recorder();
+    const html = new File(['<body>hello</body>'], 'sheet.html', { type: 'text/html' });
+    const req = formReq('https://main--site--org.ue.da.live/sheet.json', html);
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 415);
+    assert.deepStrictEqual(fetched, []);
+  });
+});
+
+describe('daSourcePost', () => {
+  // on an HTML path, so the path check does not answer first and this exercises
+  // the part-type check
+  it('refuses a binary File with 415 and does not write', async () => {
+    const { env, fetched } = recorder();
+    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    const png = new File([bytes], 'logo.png', { type: 'image/png' });
+    const req = formReq('https://main--site--org.ue.da.live/page', png);
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 415);
+    assert.deepStrictEqual(fetched, []);
+  });
+
+  it('writes an HTML File', async () => {
+    const { env, fetched } = recorder();
+    const html = new File(['<body>hello</body>'], 'page.html', { type: 'text/html' });
+    const req = formReq('https://main--site--org.ue.da.live/Page', html);
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/page.html']);
+  });
+
+  it('writes a string part', async () => {
+    const { env, fetched } = recorder();
+    const req = new Request('https://main--site--org.ue.da.live/page', {
+      method: 'POST',
+      body: new URLSearchParams({ data: '<body>hello</body>' }),
+      headers: { Authorization: 'Bearer t' },
+    });
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/page.html']);
+  });
+
+  it('refuses 415 with an empty body when the request content type is not a form type', async () => {
+    const { env, fetched } = recorder();
+    const req = new Request('https://main--site--org.ue.da.live/page', {
+      method: 'POST',
+      body: '{}',
+      headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
+    });
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 415);
+    assert.strictEqual(await res.text(), '');
+    assert.deepStrictEqual(fetched, []);
+  });
+
+  // the full normalization matrix is under isHtmlPostType; these two prove it is
+  // wired into the route. the charset form is what da-admin itself sends back.
+  it('writes an HTML File declared with a charset', async () => {
+    const { env, fetched } = recorder();
+    const html = new File(['<body>hello</body>'], 'page.html', { type: 'text/html; charset=utf-8' });
+    const req = formReq('https://main--site--org.ue.da.live/page', html);
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(fetched, ['https://admin.da.live/source/org/site/page.html']);
+  });
+
+  it('refuses a File declared as application/octet-stream on an HTML path', async () => {
+    const { env, fetched } = recorder();
+    const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'logo.png', { type: 'application/octet-stream' });
+    const req = formReq('https://main--site--org.ue.da.live/page', file);
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourcePost({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 415);
+    assert.deepStrictEqual(fetched, []);
+  });
+});
+
+// workerd and undici disagree on File.type for a multipart part, so the rule is
+// asserted directly. measured in workerd 4.118.0: an absent part Content-Type
+// reports '', and a declared one is preserved verbatim including its case and
+// parameters. undici substitutes application/octet-stream and lowercases.
+describe('isHtmlPostType', () => {
+  ['', 'text/html', 'text/html; charset=utf-8', 'text/html;charset=UTF-8', 'TEXT/HTML', 'text/HTML '].forEach((type) => {
+    it(`accepts ${JSON.stringify(type)}`, () => {
+      assert.strictEqual(isHtmlPostType(type), true);
+    });
+  });
+
+  ['application/octet-stream', 'text/plain', 'image/png', 'image/svg+xml', 'application/pdf', 'application/json'].forEach((type) => {
+    it(`rejects ${JSON.stringify(type)}`, () => {
+      assert.strictEqual(isHtmlPostType(type), false);
+    });
   });
 });

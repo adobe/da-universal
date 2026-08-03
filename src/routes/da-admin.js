@@ -22,11 +22,22 @@ import {
   applyQuickEditToDocument, buildQuickEditCookie, buildQuickEditNotFoundResponse,
 } from '../utils/quick-edit.js';
 import {
-  daResp, get401, get404, head401,
+  daResp, get401, get404, get415, head401,
 } from '../responses/index.js';
 import { BRANCH_NOT_FOUND_HTML_MESSAGE, DEFAULT_HTML_TEMPLATE, UNAUTHORIZED_HTML_MESSAGE } from '../utils/constants.js';
 import { getSiteConfig } from '../storage/config.js';
 import { restoreAbsoluteImages } from '../render/rewrite-images.js';
+
+const HTML_POST_TYPE = 'text/html';
+
+export function isHtmlPostType(type) {
+  if (!type) return true;
+  return type.split(';')[0].trim().toLowerCase() === HTML_POST_TYPE;
+}
+
+function getSourceUrl(env, { org, site, sourcePath }) {
+  return new URL(`/source/${org}/${site}${sourcePath}`, env.DA_ADMIN);
+}
 
 async function getFileBody(data) {
   const text = await data.text();
@@ -70,9 +81,7 @@ async function getPageTemplate(env, daCtx, aemCtx) {
 }
 
 export async function daSourceGet({ req, env, daCtx }) {
-  const {
-    org, site, path, ext, authToken,
-  } = daCtx;
+  const { ext, authToken } = daCtx;
 
   // check if Authorization header is present
   if (!authToken) {
@@ -91,11 +100,8 @@ export async function daSourceGet({ req, env, daCtx }) {
   headers.set('Authorization', authToken);
 
   if (ext !== 'html') {
-    /*
-     for non-HTML files, simply proxy the request without processing
-     and ensure that extensions are not duplicated
-    */
-    const adminUrl = new URL(`/source/${org}/${site}${path}`, env.DA_ADMIN);
+    // for non-HTML files, simply proxy the request without processing
+    const adminUrl = getSourceUrl(env, daCtx);
     console.log(`-> ${adminUrl.toString()}`);
     const response = await env.daadmin.fetch(adminUrl, { method: 'GET', headers });
     console.log(`<- ${adminUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
@@ -115,10 +121,7 @@ export async function daSourceGet({ req, env, daCtx }) {
   }
 
   // get the content from DA admin
-  const adminUrl = new URL(
-    `/source/${org}/${site}${path}.${ext}`,
-    env.DA_ADMIN,
-  );
+  const adminUrl = getSourceUrl(env, daCtx);
 
   // eslint-disable-next-line no-param-reassign
   req = new Request(adminUrl, {
@@ -162,9 +165,7 @@ export async function daSourceGet({ req, env, daCtx }) {
 }
 
 export async function daSourceHead({ env, daCtx }) {
-  const {
-    org, site, path, ext, authToken,
-  } = daCtx;
+  const { authToken } = daCtx;
 
   if (!authToken) {
     return head401();
@@ -173,8 +174,7 @@ export async function daSourceHead({ env, daCtx }) {
   const headers = new Headers();
   headers.set('Authorization', authToken);
 
-  const adminPath = ext !== 'html' ? path : `${path}.${ext}`;
-  const adminUrl = new URL(`/source/${org}/${site}${adminPath}`, env.DA_ADMIN);
+  const adminUrl = getSourceUrl(env, daCtx);
   console.log(`-> HEAD ${adminUrl.toString()}`);
   const response = await env.daadmin.fetch(adminUrl, { method: 'HEAD', headers });
   console.log(`<- HEAD ${adminUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
@@ -182,13 +182,21 @@ export async function daSourceHead({ env, daCtx }) {
 }
 
 export async function daSourcePost({ req, env, daCtx }) {
-  const {
-    org, site, path, ext, authToken,
-  } = daCtx;
+  const { sourcePath, ext, authToken } = daCtx;
+
+  // the body is rewritten as HTML below, so anything but an HTML document would be
+  // written back mangled onto the key GET reads
+  if (ext !== 'html') {
+    console.log(`415 POST ${sourcePath}, not an HTML document`);
+    return get415();
+  }
 
   const obj = await putHelper(req, env, daCtx);
   if (obj && obj.data) {
     const isFile = obj.data instanceof File;
+    if (isFile && !isHtmlPostType(obj.data.type)) {
+      return get415();
+    }
     const { body: bodyHtml } = isFile
       ? await getFileBody(obj.data)
       : getTextBody(obj.data);
@@ -211,10 +219,7 @@ export async function daSourcePost({ req, env, daCtx }) {
     const data = new Blob([bodyContent], { type: 'text/html' });
     body.set('data', data);
     const headers = { Authorization: authToken };
-    const adminUrl = new URL(
-      `/source/${org}/${site}${path}.${ext}`,
-      env.DA_ADMIN,
-    );
+    const adminUrl = getSourceUrl(env, daCtx);
     // eslint-disable-next-line no-param-reassign
     req = new Request(adminUrl, {
       method: 'POST',
@@ -227,5 +232,5 @@ export async function daSourcePost({ req, env, daCtx }) {
     return response;
   }
 
-  return undefined;
+  return get415();
 }
