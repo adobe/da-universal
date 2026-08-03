@@ -136,6 +136,24 @@ describe('resolveContentSource', () => {
 
       assert.strictEqual(source.kind, 'unknown');
     });
+
+    // the base is used verbatim as a store url and the author token goes with it, so the store
+    // has to be named at the front of the url and not merely somewhere inside it
+    it('answers unknown when a store url appears anywhere but the start', async () => {
+      stubFetch(() => sidekick('https://elsewhere.example/?to=https://api.aem.live/org/sites/site/source'));
+
+      const source = await resolveContentSource(env, daCtx());
+
+      assert.strictEqual(source.kind, 'unknown');
+    });
+
+    it('answers unknown for a legacy url buried mid-string too', async () => {
+      stubFetch(() => sidekick('https://elsewhere.example/#https://content.da.live/org/site/'));
+
+      const source = await resolveContentSource(env, daCtx());
+
+      assert.strictEqual(source.kind, 'unknown');
+    });
   });
 
   describe('when the question could not be answered', () => {
