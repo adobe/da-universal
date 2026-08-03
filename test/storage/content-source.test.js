@@ -71,6 +71,18 @@ describe('resolveContentSource', () => {
       assert.strictEqual(new Headers(calls[0].init.headers).get('Authorization'), 'Bearer t');
     });
 
+    // a config service that accepts the connection and never answers would otherwise hold the
+    // request open for as long as the platform allows
+    it('gives up on the lookup rather than hanging', async () => {
+      stubFetch(legacyBody);
+
+      await resolveContentSource(env, daCtx());
+
+      const { signal } = calls[0].init;
+      assert.ok(signal, 'the lookup carries an abort signal');
+      assert.strictEqual(typeof signal.aborted, 'boolean');
+    });
+
     it('asks anyway when there is no author token', async () => {
       stubFetch(legacyBody);
 
@@ -242,13 +254,23 @@ describe('resolveContentSource', () => {
   });
 
   describe('when there is no site to ask about', () => {
-    it('answers unknown without making a request', async () => {
-      stubFetch(legacyBody);
+    // either one missing is enough: a half-parsed request would otherwise build a url with
+    // "undefined" in it and send the author's token to it
+    [
+      ['neither', { org: undefined, site: undefined }],
+      ['no org', { org: undefined }],
+      ['no site', { site: undefined }],
+      ['an empty org', { org: '' }],
+      ['an empty site', { site: '' }],
+    ].forEach(([what, over]) => {
+      it(`answers unknown without making a request: ${what}`, async () => {
+        stubFetch(legacyBody);
 
-      const source = await resolveContentSource(env, daCtx({ org: undefined, site: undefined }));
+        const source = await resolveContentSource(env, daCtx(over));
 
-      assert.strictEqual(source.kind, 'unknown');
-      assert.strictEqual(calls.length, 0);
+        assert.strictEqual(source.kind, 'unknown');
+        assert.strictEqual(calls.length, 0);
+      });
     });
   });
 
