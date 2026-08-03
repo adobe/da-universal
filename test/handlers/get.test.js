@@ -129,6 +129,17 @@ describe('GET handler', () => {
       assert.strictEqual(res.status, 200);
       assert.strictEqual(await res.text(), 'proxied-resource');
     });
+
+    it('proxies to AEM for explicit .html', async () => {
+      const req = new Request('https://main--site--org.preview.da.live/folder/content.html');
+      const daCtx = getDaCtx(req);
+      const env = {};
+
+      const res = await getHandler({ req, env, daCtx });
+
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(await res.text(), 'proxied-resource');
+    });
   });
 
   describe('assets', () => {
