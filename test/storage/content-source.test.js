@@ -222,6 +222,94 @@ describe('resolveContentSource', () => {
     });
   });
 
+  describe('reusing an answer within a page load', () => {
+    // one previewed page is many worker requests: the document, then one per relative image src,
+    // each of which would look the store up again. Measured live on 2026-08-03: the sidekick
+    // config is `cache-control: no-store` and costs ~460ms, so 8 identical lookups spend 3.8s of
+    // origin time and add that to every image.
+    it('asks once for a burst of reads of the same site', async () => {
+      stubFetch(legacyBody);
+
+      await resolveContentSource(env, daCtx(), { reuse: true });
+      await resolveContentSource(env, daCtx(), { reuse: true });
+      await resolveContentSource(env, daCtx(), { reuse: true });
+
+      assert.strictEqual(calls.length, 1);
+    });
+
+    it('gives the same answer each time', async () => {
+      stubFetch(() => sidekick('https://api.aem.live/org/sites/site/source'));
+
+      const first = await resolveContentSource(env, daCtx(), { reuse: true });
+      const second = await resolveContentSource(env, daCtx(), { reuse: true });
+
+      assert.deepStrictEqual(second, first);
+    });
+
+    it('asks again for a different site', async () => {
+      stubFetch(legacyBody);
+
+      await resolveContentSource(env, daCtx(), { reuse: true });
+      await resolveContentSource(env, daCtx({ site: 'other' }), { reuse: true });
+
+      assert.strictEqual(calls.length, 2);
+    });
+
+    it('asks again for a different ref of the same site', async () => {
+      stubFetch(legacyBody);
+
+      await resolveContentSource(env, daCtx(), { reuse: true });
+      await resolveContentSource(env, daCtx({ ref: 'branch' }), { reuse: true });
+
+      assert.strictEqual(calls.length, 2);
+    });
+
+    // a write is the one operation a wrong store cannot be walked back from, so it always asks
+    it('does not reuse an answer unless asked to', async () => {
+      stubFetch(legacyBody);
+
+      await resolveContentSource(env, daCtx(), { reuse: true });
+      await resolveContentSource(env, daCtx());
+
+      assert.strictEqual(calls.length, 2);
+    });
+
+    it('never lets a write read a stored answer', async () => {
+      stubFetch(legacyBody);
+
+      await resolveContentSource(env, daCtx());
+      await resolveContentSource(env, daCtx());
+
+      assert.strictEqual(calls.length, 2);
+    });
+
+    // an outage that stuck would outlast itself
+    it('never stores an answer it could not give', async () => {
+      stubFetch(() => new Response('', { status: 503 }));
+
+      await resolveContentSource(env, daCtx({ site: 'flaky' }), { reuse: true });
+      await resolveContentSource(env, daCtx({ site: 'flaky' }), { reuse: true });
+
+      assert.strictEqual(calls.length, 2);
+    });
+
+    it('picks up a recovery on the next read', async () => {
+      let attempt = 0;
+      stubFetch(() => {
+        attempt += 1;
+        return attempt === 1
+          ? new Response('', { status: 503 })
+          : sidekick('https://api.aem.live/org/sites/recovering/source');
+      });
+
+      const down = await resolveContentSource(env, daCtx({ site: 'recovering' }), { reuse: true });
+      const up = await resolveContentSource(env, daCtx({ site: 'recovering' }), { reuse: true });
+
+      assert.strictEqual(down.kind, 'unknown');
+      assert.strictEqual(up.kind, 'sourcebus');
+    });
+  });
+
   describe('the admin host', () => {
     // the caller turns unknown into a 503 it can return; a throw here escapes into
     // withCorsHeaders, which reads response.headers and throws again on undefined
