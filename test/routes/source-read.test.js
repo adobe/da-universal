@@ -329,6 +329,54 @@ describe('reading with the content source resolved', () => {
     });
   });
 
+  describe('a media read, which the handlers race against the AEM proxy', () => {
+    // getHandler races an image read against *.aem.page and takes the proxy answer whenever the
+    // store read is not a 200. So an unresolved source degrades an image to the published copy
+    // rather than breaking the page, and an image cannot be laundered into a write: a POST to a
+    // non-html path is refused with 415 before anything is resolved.
+    it('falls through to the AEM proxy for an image when the source is unresolved', async () => {
+      const seen = [];
+      globalThis.fetch = async (input) => {
+        seen.push(input.toString());
+        return new Response('the published bytes', { status: 200 });
+      };
+      const getHandler = (await esmock('../../src/handlers/get.js', {
+        '../../src/routes/da-admin.js': {
+          daSourceGet: async () => new Response('', { status: 503 }),
+        },
+        '../../src/routes/aem-proxy.js': {
+          handleAEMProxyRequest: async () => new Response('the published bytes', { status: 200 }),
+        },
+      })).default;
+      const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
+
+      const res = await getHandler({ req, env: {}, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(await res.text(), 'the published bytes');
+    });
+
+    // mp4 is not in the raced extensions, so it has no published copy to fall back to and the
+    // refusal reaches the caller as itself
+    it('refuses a video read when the source is unresolved', async () => {
+      const { daSourceGet, env } = await build({ source: UNKNOWN_SOURCE });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/clip.mp4');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 503);
+    });
+
+    it('reads a video from the source bus when the source is known', async () => {
+      const { daSourceGet, env, seen } = await build({ source: BUS_SOURCE });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/clip.mp4');
+
+      await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(seen.bus[0].url, 'https://api.aem.live/org/sites/site/source/folder/clip.mp4');
+    });
+  });
+
   describe('the order of the two things that can fail', () => {
     // a missing AEM branch is answered as it was before, so quick-edit still gets its shell
     it('reports a missing AEM branch even when the source is unresolved', async () => {
