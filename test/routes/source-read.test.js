@@ -195,8 +195,10 @@ describe('reading with the content source resolved', () => {
       const html = authedReq('https://main--site--org.ue.da.live/folder/content');
       const asset = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
 
-      const htmlBody = await (await daSourceGet({ req: html, env, daCtx: getDaCtx(html) })).text();
-      const assetBody = await (await daSourceGet({ req: asset, env, daCtx: getDaCtx(asset) })).text();
+      const htmlRes = await daSourceGet({ req: html, env, daCtx: getDaCtx(html) });
+      const assetRes = await daSourceGet({ req: asset, env, daCtx: getDaCtx(asset) });
+      const htmlBody = await htmlRes.text();
+      const assetBody = await assetRes.text();
 
       assert.match(htmlBody, /503/);
       assert.match(assetBody, /503/);
@@ -474,9 +476,7 @@ describe('reading with the content source resolved', () => {
           daSourceHead: async () => new Response(null, { status: storeStatus }),
         },
         '../../src/routes/aem-proxy.js': {
-          handleAEMProxyRequest: async () => new Response(
-            aemStatus === 200 ? 'the published bytes' : '', { status: aemStatus },
-          ),
+          handleAEMProxyRequest: async () => new Response(aemStatus === 200 ? 'the published bytes' : '', { status: aemStatus }),
         },
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
