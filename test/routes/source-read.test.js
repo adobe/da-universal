@@ -178,6 +178,29 @@ describe('reading with the content source resolved', () => {
       assert.strictEqual(res.status, 503);
       assert.strictEqual(await res.text(), '');
     });
+
+    it('asks the caller to retry on a HEAD too', async () => {
+      const { daSourceHead, env } = await build({ source: UNKNOWN_SOURCE });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceHead({ env, daCtx: getDaCtx(req) });
+
+      assert.ok(Number(res.headers.get('Retry-After')) > 0);
+    });
+
+    // the read refusals are rendered, by the preview iframe and by quick-edit, so they carry a
+    // body that says what happened rather than an empty page
+    it('says what happened, on both GET paths', async () => {
+      const { daSourceGet, env } = await build({ source: UNKNOWN_SOURCE });
+      const html = authedReq('https://main--site--org.ue.da.live/folder/content');
+      const asset = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
+
+      const htmlBody = await (await daSourceGet({ req: html, env, daCtx: getDaCtx(html) })).text();
+      const assetBody = await (await daSourceGet({ req: asset, env, daCtx: getDaCtx(asset) })).text();
+
+      assert.match(htmlBody, /503/);
+      assert.match(assetBody, /503/);
+    });
   });
 
   describe('when the caller is not allowed to ask which store', () => {
@@ -440,6 +463,44 @@ describe('reading with the content source resolved', () => {
   });
 
   describe('a media read, which the handlers race against the AEM proxy', () => {
+    // the store answer is preferred at 200 and the published copy otherwise, so an image that is
+    // published still resolves during a lookup outage. But when neither answers, a 404 says "this
+    // image does not exist" where the truth is "we could not find out", so the store's own 503
+    // wins over a non-200 from the proxy.
+    const raced = async (handler, storeStatus, aemStatus) => {
+      const mod = await esmock(`../../src/handlers/${handler}.js`, {
+        '../../src/routes/da-admin.js': {
+          daSourceGet: async () => new Response('', { status: storeStatus }),
+          daSourceHead: async () => new Response(null, { status: storeStatus }),
+        },
+        '../../src/routes/aem-proxy.js': {
+          handleAEMProxyRequest: async () => new Response(
+            aemStatus === 200 ? 'the published bytes' : '', { status: aemStatus },
+          ),
+        },
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
+      return (await mod.default({ req, env: {}, daCtx: getDaCtx(req) })).status;
+    };
+
+    ['get', 'head'].forEach((handler) => {
+      it(`prefers the published copy over an unresolved store on a ${handler.toUpperCase()}`, async () => {
+        assert.strictEqual(await raced(handler, 503, 200), 200);
+      });
+
+      it(`answers 503 rather than 404 when neither answers on a ${handler.toUpperCase()}`, async () => {
+        assert.strictEqual(await raced(handler, 503, 404), 503);
+      });
+
+      it(`still answers 404 when the image is simply absent on a ${handler.toUpperCase()}`, async () => {
+        assert.strictEqual(await raced(handler, 404, 404), 404);
+      });
+
+      it(`still prefers the store at 200 on a ${handler.toUpperCase()}`, async () => {
+        assert.strictEqual(await raced(handler, 200, 404), 200);
+      });
+    });
+
     // getHandler races an image read against *.aem.page and takes the proxy answer whenever the
     // store read is not a 200. So an unresolved source degrades an image to the published copy
     // rather than breaking the page, and an image cannot be laundered into a write: a POST to a

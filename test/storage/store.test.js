@@ -162,9 +162,9 @@ describe('getStore', () => {
       assert.strictEqual(new Headers(l.writeInit('<body></body>', 'Bearer t').headers).get('Authorization'), 'Bearer t');
     });
 
-    // neither store's writes are conditional: only the source bus sets an etag on a read, and a
-    // marker on the connection uri is minted once per page load while UE saves many times against
-    // it, so nothing could refresh a version pin
+    // neither store's writes are conditional. Only the source bus sets an etag on a read, and
+    // nothing carries it into the save: a marker on the connection uri would be minted once per
+    // page load while UE saves many times against it, so no version pin could stay fresh.
     it('sends no precondition to either store', () => {
       const b = getStore(env, ctxFor('https://main--site--org.ue.da.live/doc'), bus);
       const l = getStore(env, ctxFor('https://main--site--org.ue.da.live/doc'), legacy);

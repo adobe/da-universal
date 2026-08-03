@@ -164,9 +164,9 @@ describe('resolveContentSource', () => {
   });
 
   describe('when the question could not be answered', () => {
-    // a 404 is what helix-admin returns when config resolution produced nothing
-    // (src/sidekick/handler.js: `if (config) { ... } return { status: 404 }`), so it
-    // means "we do not know", not "legacy"
+    // a 404 is what the sidekick route returns when config resolution produced nothing
+    // (helix-api-service and helix-admin both: `if (config) { ... } return { status: 404 }`), so
+    // it means "we do not know", not "legacy"
     it('answers unknown on a 404', async () => {
       stubFetch(() => new Response('', { status: 404 }));
 
