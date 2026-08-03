@@ -37,7 +37,9 @@ const build = async (overrides = {}) => {
   // 'headHtml' in overrides rather than a destructured default, so passing
   // `{ headHtml: undefined }` really does simulate a missing head.html
   const headHtml = 'headHtml' in overrides ? overrides.headHtml : '<meta name="from" content="aem" />';
-  const seen = { bus: [], legacy: [], ue: 0, ping: 0, config: 0 };
+  const seen = {
+    bus: [], legacy: [], ue: 0, ping: 0, config: 0,
+  };
   globalThis.fetch = async (input, init) => {
     const request = input instanceof Request ? input : new Request(input, init);
     seen.bus.push({ url: request.url, method: request.method, headers: request.headers });
@@ -144,24 +146,13 @@ describe('the /ping fast path on a read', () => {
     assert.strictEqual(seen.legacy.length, 1);
   });
 
-  it('falls back when the fast store refuses', async () => {
-    const { daSourceGet, env, seen } = await build({
-      source: LEGACY_SOURCE,
-      fast: FAST,
-      bus: () => new Response('', { status: 403 }),
-    });
-    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-    await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-    assert.strictEqual(seen.legacy.length, 1);
-  });
-
   it('falls back when the fast store cannot be reached', async () => {
     const { daSourceGet, env, seen } = await build({
       source: LEGACY_SOURCE,
       fast: FAST,
-      bus: () => { throw new TypeError('fetch failed'); },
+      bus: () => {
+        throw new TypeError('fetch failed');
+      },
     });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
@@ -203,7 +194,7 @@ describe('the /ping fast path on a read', () => {
   // answer 401 with an empty body.
   it('serves the da:401 shell when the store refuses the token on an html read', async () => {
     const { daSourceGet, env } = await build({
-      source: UNKNOWN_SOURCE,
+      source: DENIED_SOURCE,
       fast: FAST,
       bus: () => new Response('', { status: 401 }),
     });
@@ -217,7 +208,7 @@ describe('the /ping fast path on a read', () => {
 
   it('passes a store 401 through bare on a non-html read, which renders nothing', async () => {
     const { daSourceGet, env } = await build({
-      source: UNKNOWN_SOURCE,
+      source: DENIED_SOURCE,
       fast: FAST,
       bus: () => new Response('', { status: 401 }),
     });

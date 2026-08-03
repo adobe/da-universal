@@ -34,7 +34,7 @@ import {
   UNAUTHORIZED_HTML_MESSAGE,
 } from '../utils/constants.js';
 import { getSiteConfig } from '../storage/config.js';
-import resolveContentSource, { UNAUTHORIZED, UNKNOWN } from '../storage/content-source.js';
+import resolveContentSource, { fastSourceBus, UNAUTHORIZED, UNKNOWN } from '../storage/content-source.js';
 import getStore from '../storage/store.js';
 import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 
@@ -101,6 +101,38 @@ async function reachStore(store, input, init) {
   }
 }
 
+/**
+ * Reads from the store that holds the site, taking `/ping`'s fast answer when it produced content.
+ *
+ * The two lookups run at once: `/ping` answers an enrolled site from the Fastly edge in ~37ms,
+ * where the config read is ~529ms, and a legacy site learns nothing from `/ping` so it would
+ * otherwise pay both in series. The fast answer is trusted only on a 200, because `/ping` cannot
+ * say "legacy" and a yes that found nothing would otherwise become the starter template.
+ *
+ * @returns {Promise<{source: Object, response?: Response}>} `response` is absent when the store
+ * could not be reached, and when `source.kind` is unauthorized or unknown
+ */
+async function readSource(env, daCtx, init) {
+  const config = resolveContentSource(env, daCtx);
+  const fast = await fastSourceBus(env, daCtx);
+  if (fast) {
+    const store = getStore(env, daCtx, fast);
+    console.log(`-> ${init.method} ${store.url.toString()} (fast)`);
+    const response = await reachStore(store, store.url, init);
+    if (response?.status === 200) return { source: fast, response };
+    // a refusal is about the token, not about which store, so the config read would repeat it
+    if (response?.status === 401 || response?.status === 403) return { source: fast, response };
+  }
+
+  const source = await config;
+  if (source.kind === UNAUTHORIZED || source.kind === UNKNOWN) return { source };
+
+  const store = getStore(env, daCtx, source);
+  console.log(`-> ${init.method} ${store.url.toString()}`);
+  const response = await reachStore(store, store.url, init);
+  return { source, response };
+}
+
 export async function daSourceGet({ req, env, daCtx }) {
   const { ext, authToken } = daCtx;
 
@@ -121,29 +153,28 @@ export async function daSourceGet({ req, env, daCtx }) {
   headers.set('Authorization', authToken);
 
   if (ext !== 'html') {
-    // for non-HTML files, simply proxy the request without processing
-    const source = await resolveContentSource(env, daCtx);
+    // for non-HTML files, simply proxy the request without processing. A refusal is passed on as
+    // itself: nothing renders an image, so the da:401 shell would only corrupt it.
+    const { source, response } = await readSource(env, daCtx, { method: 'GET', headers });
     if (source.kind === UNAUTHORIZED) {
-      return daResp({ body: UNAUTHORIZED_HTML_MESSAGE, status: source.status, contentType: 'text/html' });
+      return daResp({ body: '', status: source.status, contentType: 'text/plain; charset=utf-8' });
     }
     if (source.kind === UNKNOWN) {
       console.warn(`503 GET ${daCtx.sourcePath}, content source unresolved: ${source.reason}`);
       return get503(SOURCE_UNRESOLVED_HTML_MESSAGE);
     }
-    const store = getStore(env, daCtx, source);
-    console.log(`-> ${store.url.toString()}`);
-    const response = await reachStore(store, store.url, { method: 'GET', headers });
     if (!response) return get503(SOURCE_UNREACHABLE_HTML_MESSAGE);
-    console.log(`<- ${store.url.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+    console.log(`<- ${daCtx.sourcePath}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
     return response;
   }
 
   // the store lookup costs a round trip, so it runs alongside head.html rather than after it
   const aemCtx = getAemCtx(env, daCtx);
-  const [headHtml, source] = await Promise.all([
+  const [headHtml, read] = await Promise.all([
     getAEMHtml(aemCtx, '/head.html'),
-    resolveContentSource(env, daCtx),
+    readSource(env, daCtx, { method: 'GET', headers }),
   ]);
+  const { source, response: sourceResp } = read;
   if (!headHtml) {
     // quick-edit still needs a working shell (with the import map) so the editor
     // can load into this page, even when the AEM branch doesn't exist yet.
@@ -159,19 +190,15 @@ export async function daSourceGet({ req, env, daCtx }) {
     console.warn(`503 GET ${daCtx.sourcePath}, content source unresolved: ${source.reason}`);
     return get503(SOURCE_UNRESOLVED_HTML_MESSAGE);
   }
-
-  // get the content from the store that holds it
-  const store = getStore(env, daCtx, source);
-
-  // eslint-disable-next-line no-param-reassign
-  req = new Request(store.url, {
-    method: 'GET',
-    headers,
-  });
-  console.log(`-> ${store.url.toString()}`);
-  const sourceResp = await reachStore(store, req);
   if (!sourceResp) return get503(SOURCE_UNREACHABLE_HTML_MESSAGE);
-  console.log(`<- ${store.url.toString()}. ${sourceResp.status} ${sourceResp.statusText}`, { status: sourceResp.status, statusText: sourceResp.statusText });
+  console.log(`<- ${daCtx.sourcePath}. ${sourceResp.status} ${sourceResp.statusText}`, { status: sourceResp.status, statusText: sourceResp.statusText });
+
+  // the store is the first thing to see the token when the fast path skipped the config read, and
+  // the authorbus extension recovers off the da:401 meta rather than the status, so a refusal from
+  // the store gets the same shell the config read would have produced
+  if (sourceResp.status === 401 || sourceResp.status === 403) {
+    return daResp({ body: UNAUTHORIZED_HTML_MESSAGE, status: sourceResp.status, contentType: 'text/html' });
+  }
 
   // only a 404 means "this document is not here". Composing the starter template over anything
   // else hands the author a blank page to save over a document that exists.
@@ -221,7 +248,7 @@ export async function daSourceHead({ env, daCtx }) {
   const headers = new Headers();
   headers.set('Authorization', authToken);
 
-  const source = await resolveContentSource(env, daCtx);
+  const { source, response } = await readSource(env, daCtx, { method: 'HEAD', headers });
   if (source.kind === UNAUTHORIZED) {
     return new Response(null, { status: source.status });
   }
@@ -229,12 +256,8 @@ export async function daSourceHead({ env, daCtx }) {
     console.warn(`503 HEAD ${daCtx.sourcePath}, content source unresolved: ${source.reason}`);
     return head503();
   }
-
-  const store = getStore(env, daCtx, source);
-  console.log(`-> HEAD ${store.url.toString()}`);
-  const response = await reachStore(store, store.url, { method: 'HEAD', headers });
   if (!response) return head503();
-  console.log(`<- HEAD ${store.url.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+  console.log(`<- HEAD ${daCtx.sourcePath}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
   return new Response(null, { status: response.status, headers: response.headers });
 }
 
