@@ -205,6 +205,24 @@ describe('resolveContentSource', () => {
   });
 
   describe('the admin host', () => {
+    // the caller turns unknown into a 503 it can return; a throw here escapes into
+    // withCorsHeaders, which reads response.headers and throws again on undefined
+    it('answers unknown rather than throwing when it is not set', async () => {
+      stubFetch(legacyBody);
+
+      const source = await resolveContentSource({}, daCtx());
+
+      assert.strictEqual(source.kind, 'unknown');
+    });
+
+    it('answers unknown rather than throwing when it is not a url', async () => {
+      stubFetch(legacyBody);
+
+      const source = await resolveContentSource({ HLX_ADMIN: 'not-a-url' }, daCtx());
+
+      assert.strictEqual(source.kind, 'unknown');
+    });
+
     it('comes from env, so stage can point elsewhere', async () => {
       stubFetch(legacyBody);
 
