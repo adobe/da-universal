@@ -162,21 +162,19 @@ describe('getStore', () => {
       assert.strictEqual(new Headers(l.writeInit('<body></body>', 'Bearer t').headers).get('Authorization'), 'Bearer t');
     });
 
-    it('adds a precondition to the source-bus write when one is given', () => {
-      const store = getStore(env, ctxFor('https://main--site--org.ue.da.live/doc'), bus);
+    // neither store's writes are conditional: only the source bus sets an etag on a read, and a
+    // marker on the connection uri is minted once per page load while UE saves many times against
+    // it, so nothing could refresh a version pin
+    it('sends no precondition to either store', () => {
+      const b = getStore(env, ctxFor('https://main--site--org.ue.da.live/doc'), bus);
+      const l = getStore(env, ctxFor('https://main--site--org.ue.da.live/doc'), legacy);
 
-      const init = store.writeInit('<body></body>', 'Bearer t', { 'If-Match': '"abc"' });
-
-      assert.strictEqual(new Headers(init.headers).get('If-Match'), '"abc"');
-    });
-
-    it('sends no precondition when none is given', () => {
-      const store = getStore(env, ctxFor('https://main--site--org.ue.da.live/doc'), legacy);
-
-      const init = store.writeInit('<body></body>', 'Bearer t');
-
-      assert.strictEqual(new Headers(init.headers).get('If-Match'), null);
-      assert.strictEqual(new Headers(init.headers).get('If-None-Match'), null);
+      [b, l].forEach((store) => {
+        const headers = new Headers(store.writeInit('<body></body>', 'Bearer t').headers);
+        assert.strictEqual(headers.get('If-Match'), null);
+        assert.strictEqual(headers.get('If-None-Match'), null);
+        assert.strictEqual(headers.get('If-Unmodified-Since'), null);
+      });
     });
   });
 });

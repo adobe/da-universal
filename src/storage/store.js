@@ -52,10 +52,10 @@ export default function getStore(env, daCtx, source) {
     return {
       url: new URL(`${source.base}${sourceBusPath(daCtx)}`),
       fetch: (input, init) => fetch(input, init),
-      writeInit: (html, authToken, condition) => ({
+      writeInit: (html, authToken) => ({
         method: 'POST',
         body: html,
-        headers: { Authorization: authToken, 'Content-Type': 'text/html', ...condition },
+        headers: { Authorization: authToken, 'Content-Type': 'text/html' },
       }),
     };
   }
@@ -63,10 +63,10 @@ export default function getStore(env, daCtx, source) {
   return {
     url: new URL(`/source/${org}/${site}${sourcePath}`, env.DA_ADMIN),
     fetch: (input, init) => env.daadmin.fetch(input, init),
-    writeInit: (html, authToken, condition) => {
+    writeInit: (html, authToken) => {
       const body = new FormData();
       body.set('data', new Blob([html], { type: 'text/html' }));
-      return { method: 'POST', body, headers: { Authorization: authToken, ...condition } };
+      return { method: 'POST', body, headers: { Authorization: authToken } };
     },
   };
 }

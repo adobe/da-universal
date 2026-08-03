@@ -22,20 +22,18 @@ import {
   applyQuickEditToDocument, buildQuickEditCookie, buildQuickEditNotFoundResponse,
 } from '../utils/quick-edit.js';
 import {
-  daResp, get401, get404, get415, get503, head401, head503, post409, post503,
+  daResp, get401, get404, get415, get503, head401, head503, post503,
 } from '../responses/index.js';
 import {
   BRANCH_NOT_FOUND_HTML_MESSAGE,
   DEFAULT_HTML_TEMPLATE,
-  SOURCE_MOVED_MESSAGE,
   SOURCE_UNRESOLVED_HTML_MESSAGE,
   SOURCE_UNRESOLVED_MESSAGE,
   UNAUTHORIZED_HTML_MESSAGE,
 } from '../utils/constants.js';
 import { getSiteConfig } from '../storage/config.js';
-import resolveContentSource, { SOURCE_BUS, UNKNOWN } from '../storage/content-source.js';
+import resolveContentSource, { UNKNOWN } from '../storage/content-source.js';
 import getStore from '../storage/store.js';
-import { formatSourceStamp, parseSourceStamp } from '../utils/source-stamp.js';
 import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 
 const HTML_POST_TYPE = 'text/html';
@@ -107,7 +105,7 @@ export async function daSourceGet({ req, env, daCtx }) {
 
   if (ext !== 'html') {
     // for non-HTML files, simply proxy the request without processing
-    const source = await resolveContentSource(env, daCtx, { reuse: true });
+    const source = await resolveContentSource(env, daCtx);
     if (source.kind === UNKNOWN) {
       console.warn(`503 GET ${daCtx.sourcePath}, content source unresolved: ${source.reason}`);
       return get503(SOURCE_UNRESOLVED_HTML_MESSAGE);
@@ -123,7 +121,7 @@ export async function daSourceGet({ req, env, daCtx }) {
   const aemCtx = getAemCtx(env, daCtx);
   const [headHtml, source] = await Promise.all([
     getAEMHtml(aemCtx, '/head.html'),
-    resolveContentSource(env, daCtx, { reuse: true }),
+    resolveContentSource(env, daCtx),
   ]);
   if (!headHtml) {
     // quick-edit still needs a working shell (with the import map) so the editor
@@ -156,9 +154,8 @@ export async function daSourceGet({ req, env, daCtx }) {
     return sourceResp;
   }
 
-  const found = sourceResp.status === 200;
   // use the stored content when available, otherwise fall back to a template
-  const bodyHtml = found
+  const bodyHtml = sourceResp.status === 200
     ? await sourceResp.text()
     : await getPageTemplate(env, daCtx, aemCtx, headHtml);
 
@@ -175,9 +172,7 @@ export async function daSourceGet({ req, env, daCtx }) {
       extraHeaders.push(['Set-Cookie', buildQuickEditCookie(entryPath)]);
     }
   } else if (isUE) {
-    // UE is the only client that posts back, so it is the only one that needs the stamp
-    const stamp = formatSourceStamp(source, found);
-    await applyUEInstrumentation(documentTree, daCtx, aemCtx, stamp);
+    await applyUEInstrumentation(documentTree, daCtx, aemCtx);
   }
 
   const body = serializeHtml(documentTree);
@@ -201,7 +196,7 @@ export async function daSourceHead({ env, daCtx }) {
   const headers = new Headers();
   headers.set('Authorization', authToken);
 
-  const source = await resolveContentSource(env, daCtx, { reuse: true });
+  const source = await resolveContentSource(env, daCtx);
   if (source.kind === UNKNOWN) {
     console.warn(`503 HEAD ${daCtx.sourcePath}, content source unresolved: ${source.reason}`);
     return head503();
@@ -256,29 +251,11 @@ export async function daSourcePost({ req, env, daCtx }) {
       return post503(SOURCE_UNRESOLVED_MESSAGE);
     }
 
-    // the read stamped the connection uri with the store it came from, and the Universal Editor
-    // Service posts back to that uri, so the two requests are linked. Where the stamp and a
-    // fresh lookup disagree, the site moved stores while the page was open: writing to the store
-    // the content came from orphans it, writing to the new one overwrites a page the author
-    // never saw, and neither is worth doing silently.
-    const stamp = parseSourceStamp(daCtx.sourceStamp);
-    if (stamp && stamp.kind !== source.kind) {
-      console.warn(`409 POST ${sourcePath}, read from ${stamp.kind} but the site is on ${source.kind}`);
-      return post409(SOURCE_MOVED_MESSAGE);
-    }
-
-    // with no stamp there is no provenance, so a source-bus write may overwrite a page that
-    // exists but may not invent one. A stamp that carries no precondition is not the same thing:
-    // it says the read looked at the source bus and found nothing, so creating is what it asked
-    // for.
-    const noProvenance = source.kind === SOURCE_BUS ? { 'If-Match': '*' } : undefined;
-    const condition = stamp ? stamp.condition : noProvenance;
-
     // the two stores take the document in different shapes, so the store builds its own request
     const store = getStore(env, daCtx, source);
     // eslint-disable-next-line no-param-reassign
-    req = new Request(store.url, store.writeInit(bodyContent, authToken, condition));
-    console.log(`-> ${store.url.toString()}${condition ? ` ${JSON.stringify(condition)}` : ''}`);
+    req = new Request(store.url, store.writeInit(bodyContent, authToken));
+    console.log(`-> ${store.url.toString()}`);
     const response = await store.fetch(req);
     console.log(`<- ${store.url.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
     return response;

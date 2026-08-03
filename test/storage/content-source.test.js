@@ -15,7 +15,7 @@ import assert from 'assert';
 
 const { default: resolveContentSource } = await import('../../src/storage/content-source.js');
 
-const env = { HLX_ADMIN: 'https://admin.hlx.page' };
+const env = { AEM_API: 'https://api.aem.live' };
 
 const daCtx = (over = {}) => ({
   org: 'org', site: 'site', ref: 'main', authToken: 'Bearer t', ...over,
@@ -44,16 +44,23 @@ describe('resolveContentSource', () => {
   });
 
   describe('the request it makes', () => {
-    it('asks the sidekick config for org, site and ref', async () => {
+    it('asks the AEM API for the site', async () => {
+      stubFetch(legacyBody);
+
+      await resolveContentSource(env, daCtx());
+
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls[0].url, 'https://api.aem.live/org/sites/site/sidekick');
+    });
+
+    // both stores read the same config service and the source is per site, so the branch does
+    // not change the answer
+    it('does not vary by ref', async () => {
       stubFetch(legacyBody);
 
       await resolveContentSource(env, daCtx({ ref: 'branch' }));
 
-      assert.strictEqual(calls.length, 1);
-      assert.strictEqual(
-        calls[0].url,
-        'https://admin.hlx.page/sidekick/org/site/branch/config.json',
-      );
+      assert.strictEqual(calls[0].url, 'https://api.aem.live/org/sites/site/sidekick');
     });
 
     it('passes the author token on, so a private site resolves', async () => {
@@ -129,7 +136,7 @@ describe('resolveContentSource', () => {
       assert.strictEqual(source.kind, 'unknown');
     });
 
-    it('answers unknown for a host that only starts like api.aem.live', async () => {
+    it('answers unknown for a host that only starts like the API', async () => {
       stubFetch(() => sidekick('https://api.aem.live.evil.example/org/sites/site/source'));
 
       const source = await resolveContentSource(env, daCtx());
@@ -222,94 +229,7 @@ describe('resolveContentSource', () => {
     });
   });
 
-  describe('reusing an answer within a page load', () => {
-    // one previewed page is many worker requests: the document, then one per relative image src,
-    // each of which would look the store up again. Measured live on 2026-08-03: the sidekick
-    // config is `cache-control: no-store` and costs ~460ms, so 8 identical lookups spend 3.8s of
-    // origin time and add that to every image.
-    //
-    // What is held is per isolate and shared across requests, so each test here uses its own site.
-    it('asks once for a burst of reads of the same site', async () => {
-      stubFetch(legacyBody);
-      const ctx = daCtx({ site: 'burst' });
-
-      await resolveContentSource(env, ctx, { reuse: true });
-      await resolveContentSource(env, ctx, { reuse: true });
-      await resolveContentSource(env, ctx, { reuse: true });
-
-      assert.strictEqual(calls.length, 1);
-    });
-
-    it('gives the same answer each time', async () => {
-      stubFetch(() => sidekick('https://api.aem.live/org/sites/same/source'));
-      const ctx = daCtx({ site: 'same' });
-
-      const first = await resolveContentSource(env, ctx, { reuse: true });
-      const second = await resolveContentSource(env, ctx, { reuse: true });
-
-      assert.deepStrictEqual(second, first);
-    });
-
-    it('asks again for a different site', async () => {
-      stubFetch(legacyBody);
-
-      await resolveContentSource(env, daCtx({ site: 'one' }), { reuse: true });
-      await resolveContentSource(env, daCtx({ site: 'two' }), { reuse: true });
-
-      assert.strictEqual(calls.length, 2);
-    });
-
-    it('asks again for a different ref of the same site', async () => {
-      stubFetch(legacyBody);
-
-      await resolveContentSource(env, daCtx({ site: 'refs' }), { reuse: true });
-      await resolveContentSource(env, daCtx({ site: 'refs', ref: 'branch' }), { reuse: true });
-
-      assert.strictEqual(calls.length, 2);
-    });
-
-    // a write is the one operation a wrong store cannot be walked back from, so it always asks
-    it('does not reuse an answer unless asked to', async () => {
-      stubFetch(legacyBody);
-      const ctx = daCtx({ site: 'writes' });
-
-      await resolveContentSource(env, ctx, { reuse: true });
-      await resolveContentSource(env, ctx);
-      await resolveContentSource(env, ctx);
-
-      assert.strictEqual(calls.length, 3);
-    });
-
-    // an outage that stuck would outlast itself
-    it('never stores an answer it could not give', async () => {
-      stubFetch(() => new Response('', { status: 503 }));
-      const ctx = daCtx({ site: 'flaky' });
-
-      await resolveContentSource(env, ctx, { reuse: true });
-      await resolveContentSource(env, ctx, { reuse: true });
-
-      assert.strictEqual(calls.length, 2);
-    });
-
-    it('picks up a recovery on the next read', async () => {
-      let attempt = 0;
-      stubFetch(() => {
-        attempt += 1;
-        return attempt === 1
-          ? new Response('', { status: 503 })
-          : sidekick('https://api.aem.live/org/sites/recovering/source');
-      });
-      const ctx = daCtx({ site: 'recovering' });
-
-      const down = await resolveContentSource(env, ctx, { reuse: true });
-      const up = await resolveContentSource(env, ctx, { reuse: true });
-
-      assert.strictEqual(down.kind, 'unknown');
-      assert.strictEqual(up.kind, 'sourcebus');
-    });
-  });
-
-  describe('the admin host', () => {
+  describe('the API host', () => {
     // the caller turns unknown into a 503 it can return; a throw here escapes into
     // withCorsHeaders, which reads response.headers and throws again on undefined
     it('answers unknown rather than throwing when it is not set', async () => {
@@ -323,7 +243,7 @@ describe('resolveContentSource', () => {
     it('answers unknown rather than throwing when it is not a url', async () => {
       stubFetch(legacyBody);
 
-      const source = await resolveContentSource({ HLX_ADMIN: 'not-a-url' }, daCtx());
+      const source = await resolveContentSource({ AEM_API: 'not-a-url' }, daCtx());
 
       assert.strictEqual(source.kind, 'unknown');
     });
@@ -331,12 +251,27 @@ describe('resolveContentSource', () => {
     it('comes from env, so stage can point elsewhere', async () => {
       stubFetch(legacyBody);
 
-      await resolveContentSource({ HLX_ADMIN: 'https://admin.stage.example' }, daCtx());
+      await resolveContentSource({ AEM_API: 'https://api.stage.example' }, daCtx());
 
-      assert.strictEqual(
-        calls[0].url,
-        'https://admin.stage.example/sidekick/org/site/main/config.json',
-      );
+      assert.strictEqual(calls[0].url, 'https://api.stage.example/org/sites/site/sidekick');
+    });
+
+    it('tolerates a trailing slash on it', async () => {
+      stubFetch(legacyBody);
+
+      await resolveContentSource({ AEM_API: 'https://api.aem.live/' }, daCtx());
+
+      assert.strictEqual(calls[0].url, 'https://api.aem.live/org/sites/site/sidekick');
+    });
+
+    // the same env value decides where we ask and what counts as the source bus, so pointing at
+    // stage must not leave the prefix test matching production
+    it('is also what makes a source url the source bus', async () => {
+      stubFetch(() => sidekick('https://api.aem.live/org/sites/site/source'));
+
+      const source = await resolveContentSource({ AEM_API: 'https://api.stage.example' }, daCtx());
+
+      assert.strictEqual(source.kind, 'unknown');
     });
   });
 });

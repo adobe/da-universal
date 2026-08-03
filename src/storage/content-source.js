@@ -10,21 +10,12 @@
  * governing permissions and limitations under the License.
  */
 
-const SOURCE_BUS_PREFIX = 'https://api.aem.live/';
 const LEGACY_PREFIX = 'https://content.da.live/';
 const TIMEOUT_MS = 5 * 1000;
-const REUSE_MS = 10 * 1000;
 
 export const SOURCE_BUS = 'sourcebus';
 export const LEGACY = 'legacy';
 export const UNKNOWN = 'unknown';
-
-/**
- * Answers a read has already paid for, so the images on one page do not each pay again. Only ever
- * read on the read path, and only ever holds an answer that was given, so an outage does not
- * outlast itself.
- */
-const recent = new Map();
 
 function unknown(org, site, reason) {
   console.warn(`[source] ${org}/${site} unknown: ${reason}`);
@@ -32,45 +23,37 @@ function unknown(org, site, reason) {
 }
 
 /**
- * Asks admin.hlx.page which store holds a site's content.
+ * Asks the AEM API which store holds a site's content.
  *
- * The sidekick config returns the resolved content source url in its body, and answers 404 when
- * config resolution produced nothing (`if (config) { ... } return { status: 404 }` in
- * helix-admin src/sidekick/handler.js). So a failure to resolve is reported as a failure. The
- * `/ping` header cannot do that: it is absent both for a legacy site and for a source-bus site
- * whose config could not be read, which is the case that reads past a page and writes over it.
+ * `GET {AEM_API}/{org}/sites/{site}/sidekick` returns the resolved content source url in its body
+ * and needs only `code:read`, the permission every authoring role already has. It answers for
+ * legacy sites too, because both stores read the same config service. A config that could not be
+ * resolved is a 404 rather than a wrong answer, which is what lets an unresolved source be
+ * refused instead of guessed at.
  *
- * @param {Object} env worker env, `HLX_ADMIN` is the admin host
+ * The prefix test is the same one the platform applies to itself:
+ * `helix-api-service/src/contentproxy/index.js` reads the source as the source bus when its url
+ * starts with the API host.
+ *
+ * @param {Object} env worker env, `AEM_API` is the API host and the source-bus prefix
  * @param {Object} daCtx
- * @param {Object} [opts]
- * @param {boolean} [opts.reuse] reuse an answer given for this site in the last few seconds. Set
- * on reads, where one previewed page is a request per image; never on a write, which is the one
- * operation a wrong store cannot be walked back from.
  * @returns {Promise<{kind: string, base?: string, reason?: string}>} `sourcebus` with the store
  * base url, `legacy`, or `unknown` with the reason it could not be answered
  */
-export default async function resolveContentSource(env, daCtx, { reuse = false } = {}) {
-  const {
-    org, site, ref, authToken,
-  } = daCtx;
+export default async function resolveContentSource(env, daCtx) {
+  const { org, site, authToken } = daCtx;
 
-  // an unparseable hostname leaves org, site and ref all undefined together, and there is no
-  // site to ask about
+  // an unparseable hostname leaves org and site undefined, and there is no site to ask about
   if (!org || !site) {
     return unknown(org, site, 'no org or site in the request');
   }
 
-  const key = `${org}/${site}/${ref}`;
-  if (reuse) {
-    const held = recent.get(key);
-    if (held && Date.now() - held.at < REUSE_MS) return held.source;
-  }
-
+  const api = env.AEM_API?.replace(/\/$/, '');
   let url;
   try {
-    url = new URL(`/sidekick/${org}/${site}/${ref}/config.json`, env.HLX_ADMIN);
+    url = new URL(`/${org}/sites/${site}/sidekick`, api);
   } catch (e) {
-    return unknown(org, site, `HLX_ADMIN is not a url: ${e.message}`);
+    return unknown(org, site, `AEM_API is not a url: ${e.message}`);
   }
 
   const headers = new Headers();
@@ -98,14 +81,11 @@ export default async function resolveContentSource(env, daCtx, { reuse = false }
   if (typeof sourceUrl !== 'string') {
     return unknown(org, site, `${url} named no content source`);
   }
-  let source;
-  if (sourceUrl.startsWith(SOURCE_BUS_PREFIX)) {
-    source = { kind: SOURCE_BUS, base: sourceUrl.replace(/\/$/, '') };
-  } else if (sourceUrl.startsWith(LEGACY_PREFIX)) {
-    source = { kind: LEGACY };
-  } else {
-    return unknown(org, site, `content source ${sourceUrl} is neither store`);
+  if (sourceUrl.startsWith(`${api}/`)) {
+    return { kind: SOURCE_BUS, base: sourceUrl.replace(/\/$/, '') };
   }
-  recent.set(key, { source, at: Date.now() });
-  return source;
+  if (sourceUrl.startsWith(LEGACY_PREFIX)) {
+    return { kind: LEGACY };
+  }
+  return unknown(org, site, `content source ${sourceUrl} is neither store`);
 }

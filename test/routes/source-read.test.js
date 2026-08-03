@@ -35,7 +35,7 @@ const build = async (overrides = {}) => {
   // 'headHtml' in overrides rather than a destructured default, so passing
   // `{ headHtml: undefined }` really does simulate a missing head.html
   const headHtml = 'headHtml' in overrides ? overrides.headHtml : '<meta name="from" content="aem" />';
-  const seen = { bus: [], legacy: [], stamps: [] };
+  const seen = { bus: [], legacy: [], ue: 0 };
   globalThis.fetch = async (input, init) => {
     const request = input instanceof Request ? input : new Request(input, init);
     seen.bus.push({ url: request.url, method: request.method, headers: request.headers });
@@ -43,7 +43,7 @@ const build = async (overrides = {}) => {
   };
   const env = {
     DA_ADMIN: 'https://admin.da.live',
-    HLX_ADMIN: 'https://admin.hlx.page',
+    AEM_API: 'https://api.aem.live',
     daadmin: {
       fetch: async (input, init) => {
         const request = input instanceof Request ? input : new Request(input, init);
@@ -68,7 +68,7 @@ const build = async (overrides = {}) => {
       serializeHtml: (tree) => `<html>${tree.bodyHtml}</html>`,
     },
     '../../src/ue/ue.js': {
-      applyUEInstrumentation: async (tree, daCtx, aemCtx, stamp) => { seen.stamps.push(stamp); },
+      applyUEInstrumentation: async () => { seen.ue += 1; },
     },
     '../../src/storage/config.js': {
       getSiteConfig: async () => { throw new Error('no config'); },
@@ -209,116 +209,62 @@ describe('reading with the content source resolved', () => {
     });
   });
 
-  describe('the stamp a read leaves for its write', () => {
-    it('names the source bus when the read found a document', async () => {
+  describe('UE instrumentation', () => {
+    it('is applied on a UE host', async () => {
       const { daSourceGet, env, seen } = await build({ source: BUS_SOURCE });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-      assert.deepStrictEqual(seen.stamps, ['sb']);
+      assert.strictEqual(seen.ue, 1);
     });
 
-    it('says the source-bus document is new when the read found nothing', async () => {
-      const { daSourceGet, env, seen } = await build({
-        source: BUS_SOURCE,
-        bus: () => new Response('', { status: 404 }),
-      });
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-      await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.deepStrictEqual(seen.stamps, ['sb.new']);
-    });
-
-    // one page load produces many saves against the same stamp, so pinning the version would
-    // land the first and refuse the rest
-    it('carries no version, so it holds for every save in the session', async () => {
-      const { daSourceGet, env, seen } = await build({
-        source: BUS_SOURCE,
-        bus: () => new Response('<body>x</body>', { status: 200, headers: { etag: '"deadbeefcafe"' } }),
-      });
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-      await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.deepStrictEqual(seen.stamps, ['sb']);
-    });
-
-    it('names da-admin for a legacy read', async () => {
-      const { daSourceGet, env, seen } = await build({ source: LEGACY_SOURCE });
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-      await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.deepStrictEqual(seen.stamps, ['da']);
-    });
-
-    // every other test here mocks applyUEInstrumentation, which leaves the one line that carries
-    // the stamp from daSourceGet into the emitted meta tag unguarded. These two run the real
-    // src/ue/ue.js and assert on the served body instead.
-    describe('as it reaches the served page', () => {
-      const servedBy = async (source) => {
-        const seen = { bus: [], legacy: [] };
-        globalThis.fetch = async (input, init) => {
-          const request = input instanceof Request ? input : new Request(input, init);
-          if (request.url.startsWith('https://api.aem.live/')) {
-            seen.bus.push(request.url);
-            return new Response('<body><main><div><p>x</p></div></main></body>', { status: 200, headers: { etag: '"busetag"' } });
-          }
-          // component-definition and friends, fetched by the real instrumentation. A missing one
-          // is what a site without them answers, and getUEConfig degrades to undefined.
-          return new Response('not found', { status: 404 });
-        };
-        const env = {
-          DA_ADMIN: 'https://admin.da.live',
-          HLX_ADMIN: 'https://admin.hlx.page',
-          UE_HOST: 'ue.da.live',
-          daadmin: {
-            fetch: async (input, init) => {
-              const request = input instanceof Request ? input : new Request(input, init);
-              seen.legacy.push(request.url);
-              return new Response('<body><main><div><p>x</p></div></main></body>', { status: 200 });
-            },
-          },
-        };
-        const { daSourceGet } = await esmock('../../src/routes/da-admin.js', {
-          '../../src/storage/content-source.js': {
-            default: async () => source,
-            SOURCE_BUS: 'sourcebus',
-            LEGACY: 'legacy',
-            UNKNOWN: 'unknown',
-          },
-          '../../src/utils/aemCtx.js': {
-            getAemCtx: () => ({ ueHostname: 'ue.da.live', previewUrl: 'https://p.example' }),
-            getAEMHtml: async () => '<meta name="from" content="aem" />',
-          },
-        });
-        const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-        const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-        return res.text();
-      };
-
-      it('lands on the connection uri for a source-bus read', async () => {
-        const html = await servedBy(BUS_SOURCE);
-
-        assert.match(html, /urn:adobe:aue:system:ab" content="da:[^"]*\?ab-src=sb"/);
-      });
-
-      it('lands on the connection uri for a legacy read', async () => {
-        const html = await servedBy(LEGACY_SOURCE);
-
-        assert.match(html, /urn:adobe:aue:system:ab" content="da:[^"]*\?ab-src=da"/);
-      });
-    });
-
-    it('is not applied outside UE, where nothing posts back', async () => {
+    it('is not applied on a preview host', async () => {
       const { daSourceGet, env, seen } = await build({ source: BUS_SOURCE });
       const req = authedReq('https://main--site--org.preview.da.live/folder/content');
 
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-      assert.deepStrictEqual(seen.stamps, []);
+      assert.strictEqual(seen.ue, 0);
+    });
+
+    // the connection uri names the page and nothing else; the store a read came from is not
+    // carried on it, so a save resolves the store for itself
+    it('leaves no marker on the connection uri', async () => {
+      const seenReq = [];
+      globalThis.fetch = async (input, init) => {
+        const request = input instanceof Request ? input : new Request(input, init);
+        seenReq.push(request.url);
+        if (request.url.startsWith('https://api.aem.live/')) {
+          return new Response('<body><main><div><p>x</p></div></main></body>', { status: 200 });
+        }
+        return new Response('not found', { status: 404 });
+      };
+      const env = {
+        DA_ADMIN: 'https://admin.da.live',
+        AEM_API: 'https://api.aem.live',
+        UE_HOST: 'ue.da.live',
+        daadmin: { fetch: async () => new Response('<body></body>', { status: 200 }) },
+      };
+      const { daSourceGet } = await esmock('../../src/routes/da-admin.js', {
+        '../../src/storage/content-source.js': {
+          default: async () => BUS_SOURCE,
+          SOURCE_BUS: 'sourcebus',
+          LEGACY: 'legacy',
+          UNKNOWN: 'unknown',
+        },
+        '../../src/utils/aemCtx.js': {
+          getAemCtx: () => ({ ueHostname: 'ue.da.live', previewUrl: 'https://p.example' }),
+          getAEMHtml: async () => '<meta name="from" content="aem" />',
+        },
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const html = await (await daSourceGet({ req, env, daCtx: getDaCtx(req) })).text();
+
+      assert.match(html, /urn:adobe:aue:system:ab" content="da:[^"?]*"/);
+      assert.ok(!html.includes('ab-src'), 'no marker on the connection uri');
+      assert.ok(!html.includes('content-store'), 'no marker on the connection uri');
     });
   });
 

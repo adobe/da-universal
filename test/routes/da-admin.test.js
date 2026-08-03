@@ -32,7 +32,7 @@ const recorder = () => {
   const fetched = [];
   const env = {
     DA_ADMIN: 'https://admin.da.live',
-    HLX_ADMIN: 'https://admin.hlx.page',
+    AEM_API: 'https://api.aem.live',
     daadmin: {
       fetch: async (input) => {
         fetched.push(input instanceof Request ? input.url : input.href);
@@ -87,7 +87,7 @@ describe('daSourceHead', () => {
 describe('daSourceGet', () => {
   const env = {
     DA_ADMIN: 'https://admin.da.live',
-    HLX_ADMIN: 'https://admin.hlx.page',
+    AEM_API: 'https://api.aem.live',
     daadmin: { fetch: async () => new Response('<body>stored</body>', { status: 200 }) },
   };
 

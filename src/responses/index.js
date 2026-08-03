@@ -60,10 +60,6 @@ export function get503(message = '') {
 
 // a refused write is never rendered. The Universal Editor Service embeds the body verbatim in
 // its problem+json error string, so plain text is what an author is shown.
-export function post409(message = '') {
-  return daResp({ body: message, status: 409, contentType: 'text/plain; charset=utf-8' });
-}
-
 export function post503(message = '') {
   return daResp({
     body: message,

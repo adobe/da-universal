@@ -55,6 +55,4 @@ export const SOURCE_UNRESOLVED_HTML_MESSAGE = '<html><body><h1>503: Content sour
 
 export const SOURCE_UNRESOLVED_MESSAGE = 'The store that holds this document could not be determined, so the write was refused rather than sent to the wrong one. Please retry.';
 
-export const SOURCE_MOVED_MESSAGE = 'This document moved to a different content store while it was open. Reload the page to pick up the new one; saving now would write to the store it left.';
-
 export const DEFAULT_UNAUTHORIZED_HTML_MESSAGE = '<html><body><h1>401: Unauthorized</h1></body></html>';
