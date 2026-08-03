@@ -19,8 +19,14 @@ export const LEGACY = 'legacy';
 export const UNKNOWN = 'unknown';
 export const UNAUTHORIZED = 'unauthorized';
 
+// getStore appends the path to this and calls `new URL` on the result, where a throw escapes
+// `worker.fetch` before CORS headers are added, so an unusable AEM_API is refused here instead.
 function sourceBusBase(env, org, site) {
-  return `${env.AEM_API?.replace(/\/$/, '')}/${org}/sites/${site}/source`;
+  try {
+    return new URL(`${env.AEM_API?.replace(/\/$/, '')}/${org}/sites/${site}/source`).toString();
+  } catch (e) {
+    return undefined;
+  }
 }
 
 /**
@@ -43,6 +49,10 @@ export async function fastSourceBus(env, daCtx) {
   const { org, site } = daCtx;
   if (!org || !site) return undefined;
 
+  // built before the probe, since a base that cannot be used makes the answer unusable too
+  const base = sourceBusBase(env, org, site);
+  if (!base) return undefined;
+
   let url;
   try {
     url = new URL(`/ping/${org}/${site}`, env.HLX_ADMIN);
@@ -58,7 +68,7 @@ export async function fastSourceBus(env, daCtx) {
   } catch (e) {
     return undefined;
   }
-  return { kind: SOURCE_BUS, base: sourceBusBase(env, org, site) };
+  return { kind: SOURCE_BUS, base };
 }
 
 function unknown(org, site, reason) {
