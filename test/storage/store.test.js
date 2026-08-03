@@ -85,7 +85,11 @@ describe('getStore', () => {
   describe('how it reaches the store', () => {
     it('sends a legacy request over the daadmin service binding', async () => {
       const seen = [];
-      const bound = { ...env, daadmin: { fetch: async (i) => { seen.push(i); return new Response(''); } } };
+      const record = async (input) => {
+        seen.push(input);
+        return new Response('');
+      };
+      const bound = { ...env, daadmin: { fetch: record } };
       const store = getStore(bound, ctxFor('https://main--site--org.ue.da.live/doc'), legacy);
 
       await store.fetch(store.url, { method: 'GET' });
@@ -95,7 +99,10 @@ describe('getStore', () => {
 
     it('sends a source-bus request over the public network', async () => {
       const seen = [];
-      globalThis.fetch = async (i) => { seen.push(i); return new Response(''); };
+      globalThis.fetch = async (input) => {
+        seen.push(input);
+        return new Response('');
+      };
       const bound = { ...env, daadmin: { fetch: async () => assert.fail('used the binding') } };
       const store = getStore(bound, ctxFor('https://main--site--org.ue.da.live/doc'), bus);
 
