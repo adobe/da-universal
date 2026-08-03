@@ -107,7 +107,7 @@ export async function daSourceGet({ req, env, daCtx }) {
 
   if (ext !== 'html') {
     // for non-HTML files, simply proxy the request without processing
-    const source = await resolveContentSource(env, daCtx);
+    const source = await resolveContentSource(env, daCtx, { reuse: true });
     if (source.kind === UNKNOWN) {
       console.warn(`503 GET ${daCtx.sourcePath}, content source unresolved: ${source.reason}`);
       return get503(SOURCE_UNRESOLVED_HTML_MESSAGE);
@@ -123,7 +123,7 @@ export async function daSourceGet({ req, env, daCtx }) {
   const aemCtx = getAemCtx(env, daCtx);
   const [headHtml, source] = await Promise.all([
     getAEMHtml(aemCtx, '/head.html'),
-    resolveContentSource(env, daCtx),
+    resolveContentSource(env, daCtx, { reuse: true }),
   ]);
   if (!headHtml) {
     // quick-edit still needs a working shell (with the import map) so the editor
@@ -201,7 +201,7 @@ export async function daSourceHead({ env, daCtx }) {
   const headers = new Headers();
   headers.set('Authorization', authToken);
 
-  const source = await resolveContentSource(env, daCtx);
+  const source = await resolveContentSource(env, daCtx, { reuse: true });
   if (source.kind === UNKNOWN) {
     console.warn(`503 HEAD ${daCtx.sourcePath}, content source unresolved: ${source.reason}`);
     return head503();

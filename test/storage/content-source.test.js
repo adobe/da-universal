@@ -227,21 +227,25 @@ describe('resolveContentSource', () => {
     // each of which would look the store up again. Measured live on 2026-08-03: the sidekick
     // config is `cache-control: no-store` and costs ~460ms, so 8 identical lookups spend 3.8s of
     // origin time and add that to every image.
+    //
+    // What is held is per isolate and shared across requests, so each test here uses its own site.
     it('asks once for a burst of reads of the same site', async () => {
       stubFetch(legacyBody);
+      const ctx = daCtx({ site: 'burst' });
 
-      await resolveContentSource(env, daCtx(), { reuse: true });
-      await resolveContentSource(env, daCtx(), { reuse: true });
-      await resolveContentSource(env, daCtx(), { reuse: true });
+      await resolveContentSource(env, ctx, { reuse: true });
+      await resolveContentSource(env, ctx, { reuse: true });
+      await resolveContentSource(env, ctx, { reuse: true });
 
       assert.strictEqual(calls.length, 1);
     });
 
     it('gives the same answer each time', async () => {
-      stubFetch(() => sidekick('https://api.aem.live/org/sites/site/source'));
+      stubFetch(() => sidekick('https://api.aem.live/org/sites/same/source'));
+      const ctx = daCtx({ site: 'same' });
 
-      const first = await resolveContentSource(env, daCtx(), { reuse: true });
-      const second = await resolveContentSource(env, daCtx(), { reuse: true });
+      const first = await resolveContentSource(env, ctx, { reuse: true });
+      const second = await resolveContentSource(env, ctx, { reuse: true });
 
       assert.deepStrictEqual(second, first);
     });
@@ -249,8 +253,8 @@ describe('resolveContentSource', () => {
     it('asks again for a different site', async () => {
       stubFetch(legacyBody);
 
-      await resolveContentSource(env, daCtx(), { reuse: true });
-      await resolveContentSource(env, daCtx({ site: 'other' }), { reuse: true });
+      await resolveContentSource(env, daCtx({ site: 'one' }), { reuse: true });
+      await resolveContentSource(env, daCtx({ site: 'two' }), { reuse: true });
 
       assert.strictEqual(calls.length, 2);
     });
@@ -258,8 +262,8 @@ describe('resolveContentSource', () => {
     it('asks again for a different ref of the same site', async () => {
       stubFetch(legacyBody);
 
-      await resolveContentSource(env, daCtx(), { reuse: true });
-      await resolveContentSource(env, daCtx({ ref: 'branch' }), { reuse: true });
+      await resolveContentSource(env, daCtx({ site: 'refs' }), { reuse: true });
+      await resolveContentSource(env, daCtx({ site: 'refs', ref: 'branch' }), { reuse: true });
 
       assert.strictEqual(calls.length, 2);
     });
@@ -267,28 +271,22 @@ describe('resolveContentSource', () => {
     // a write is the one operation a wrong store cannot be walked back from, so it always asks
     it('does not reuse an answer unless asked to', async () => {
       stubFetch(legacyBody);
+      const ctx = daCtx({ site: 'writes' });
 
-      await resolveContentSource(env, daCtx(), { reuse: true });
-      await resolveContentSource(env, daCtx());
+      await resolveContentSource(env, ctx, { reuse: true });
+      await resolveContentSource(env, ctx);
+      await resolveContentSource(env, ctx);
 
-      assert.strictEqual(calls.length, 2);
-    });
-
-    it('never lets a write read a stored answer', async () => {
-      stubFetch(legacyBody);
-
-      await resolveContentSource(env, daCtx());
-      await resolveContentSource(env, daCtx());
-
-      assert.strictEqual(calls.length, 2);
+      assert.strictEqual(calls.length, 3);
     });
 
     // an outage that stuck would outlast itself
     it('never stores an answer it could not give', async () => {
       stubFetch(() => new Response('', { status: 503 }));
+      const ctx = daCtx({ site: 'flaky' });
 
-      await resolveContentSource(env, daCtx({ site: 'flaky' }), { reuse: true });
-      await resolveContentSource(env, daCtx({ site: 'flaky' }), { reuse: true });
+      await resolveContentSource(env, ctx, { reuse: true });
+      await resolveContentSource(env, ctx, { reuse: true });
 
       assert.strictEqual(calls.length, 2);
     });
@@ -301,9 +299,10 @@ describe('resolveContentSource', () => {
           ? new Response('', { status: 503 })
           : sidekick('https://api.aem.live/org/sites/recovering/source');
       });
+      const ctx = daCtx({ site: 'recovering' });
 
-      const down = await resolveContentSource(env, daCtx({ site: 'recovering' }), { reuse: true });
-      const up = await resolveContentSource(env, daCtx({ site: 'recovering' }), { reuse: true });
+      const down = await resolveContentSource(env, ctx, { reuse: true });
+      const up = await resolveContentSource(env, ctx, { reuse: true });
 
       assert.strictEqual(down.kind, 'unknown');
       assert.strictEqual(up.kind, 'sourcebus');
