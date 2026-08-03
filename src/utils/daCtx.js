@@ -9,6 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+import { SOURCE_STAMP_PARAM } from './source-stamp.js';
 
 function getRefSiteOrgPath(hostname, pathname) {
   if (hostname === 'localhost') {
@@ -112,6 +113,11 @@ export function getDaCtx(req) {
 
   const ueService = searchParams.get('ue-service');
   if (ueService !== null) daCtx.ueService = ueService;
+
+  // the store a UE read came from, stamped onto the connection uri that the Universal Editor
+  // Service posts back to. Raw here; only source-stamp.js decides what it may be trusted to say.
+  const sourceStamp = searchParams.get(SOURCE_STAMP_PARAM);
+  if (sourceStamp !== null) daCtx.sourceStamp = sourceStamp;
 
   daCtx.authToken = getAuthToken(req);
   daCtx.siteToken = getSiteToken(req);

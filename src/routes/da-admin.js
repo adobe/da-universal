@@ -22,19 +22,20 @@ import {
   applyQuickEditToDocument, buildQuickEditCookie, buildQuickEditNotFoundResponse,
 } from '../utils/quick-edit.js';
 import {
-  daResp, get401, get404, get415, get503, head401, head503, post503,
+  daResp, get401, get404, get415, get503, head401, head503, post409, post503,
 } from '../responses/index.js';
 import {
   BRANCH_NOT_FOUND_HTML_MESSAGE,
   DEFAULT_HTML_TEMPLATE,
+  SOURCE_MOVED_MESSAGE,
   SOURCE_UNRESOLVED_HTML_MESSAGE,
   SOURCE_UNRESOLVED_MESSAGE,
   UNAUTHORIZED_HTML_MESSAGE,
 } from '../utils/constants.js';
 import { getSiteConfig } from '../storage/config.js';
-import resolveContentSource, { UNKNOWN } from '../storage/content-source.js';
+import resolveContentSource, { SOURCE_BUS, UNKNOWN } from '../storage/content-source.js';
 import getStore from '../storage/store.js';
-import { formatSourceStamp } from '../utils/source-stamp.js';
+import { formatSourceStamp, parseSourceStamp } from '../utils/source-stamp.js';
 import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 
 const HTML_POST_TYPE = 'text/html';
@@ -247,17 +248,35 @@ export async function daSourcePost({ req, env, daCtx }) {
 
     const bodyContent = toHtml(bodyNode);
 
+    // the payload is settled, so the only question left is where it goes. A write is the one
+    // operation a wrong guess cannot be walked back from.
     const source = await resolveContentSource(env, daCtx);
     if (source.kind === UNKNOWN) {
       console.warn(`503 POST ${sourcePath}, content source unresolved: ${source.reason}`);
       return post503(SOURCE_UNRESOLVED_MESSAGE);
     }
 
+    // the read stamped the connection uri with the store it came from, and the Universal Editor
+    // Service posts back to that uri, so the two requests are linked. Where the stamp and a
+    // fresh lookup disagree, the site moved stores while the page was open: writing to the store
+    // the content came from orphans it, writing to the new one overwrites a page the author
+    // never saw, and neither is worth doing silently.
+    const stamp = parseSourceStamp(daCtx.sourceStamp);
+    if (stamp && stamp.kind !== source.kind) {
+      console.warn(`409 POST ${sourcePath}, read from ${stamp.kind} but the site is on ${source.kind}`);
+      return post409(SOURCE_MOVED_MESSAGE);
+    }
+
+    // with no stamp there is no provenance, so a source-bus write may overwrite a page that
+    // exists but may not invent one
+    const condition = stamp?.condition
+      ?? (source.kind === SOURCE_BUS ? { 'If-Match': '*' } : undefined);
+
     // the two stores take the document in different shapes, so the store builds its own request
     const store = getStore(env, daCtx, source);
     // eslint-disable-next-line no-param-reassign
-    req = new Request(store.url, store.writeInit(bodyContent, authToken));
-    console.log(`-> ${store.url.toString()}`);
+    req = new Request(store.url, store.writeInit(bodyContent, authToken, condition));
+    console.log(`-> ${store.url.toString()}${condition ? ` ${JSON.stringify(condition)}` : ''}`);
     const response = await store.fetch(req);
     console.log(`<- ${store.url.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
     return response;
