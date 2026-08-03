@@ -49,6 +49,16 @@ describe('daSourceGet', () => {
 
   // record which composition / instrumentation calls happen and with what
   let calls;
+  let originalFetch;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response('', { status: 200 });
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
 
   const mockDaSourceGet = async (overrides = {}) => {
     // 'headHtml' in overrides (rather than a destructured default) so passing
