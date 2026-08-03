@@ -80,6 +80,105 @@ afterEach(() => {
   delete globalThis.fetch;
 });
 
+describe('a UE session, which saves many times against one page load', () => {
+  // The Universal Editor Service runs load() then store() for each mutating operation, against
+  // the connection uri the editor read once at page load
+  // (universal-editor-service-plugin-da/src/index.ts: add 104/135, copy 150/184, move 242/270,
+  // patch 301/344, remove 474/492, update 540/555). Every one returns updates[] for in-place DOM
+  // patching, so the iframe never reloads and the stamp is never refreshed. A precondition that
+  // pins a version therefore lands the first save and is refused 412 for the rest of the session.
+  const store = (present) => {
+    let etag = present ? '"v1"' : undefined;
+    let body = present ? 'the original' : undefined;
+    return {
+      answer: (request) => {
+        const ifMatch = request.headers.get('If-Match');
+        const ifNone = request.headers.get('If-None-Match');
+        if (request.method !== 'POST') {
+          return etag === undefined
+            ? new Response('', { status: 404 })
+            : new Response(body, { status: 200, headers: { etag } });
+        }
+        if (ifNone === '*' && etag !== undefined) return new Response('', { status: 412 });
+        if (ifMatch === '*' && etag === undefined) return new Response('', { status: 412 });
+        if (ifMatch && ifMatch !== '*' && ifMatch !== etag) return new Response('', { status: 412 });
+        body = 'written';
+        etag = `"v${Number(etag?.replace(/\D/g, '') ?? 0) + 1}"`;
+        return new Response('', { status: 201 });
+      },
+      get body() { return body; },
+    };
+  };
+
+  const session = async (present) => {
+    const st = store(present);
+    globalThis.fetch = async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      return st.answer(request);
+    };
+    const env = {
+      DA_ADMIN: 'https://admin.da.live',
+      HLX_ADMIN: 'https://admin.hlx.page',
+      daadmin: { fetch: async () => assert.fail('a source-bus site must not touch da-admin') },
+    };
+    let served;
+    const mod = await esmock('../../src/routes/da-admin.js', {
+      '../../src/storage/content-source.js': {
+        default: async () => BUS_SOURCE,
+        SOURCE_BUS: 'sourcebus',
+        LEGACY: 'legacy',
+        UNKNOWN: 'unknown',
+      },
+      '../../src/utils/aemCtx.js': {
+        getAemCtx: () => ({}),
+        getAEMHtml: async () => '<meta name="from" content="aem" />',
+      },
+      '../../src/render/compose.js': {
+        composeHtml: async () => ({}),
+        serializeHtml: () => '<html>composed</html>',
+      },
+      '../../src/ue/ue.js': {
+        applyUEInstrumentation: async (tree, daCtx, aemCtx, stamp) => { served = stamp; },
+      },
+      '../../src/storage/config.js': {
+        getSiteConfig: async () => { throw new Error('no config'); },
+      },
+    });
+
+    // the editor loads the page once and keeps whatever stamp it was served
+    const read = new Request(AT, { headers: { Authorization: 'Bearer t' } });
+    await mod.daSourceGet({ req: read, env, daCtx: getDaCtx(read) });
+
+    const at = `${AT}?ab-src=${served}`;
+    const statuses = [];
+    for (let i = 0; i < 3; i += 1) {
+      const request = uePost(at, `<body><main><div><p>edit ${i + 1}</p></div></main></body>`);
+      // eslint-disable-next-line no-await-in-loop
+      const res = await mod.daSourcePost({ req: request, env, daCtx: getDaCtx(request) });
+      statuses.push(res.status);
+    }
+    return { statuses, stored: st.body, stamp: served };
+  };
+
+  it('lands all three saves on a page that already existed', async () => {
+    const { statuses, stamp } = await session(true);
+
+    assert.deepStrictEqual(statuses, [201, 201, 201], `with the stamp the read served: ${stamp}`);
+  });
+
+  it('lands all three saves on a page it created', async () => {
+    const { statuses, stamp } = await session(false);
+
+    assert.deepStrictEqual(statuses, [201, 201, 201], `with the stamp the read served: ${stamp}`);
+  });
+
+  it('keeps the last edit, not the first', async () => {
+    const { stored } = await session(true);
+
+    assert.strictEqual(stored, 'written');
+  });
+});
+
 describe('writing with the content source resolved', () => {
   describe('a stamped source-bus save', () => {
     it('goes to the source bus', async () => {
