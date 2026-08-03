@@ -18,6 +18,8 @@ import { getDaCtx } from '../../src/utils/daCtx.js';
 const LEGACY_SOURCE = { kind: 'legacy' };
 const BUS_SOURCE = { kind: 'sourcebus', base: 'https://api.aem.live/org/sites/site/source' };
 const UNKNOWN_SOURCE = { kind: 'unknown', reason: 'the config service answered 503' };
+const DENIED_SOURCE = { kind: 'unauthorized', status: 401 };
+const FORBIDDEN_SOURCE = { kind: 'unauthorized', status: 403 };
 
 const authedReq = (url) => new Request(url, { headers: { Authorization: 'Bearer t' } });
 
@@ -175,6 +177,108 @@ describe('reading with the content source resolved', () => {
 
       assert.strictEqual(res.status, 503);
       assert.strictEqual(await res.text(), '');
+    });
+  });
+
+  describe('when the caller is not allowed to ask which store', () => {
+    it('answers 401 on a GET, so the client knows to re-authenticate', async () => {
+      const { daSourceGet, env, seen } = await build({ source: DENIED_SOURCE });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 401);
+      assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
+    });
+
+    // the authorbus extension matches this sentinel exactly and recovers by refetching
+    // /gimme_cookie and refreshing the page
+    it('serves the da:401 shell the editor recovers from', async () => {
+      const { daSourceGet, env } = await build({ source: DENIED_SOURCE });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.match(await res.text(), /content="da:401"/);
+    });
+
+    it('does not ask the caller to retry, since retrying cannot help', async () => {
+      const { daSourceGet, env } = await build({ source: DENIED_SOURCE });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.headers.get('Retry-After'), null);
+    });
+
+    it('passes a 403 through as itself', async () => {
+      const { daSourceGet, env } = await build({ source: FORBIDDEN_SOURCE });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      assert.strictEqual((await daSourceGet({ req, env, daCtx: getDaCtx(req) })).status, 403);
+    });
+
+    it('answers 401 on a non-html GET too', async () => {
+      const { daSourceGet, env } = await build({ source: DENIED_SOURCE });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
+
+      assert.strictEqual((await daSourceGet({ req, env, daCtx: getDaCtx(req) })).status, 401);
+    });
+
+    it('answers 401 on a HEAD with no body', async () => {
+      const { daSourceHead, env } = await build({ source: DENIED_SOURCE });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceHead({ env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 401);
+      assert.strictEqual(await res.text(), '');
+    });
+  });
+
+  describe('when the store cannot be reached at all', () => {
+    // withCorsHeaders reads response.headers, so a throw escaping a handler is an opaque 500
+    // with no CORS headers on it
+    it('answers 503 rather than throwing on an html read', async () => {
+      const { daSourceGet, env } = await build({
+        source: BUS_SOURCE,
+        bus: () => { throw new TypeError('fetch failed'); },
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 503);
+    });
+
+    it('answers 503 rather than throwing on a non-html read', async () => {
+      const { daSourceGet, env } = await build({
+        source: BUS_SOURCE,
+        bus: () => { throw new TypeError('fetch failed'); },
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
+
+      assert.strictEqual((await daSourceGet({ req, env, daCtx: getDaCtx(req) })).status, 503);
+    });
+
+    it('answers 503 rather than throwing on a HEAD', async () => {
+      const { daSourceHead, env } = await build({
+        source: BUS_SOURCE,
+        bus: () => { throw new TypeError('fetch failed'); },
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      assert.strictEqual((await daSourceHead({ env, daCtx: getDaCtx(req) })).status, 503);
+    });
+
+    it('answers 503 rather than throwing when da-admin is unreachable', async () => {
+      const { daSourceGet, env } = await build({
+        source: LEGACY_SOURCE,
+        legacy: () => { throw new TypeError('fetch failed'); },
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      assert.strictEqual((await daSourceGet({ req, env, daCtx: getDaCtx(req) })).status, 503);
     });
   });
 

@@ -183,14 +183,6 @@ describe('resolveContentSource', () => {
       assert.strictEqual(source.kind, 'unknown');
     });
 
-    it('answers unknown on a 401', async () => {
-      stubFetch(() => new Response('', { status: 401 }));
-
-      const source = await resolveContentSource(env, daCtx());
-
-      assert.strictEqual(source.kind, 'unknown');
-    });
-
     it('answers unknown when the body is not json', async () => {
       stubFetch(() => new Response('<html>gateway</html>', { status: 200 }));
 
@@ -215,6 +207,37 @@ describe('resolveContentSource', () => {
       const source = await resolveContentSource(env, daCtx());
 
       assert.match(source.reason, /404/);
+    });
+  });
+
+  describe('when the caller is not allowed to ask', () => {
+    // "we do not know" is retryable and "you are not authenticated" is not. Reporting an expired
+    // session as unknown turns into a 503 that says retry, so the client never re-authenticates
+    // and the da:401 recovery the authorbus extension has never fires.
+    [401, 403].forEach((status) => {
+      it(`answers unauthorized on a ${status}, not unknown`, async () => {
+        stubFetch(() => new Response('', { status }));
+
+        const source = await resolveContentSource(env, daCtx());
+
+        assert.strictEqual(source.kind, 'unauthorized');
+      });
+
+      it(`carries the ${status} through, so the caller answers the same`, async () => {
+        stubFetch(() => new Response('', { status }));
+
+        const source = await resolveContentSource(env, daCtx());
+
+        assert.strictEqual(source.status, status);
+      });
+    });
+
+    it('still answers unknown for a 5xx, which is retryable', async () => {
+      stubFetch(() => new Response('', { status: 502 }));
+
+      const source = await resolveContentSource(env, daCtx());
+
+      assert.strictEqual(source.kind, 'unknown');
     });
   });
 

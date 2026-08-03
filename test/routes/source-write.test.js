@@ -18,6 +18,7 @@ import { getDaCtx } from '../../src/utils/daCtx.js';
 const LEGACY_SOURCE = { kind: 'legacy' };
 const BUS_SOURCE = { kind: 'sourcebus', base: 'https://api.aem.live/org/sites/site/source' };
 const UNKNOWN_SOURCE = { kind: 'unknown', reason: 'the API answered 503' };
+const DENIED_SOURCE = { kind: 'unauthorized', status: 401 };
 
 const AT = 'https://main--site--org.ue.da.live/folder/content';
 const DOC = '<body><main><div><p>the author typed this</p></div></main></body>';
@@ -199,6 +200,28 @@ describe('writing to the store that holds the site', () => {
 
       assert.match(res.headers.get('Content-Type'), /^text\/plain/);
       assert.ok((await res.text()).length > 0);
+    });
+  });
+
+  describe('when the caller is not allowed to ask which store', () => {
+    it('answers 401, not a retryable 503', async () => {
+      const { res, seen } = await post({ source: DENIED_SOURCE });
+
+      assert.strictEqual(res.status, 401);
+      assert.strictEqual(res.headers.get('Retry-After'), null);
+      assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
+    });
+  });
+
+  describe('when the store cannot be reached at all', () => {
+    it('answers 503 rather than throwing', async () => {
+      const { daSourcePost, env } = await build({ source: BUS_SOURCE });
+      globalThis.fetch = async () => { throw new TypeError('fetch failed'); };
+      const req = uePost(AT);
+
+      const res = await daSourcePost({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 503);
     });
   });
 
