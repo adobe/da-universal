@@ -424,5 +424,23 @@ describe('fastSourceBus', () => {
 
       assert.strictEqual(await fastSourceBus({ ...env, HLX_ADMIN: 'nope' }, daCtx()), undefined);
     });
+
+    // getStore builds the store url from this base and its `new URL` is unguarded, so a base that
+    // cannot parse throws out of `worker.fetch` before withCorsHeaders runs: an opaque 500 with no
+    // CORS on a document read, and a 404 on the raced image path where allSettled swallows it. The
+    // config read answers unknown for the same env, so the caller gets a 503 instead.
+    [
+      ['AEM_API is unset', undefined],
+      ['AEM_API has no scheme', 'api.aem.live'],
+      ['AEM_API is protocol-relative', '//api.aem.live'],
+      ['AEM_API has a trailing space', 'https://api.aem.live '],
+    ].forEach(([what, AEM_API]) => {
+      it(`answers undefined without asking when ${what}`, async () => {
+        stubFetch(() => ping({ 'x-api-upgrade-available': 'true' }));
+
+        assert.strictEqual(await fastSourceBus({ ...env, AEM_API }, daCtx()), undefined);
+        assert.strictEqual(calls.length, 0);
+      });
+    });
   });
 });
