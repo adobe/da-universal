@@ -322,6 +322,84 @@ describe('writing with the content source resolved', () => {
     });
   });
 
+  describe('how fresh the lookup on a write is', () => {
+    // reads reuse an answer for a few seconds so one page's images do not each pay for it. A
+    // write must not: a stale answer would let the 409 miss a site that moved stores in that
+    // window, which is the one case that overwrites a live page.
+    const optsSeenBy = async (drive) => {
+      const opts = [];
+      globalThis.fetch = async () => new Response('', { status: 201 });
+      const env = {
+        DA_ADMIN: 'https://admin.da.live',
+        HLX_ADMIN: 'https://admin.hlx.page',
+        daadmin: { fetch: async () => new Response('', { status: 201 }) },
+      };
+      const mod = await esmock('../../src/routes/da-admin.js', {
+        '../../src/storage/content-source.js': {
+          default: async (e, ctx, o) => {
+            opts.push(o);
+            return BUS_SOURCE;
+          },
+          SOURCE_BUS: 'sourcebus',
+          LEGACY: 'legacy',
+          UNKNOWN: 'unknown',
+        },
+        '../../src/utils/aemCtx.js': {
+          getAemCtx: () => ({}),
+          getAEMHtml: async () => '<meta name="from" content="aem" />',
+        },
+        '../../src/render/compose.js': {
+          composeHtml: async () => ({}),
+          serializeHtml: () => '<html>c</html>',
+        },
+        '../../src/ue/ue.js': { applyUEInstrumentation: async () => {} },
+        '../../src/storage/config.js': {
+          getSiteConfig: async () => { throw new Error('none'); },
+        },
+      });
+      await drive(mod, env);
+      return opts;
+    };
+
+    it('asks for a fresh answer on a write', async () => {
+      const opts = await optsSeenBy(async (mod, env) => {
+        const request = uePost(`${AT}?ab-src=sb`);
+        await mod.daSourcePost({ req: request, env, daCtx: getDaCtx(request) });
+      });
+
+      assert.strictEqual(opts.length, 1);
+      assert.notStrictEqual(opts[0]?.reuse, true);
+    });
+
+    it('lets a read reuse one', async () => {
+      const opts = await optsSeenBy(async (mod, env) => {
+        const request = new Request(AT, { headers: { Authorization: 'Bearer t' } });
+        await mod.daSourceGet({ req: request, env, daCtx: getDaCtx(request) });
+      });
+
+      assert.strictEqual(opts[0]?.reuse, true);
+    });
+
+    it('lets a HEAD reuse one', async () => {
+      const opts = await optsSeenBy(async (mod, env) => {
+        const request = new Request(AT, { headers: { Authorization: 'Bearer t' } });
+        await mod.daSourceHead({ env, daCtx: getDaCtx(request) });
+      });
+
+      assert.strictEqual(opts[0]?.reuse, true);
+    });
+
+    it('lets a non-html read reuse one', async () => {
+      const opts = await optsSeenBy(async (mod, env) => {
+        const url = 'https://main--site--org.ue.da.live/photo.png';
+        const request = new Request(url, { headers: { Authorization: 'Bearer t' } });
+        await mod.daSourceGet({ req: request, env, daCtx: getDaCtx(request) });
+      });
+
+      assert.strictEqual(opts[0]?.reuse, true);
+    });
+  });
+
   describe('when the content source could not be resolved', () => {
     it('refuses with 503 and touches neither store', async () => {
       const { res, seen } = await post({ source: UNKNOWN_SOURCE }, `${AT}?ab-src=sb`);
