@@ -13,9 +13,11 @@
 /* eslint-env mocha */
 import assert from 'assert';
 
-const { default: resolveContentSource } = await import('../../src/storage/content-source.js');
+const {
+  default: resolveContentSource, fastSourceBus,
+} = await import('../../src/storage/content-source.js');
 
-const env = { AEM_API: 'https://api.aem.live' };
+const env = { AEM_API: 'https://api.aem.live', HLX_ADMIN: 'https://admin.hlx.page' };
 
 const daCtx = (over = {}) => ({
   org: 'org', site: 'site', ref: 'main', authToken: 'Bearer t', ...over,
@@ -317,6 +319,110 @@ describe('resolveContentSource', () => {
       const source = await resolveContentSource({ AEM_API: 'https://api.stage.example' }, daCtx());
 
       assert.strictEqual(source.kind, 'unknown');
+    });
+  });
+});
+
+describe('fastSourceBus', () => {
+  afterEach(() => {
+    delete globalThis.fetch;
+  });
+
+  // /ping answers an enrolled site from the Fastly edge dictionary in ~37ms without reaching an
+  // origin, where the config read is ~529ms and always reaches one. Its `true` is positive
+  // evidence; its absence conflates legacy, a config that would not resolve, and a site that does
+  // not exist, so only the yes is usable.
+  const ping = (headers = {}, status = 200) => new Response('', { status, headers });
+
+  it('asks /ping on the admin host', async () => {
+    stubFetch(() => ping({ 'x-api-upgrade-available': 'true' }));
+
+    await fastSourceBus(env, daCtx());
+
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls[0].url, 'https://admin.hlx.page/ping/org/site');
+  });
+
+  // /ping is exempt from authorize() in helix-admin and answers the same with or without a token
+  it('sends no token, since /ping does not read one', async () => {
+    stubFetch(() => ping({ 'x-api-upgrade-available': 'true' }));
+
+    await fastSourceBus(env, daCtx());
+
+    assert.strictEqual(new Headers(calls[0].init.headers).get('Authorization'), null);
+  });
+
+  it('gives up rather than hanging', async () => {
+    stubFetch(() => ping({ 'x-api-upgrade-available': 'true' }));
+
+    await fastSourceBus(env, daCtx());
+
+    assert.ok(calls[0].init.signal, 'the probe carries an abort signal');
+  });
+
+  describe('when /ping says the site is upgraded', () => {
+    it('answers sourcebus', async () => {
+      stubFetch(() => ping({ 'x-api-upgrade-available': 'true' }));
+
+      assert.strictEqual((await fastSourceBus(env, daCtx())).kind, 'sourcebus');
+    });
+
+    // helix-api-service parses org and site out of the source url and 400s unless both match the
+    // request's own (src/contentproxy/source/utils.js, "only allow source bus from the same org
+    // and site"), so this is the only base a source-bus site can legally have
+    it('builds the only base that org and site can legally have', async () => {
+      stubFetch(() => ping({ 'x-api-upgrade-available': 'true' }));
+
+      const source = await fastSourceBus(env, daCtx());
+
+      assert.strictEqual(source.base, 'https://api.aem.live/org/sites/site/source');
+    });
+
+    it('builds it on AEM_API, so stage moves it', async () => {
+      stubFetch(() => ping({ 'x-api-upgrade-available': 'true' }));
+
+      const source = await fastSourceBus({ ...env, AEM_API: 'https://api.stage.example' }, daCtx());
+
+      assert.strictEqual(source.base, 'https://api.stage.example/org/sites/site/source');
+    });
+  });
+
+  describe('when /ping does not say so', () => {
+    [
+      ['the header is absent', {}, 200],
+      ['the header is false', { 'x-api-upgrade-available': 'false' }, 200],
+      ['the header is empty', { 'x-api-upgrade-available': '' }, 200],
+      ['the header is TRUE in capitals', { 'x-api-upgrade-available': 'TRUE' }, 200],
+      ['the status is 404', { 'x-api-upgrade-available': 'true' }, 404],
+      ['the status is 405', {}, 405],
+      ['the status is 500', {}, 500],
+    ].forEach(([what, headers, status]) => {
+      it(`answers undefined: ${what}`, async () => {
+        stubFetch(() => ping(headers, status));
+
+        assert.strictEqual(await fastSourceBus(env, daCtx()), undefined);
+      });
+    });
+
+    it('answers undefined when the probe throws', async () => {
+      stubFetch(() => {
+        throw new TypeError('fetch failed');
+      });
+
+      assert.strictEqual(await fastSourceBus(env, daCtx()), undefined);
+    });
+
+    it('answers undefined without asking when there is no site', async () => {
+      stubFetch(() => ping({ 'x-api-upgrade-available': 'true' }));
+
+      assert.strictEqual(await fastSourceBus(env, daCtx({ site: undefined })), undefined);
+      assert.strictEqual(calls.length, 0);
+    });
+
+    it('answers undefined when the admin host is unusable', async () => {
+      stubFetch(() => ping({ 'x-api-upgrade-available': 'true' }));
+
+      assert.strictEqual(await fastSourceBus({ ...env, HLX_ADMIN: 'nope' }, daCtx()), undefined);
     });
   });
 });
