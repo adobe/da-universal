@@ -126,6 +126,7 @@ describe('the /ping fast path on a read', () => {
 
     assert.strictEqual(res.status, 200);
     assert.strictEqual(seen.bus.length, 1);
+    assert.strictEqual(seen.bus[0].method, 'HEAD');
   });
 
   // /ping is trusted only when it produced content. its absence conflates legacy with a config
@@ -191,10 +192,11 @@ describe('the /ping fast path on a read', () => {
 
   // /ping reads no token, so on the fast path the store is the first thing to see one. the
   // authorbus extension recovers off the da:401 meta and never reads the status, and both stores
-  // answer 401 with an empty body.
+  // answer 401 with an empty body. the config answer is legacy in these two, so the 401 can only
+  // have come from the fast store: with a denied config answer they pass either way.
   it('serves the da:401 shell when the store refuses the token on an html read', async () => {
     const { daSourceGet, env } = await build({
-      source: DENIED_SOURCE,
+      source: LEGACY_SOURCE,
       fast: FAST,
       bus: () => new Response('', { status: 401 }),
     });
@@ -208,7 +210,7 @@ describe('the /ping fast path on a read', () => {
 
   it('passes a store 401 through bare on a non-html read, which renders nothing', async () => {
     const { daSourceGet, env } = await build({
-      source: DENIED_SOURCE,
+      source: LEGACY_SOURCE,
       fast: FAST,
       bus: () => new Response('', { status: 401 }),
     });
@@ -218,6 +220,24 @@ describe('the /ping fast path on a read', () => {
 
     assert.strictEqual(res.status, 401);
     assert.strictEqual(await res.text(), '');
+  });
+
+  // any other store answer says nothing about which store holds the site, so the config read
+  // decides. keeping the fast source there would answer 503 to a session that cannot recover by
+  // retrying, since the token is the thing that needs replacing
+  it('lets the config read answer when the fast store neither served nor refused', async () => {
+    const { daSourceGet, env, seen } = await build({
+      source: DENIED_SOURCE,
+      fast: FAST,
+      bus: () => new Response('', { status: 500 }),
+    });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 401);
+    assert.match(await res.text(), /content="da:401"/);
+    assert.strictEqual(seen.config, 1);
   });
 });
 

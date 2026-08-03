@@ -36,6 +36,7 @@ describe('sourceBusPath', () => {
     ['/Sub-Folder/', '/Sub-Folder/index.html', 'keeps directory case on a directory index'],
     ['/folder/Content', '/folder/content.html', 'lowercases a stem that had no extension'],
     ['/folder/content.plain.html', '/folder/content.plain.html', 'treats only the last dot as the extension'],
+    ['/2026.q1/report', '/2026.q1/report.html', 'ignores a dot in a directory segment'],
   ];
 
   cases.forEach(([path, expected, what]) => {
