@@ -37,7 +37,7 @@ const build = async (overrides = {}) => {
   // 'headHtml' in overrides rather than a destructured default, so passing
   // `{ headHtml: undefined }` really does simulate a missing head.html
   const headHtml = 'headHtml' in overrides ? overrides.headHtml : '<meta name="from" content="aem" />';
-  const seen = { bus: [], legacy: [], ue: 0 };
+  const seen = { bus: [], legacy: [], ue: 0, ping: 0, config: 0 };
   globalThis.fetch = async (input, init) => {
     const request = input instanceof Request ? input : new Request(input, init);
     seen.bus.push({ url: request.url, method: request.method, headers: request.headers });
@@ -56,10 +56,18 @@ const build = async (overrides = {}) => {
   };
   const mod = await esmock('../../src/routes/da-admin.js', {
     '../../src/storage/content-source.js': {
-      default: async () => source,
+      default: async () => {
+        seen.config += 1;
+        return source;
+      },
+      fastSourceBus: async () => {
+        seen.ping += 1;
+        return overrides.fast;
+      },
       SOURCE_BUS: 'sourcebus',
       LEGACY: 'legacy',
       UNKNOWN: 'unknown',
+      UNAUTHORIZED: 'unauthorized',
     },
     '../../src/utils/aemCtx.js': {
       getAemCtx: () => ({}),
@@ -81,6 +89,145 @@ const build = async (overrides = {}) => {
 
 afterEach(() => {
   delete globalThis.fetch;
+});
+
+describe('the /ping fast path on a read', () => {
+  const FAST = { kind: 'sourcebus', base: 'https://api.aem.live/org/sites/site/source' };
+
+  it('serves the source-bus document without waiting on the config read', async () => {
+    const { daSourceGet, env, seen } = await build({ source: UNKNOWN_SOURCE, fast: FAST });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(seen.ping, 1);
+    assert.strictEqual(seen.bus.length, 1);
+    assert.strictEqual(seen.bus[0].url, 'https://api.aem.live/org/sites/site/source/folder/content.html');
+  });
+
+  it('takes it on a non-html read too, which is the per-image path', async () => {
+    const { daSourceGet, env, seen } = await build({ source: UNKNOWN_SOURCE, fast: FAST });
+    const req = authedReq('https://main--site--org.ue.da.live/Media/Holiday.PNG');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(seen.bus[0].url, 'https://api.aem.live/org/sites/site/source/Media/holiday.PNG');
+  });
+
+  it('takes it on a HEAD', async () => {
+    const { daSourceHead, env, seen } = await build({ source: UNKNOWN_SOURCE, fast: FAST });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceHead({ env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(seen.bus.length, 1);
+  });
+
+  // /ping is trusted only when it produced content. its absence conflates legacy with a config
+  // that would not resolve, and the CF port of the edge hardcodes the yes, so a yes that finds
+  // nothing must not become the starter template for the author to save over
+  it('falls back to the config read when the fast store has nothing', async () => {
+    const { daSourceGet, env, seen } = await build({
+      source: LEGACY_SOURCE,
+      fast: FAST,
+      bus: () => new Response('', { status: 404 }),
+    });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(await res.text(), '<html><body>from da-admin</body></html>');
+    assert.strictEqual(seen.legacy.length, 1);
+  });
+
+  it('falls back when the fast store refuses', async () => {
+    const { daSourceGet, env, seen } = await build({
+      source: LEGACY_SOURCE,
+      fast: FAST,
+      bus: () => new Response('', { status: 403 }),
+    });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(seen.legacy.length, 1);
+  });
+
+  it('falls back when the fast store cannot be reached', async () => {
+    const { daSourceGet, env, seen } = await build({
+      source: LEGACY_SOURCE,
+      fast: FAST,
+      bus: () => { throw new TypeError('fetch failed'); },
+    });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(seen.legacy.length, 1);
+  });
+
+  it('does not take it when /ping did not say yes', async () => {
+    const { daSourceGet, env, seen } = await build({ source: LEGACY_SOURCE, fast: undefined });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(seen.ping, 1);
+    assert.strictEqual(seen.bus.length, 0);
+    assert.strictEqual(seen.legacy.length, 1);
+  });
+
+  // a save is one request where 460ms does not matter, and a wrong store on a write cannot be
+  // walked back
+  it('is never taken on a write', async () => {
+    const { daSourcePost, env, seen } = await build({ source: LEGACY_SOURCE, fast: FAST });
+    const body = new FormData();
+    body.set('data', new File(['<body><main><p>x</p></main></body>'], 'c.html', { type: 'text/html' }));
+    const req = new Request('https://main--site--org.ue.da.live/folder/content', {
+      method: 'POST', body, headers: { Authorization: 'Bearer t' },
+    });
+
+    await daSourcePost({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(seen.ping, 0);
+    assert.strictEqual(seen.bus.length, 0);
+    assert.strictEqual(seen.legacy.length, 1);
+  });
+
+  // /ping reads no token, so on the fast path the store is the first thing to see one. the
+  // authorbus extension recovers off the da:401 meta and never reads the status, and both stores
+  // answer 401 with an empty body.
+  it('serves the da:401 shell when the store refuses the token on an html read', async () => {
+    const { daSourceGet, env } = await build({
+      source: UNKNOWN_SOURCE,
+      fast: FAST,
+      bus: () => new Response('', { status: 401 }),
+    });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 401);
+    assert.match(await res.text(), /content="da:401"/);
+  });
+
+  it('passes a store 401 through bare on a non-html read, which renders nothing', async () => {
+    const { daSourceGet, env } = await build({
+      source: UNKNOWN_SOURCE,
+      fast: FAST,
+      bus: () => new Response('', { status: 401 }),
+    });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 401);
+    assert.strictEqual(await res.text(), '');
+  });
 });
 
 describe('reading with the content source resolved', () => {

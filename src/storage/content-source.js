@@ -12,11 +12,54 @@
 
 const LEGACY_PREFIX = 'https://content.da.live/';
 const TIMEOUT_MS = 5 * 1000;
+const UPGRADE_HEADER = 'x-api-upgrade-available';
 
 export const SOURCE_BUS = 'sourcebus';
 export const LEGACY = 'legacy';
 export const UNKNOWN = 'unknown';
 export const UNAUTHORIZED = 'unauthorized';
+
+function sourceBusBase(env, org, site) {
+  return `${env.AEM_API?.replace(/\/$/, '')}/${org}/sites/${site}/source`;
+}
+
+/**
+ * Asks `/ping` whether a site is on the source bus, for a read.
+ *
+ * The Fastly edge answers an enrolled site from a dictionary in ~37ms without reaching an origin,
+ * against ~529ms for the config read. Only the yes is usable: helix-admin sets the header when
+ * config resolution succeeded and named the API, so its absence covers a legacy site, a config
+ * that would not resolve, and a site that does not exist alike.
+ *
+ * The base is built rather than read, because `/ping` returns a header and no url.
+ * helix-api-service parses org and site out of a source url and refuses one that names another
+ * site (`src/contentproxy/source/utils.js`, "only allow source bus from the same org and site"),
+ * so this is the only base the site can legally have.
+ *
+ * @returns {Promise<{kind: string, base: string}|undefined>} undefined whenever `/ping` did not
+ * say yes, which leaves the config read to answer
+ */
+export async function fastSourceBus(env, daCtx) {
+  const { org, site } = daCtx;
+  if (!org || !site) return undefined;
+
+  let url;
+  try {
+    url = new URL(`/ping/${org}/${site}`, env.HLX_ADMIN);
+  } catch (e) {
+    return undefined;
+  }
+
+  try {
+    // no token: /ping is exempt from authorize() and answers the same either way
+    const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+    if (response.status !== 200) return undefined;
+    if (response.headers.get(UPGRADE_HEADER) !== 'true') return undefined;
+  } catch (e) {
+    return undefined;
+  }
+  return { kind: SOURCE_BUS, base: sourceBusBase(env, org, site) };
+}
 
 function unknown(org, site, reason) {
   console.warn(`[source] ${org}/${site} unknown: ${reason}`);
