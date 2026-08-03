@@ -48,7 +48,13 @@ export default async function resolveContentSource(env, daCtx) {
     return unknown(org, site, 'no org or site in the request');
   }
 
-  const url = new URL(`/sidekick/${org}/${site}/${ref}/config.json`, env.HLX_ADMIN);
+  let url;
+  try {
+    url = new URL(`/sidekick/${org}/${site}/${ref}/config.json`, env.HLX_ADMIN);
+  } catch (e) {
+    return unknown(org, site, `HLX_ADMIN is not a url: ${e.message}`);
+  }
+
   const headers = new Headers();
   if (authToken) headers.set('Authorization', authToken);
 

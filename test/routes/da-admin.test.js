@@ -32,6 +32,7 @@ const recorder = () => {
   const fetched = [];
   const env = {
     DA_ADMIN: 'https://admin.da.live',
+    HLX_ADMIN: 'https://admin.hlx.page',
     daadmin: {
       fetch: async (input) => {
         fetched.push(input instanceof Request ? input.url : input.href);
@@ -43,6 +44,12 @@ const recorder = () => {
 };
 
 const mockRoutes = async () => esmock('../../src/routes/da-admin.js', {
+  '../../src/storage/content-source.js': {
+    default: async () => ({ kind: 'legacy' }),
+    SOURCE_BUS: 'sourcebus',
+    LEGACY: 'legacy',
+    UNKNOWN: 'unknown',
+  },
   '../../src/utils/aemCtx.js': {
     getAemCtx: () => ({}),
     getAEMHtml: async () => '<meta name="from" content="aem" />',
@@ -80,6 +87,7 @@ describe('daSourceHead', () => {
 describe('daSourceGet', () => {
   const env = {
     DA_ADMIN: 'https://admin.da.live',
+    HLX_ADMIN: 'https://admin.hlx.page',
     daadmin: { fetch: async () => new Response('<body>stored</body>', { status: 200 }) },
   };
 
@@ -93,6 +101,12 @@ describe('daSourceGet', () => {
     const headHtml = 'headHtml' in overrides ? overrides.headHtml : '<meta name="from" content="aem" />';
     calls = { compose: [], ue: 0, quickEdit: 0 };
     return (await esmock('../../src/routes/da-admin.js', {
+      '../../src/storage/content-source.js': {
+        default: async () => ({ kind: 'legacy' }),
+        SOURCE_BUS: 'sourcebus',
+        LEGACY: 'legacy',
+        UNKNOWN: 'unknown',
+      },
       '../../src/utils/aemCtx.js': {
         getAemCtx: () => ({}),
         getAEMHtml: async () => headHtml,
@@ -241,6 +255,19 @@ describe('daSourceGet', () => {
 });
 
 describe('source URLs', () => {
+  // these drive the unmocked module, so the content-source lookup really does reach out;
+  // answer it as the legacy store, which is the store these tests describe
+  beforeEach(() => {
+    globalThis.fetch = async () => new Response(
+      JSON.stringify({ contentSourceUrl: 'https://content.da.live/org/site/' }),
+      { status: 200 },
+    );
+  });
+
+  afterEach(() => {
+    delete globalThis.fetch;
+  });
+
   it('GET / reads /index.html', async () => {
     const { daSourceGet } = await mockRoutes();
     const { env, fetched } = recorder();
@@ -369,6 +396,19 @@ describe('daSourcePost to a non-HTML path', () => {
 });
 
 describe('daSourcePost', () => {
+  // these drive the unmocked module, so the content-source lookup really does reach out;
+  // answer it as the legacy store, which is the store these tests describe
+  beforeEach(() => {
+    globalThis.fetch = async () => new Response(
+      JSON.stringify({ contentSourceUrl: 'https://content.da.live/org/site/' }),
+      { status: 200 },
+    );
+  });
+
+  afterEach(() => {
+    delete globalThis.fetch;
+  });
+
   // on an HTML path, so the path check does not answer first and this exercises
   // the part-type check
   it('refuses a binary File with 415 and does not write', async () => {

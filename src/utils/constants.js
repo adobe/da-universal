@@ -51,4 +51,10 @@ export const DEFAULT_HTML_TEMPLATE = '<body><header></header><main><div></div></
 
 export const BRANCH_NOT_FOUND_HTML_MESSAGE = '<html><body><h1>Not found: Unable to retrieve AEM branch</h1></body></html>';
 
+export const SOURCE_UNRESOLVED_HTML_MESSAGE = '<html><body><h1>503: Content source unresolved</h1><p>The store that holds this document could not be determined. Please retry.</p></body></html>';
+
+export const SOURCE_UNRESOLVED_MESSAGE = 'The store that holds this document could not be determined, so the write was refused rather than sent to the wrong one. Please retry.';
+
+export const SOURCE_MOVED_MESSAGE = 'This document moved to a different content store while it was open. Reload the page to pick up the new one; saving now would write to the store it left.';
+
 export const DEFAULT_UNAUTHORIZED_HTML_MESSAGE = '<html><body><h1>401: Unauthorized</h1></body></html>';

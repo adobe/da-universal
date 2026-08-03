@@ -11,6 +11,8 @@
  */
 import { DEFAULT_UNAUTHORIZED_HTML_MESSAGE } from '../utils/constants.js';
 
+const RETRY_AFTER_SECONDS = '5';
+
 export function daResp({
   body, status, contentType, contentLength, headers: extraHeaders,
 }) {
@@ -47,8 +49,36 @@ export function get415(message = '') {
   return daResp({ body: message, status: 415, contentType: 'text/html' });
 }
 
+export function get503(message = '') {
+  return daResp({
+    body: message,
+    status: 503,
+    contentType: 'text/html',
+    headers: [['Retry-After', RETRY_AFTER_SECONDS]],
+  });
+}
+
+// a refused write is never rendered. The Universal Editor Service embeds the body verbatim in
+// its problem+json error string, so plain text is what an author is shown.
+export function post409(message = '') {
+  return daResp({ body: message, status: 409, contentType: 'text/plain; charset=utf-8' });
+}
+
+export function post503(message = '') {
+  return daResp({
+    body: message,
+    status: 503,
+    contentType: 'text/plain; charset=utf-8',
+    headers: [['Retry-After', RETRY_AFTER_SECONDS]],
+  });
+}
+
 export function head401() {
   return new Response(null, { status: 401 });
+}
+
+export function head503() {
+  return new Response(null, { status: 503, headers: { 'Retry-After': RETRY_AFTER_SECONDS } });
 }
 
 export function head404() {

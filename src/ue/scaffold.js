@@ -12,8 +12,9 @@
 
 import { h } from 'hastscript';
 import { withAemAuth } from '../utils/aemCtx.js';
+import { SOURCE_STAMP_PARAM } from '../utils/source-stamp.js';
 
-export function getUEHtmlHeadEntries(daCtx, aemCtx) {
+export function getUEHtmlHeadEntries(daCtx, aemCtx, sourceStamp) {
   const {
     org,
     site,
@@ -28,9 +29,12 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
   let finalUeService = ueService;
   const children = [];
 
+  // the Universal Editor Service reads this uri and posts back to it verbatim, so the stamp on
+  // it is what tells a save which store the content it is saving was read from
+  const stamp = sourceStamp ? `?${SOURCE_STAMP_PARAM}=${sourceStamp}` : '';
   children.push(h('meta', {
     name: 'urn:adobe:aue:system:ab',
-    content: isLocal ? `da:https://${ueHostname}/${org}/${site}${path}` : `da:https://${ref}--${site}--${org}.${ueHostname}${path}`,
+    content: isLocal ? `da:https://${ueHostname}/${org}/${site}${path}${stamp}` : `da:https://${ref}--${site}--${org}.${ueHostname}${path}${stamp}`,
   }));
 
   if (ueServiceParam && ueServiceParam === 'local') {

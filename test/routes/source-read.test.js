@@ -26,12 +26,15 @@ const authedReq = (url) => new Request(url, { headers: { Authorization: 'Bearer 
  * answers da-admin, and every request to each is recorded so a test can assert where a read
  * went and what it carried.
  */
-const build = async ({
-  source = LEGACY_SOURCE,
-  bus = () => new Response('<body>from the source bus</body>', { status: 200, headers: { etag: '"busetag"' } }),
-  legacy = () => new Response('<body>from da-admin</body>', { status: 200 }),
-  headHtml = '<meta name="from" content="aem" />',
-} = {}) => {
+const build = async (overrides = {}) => {
+  const {
+    source = LEGACY_SOURCE,
+    bus = () => new Response('<body>from the source bus</body>', { status: 200, headers: { etag: '"busetag"' } }),
+    legacy = () => new Response('<body>from da-admin</body>', { status: 200 }),
+  } = overrides;
+  // 'headHtml' in overrides rather than a destructured default, so passing
+  // `{ headHtml: undefined }` really does simulate a missing head.html
+  const headHtml = 'headHtml' in overrides ? overrides.headHtml : '<meta name="from" content="aem" />';
   const seen = { bus: [], legacy: [], stamps: [] };
   globalThis.fetch = async (input, init) => {
     const request = input instanceof Request ? input : new Request(input, init);
