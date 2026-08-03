@@ -176,7 +176,7 @@ export async function daSourceGet({ req, env, daCtx }) {
     }
   } else if (isUE) {
     // UE is the only client that posts back, so it is the only one that needs the stamp
-    const stamp = formatSourceStamp(source, sourceResp.headers.get('etag'), found);
+    const stamp = formatSourceStamp(source, found);
     await applyUEInstrumentation(documentTree, daCtx, aemCtx, stamp);
   }
 
@@ -268,9 +268,11 @@ export async function daSourcePost({ req, env, daCtx }) {
     }
 
     // with no stamp there is no provenance, so a source-bus write may overwrite a page that
-    // exists but may not invent one
-    const condition = stamp?.condition
-      ?? (source.kind === SOURCE_BUS ? { 'If-Match': '*' } : undefined);
+    // exists but may not invent one. A stamp that carries no precondition is not the same thing:
+    // it says the read looked at the source bus and found nothing, so creating is what it asked
+    // for.
+    const noProvenance = source.kind === SOURCE_BUS ? { 'If-Match': '*' } : undefined;
+    const condition = stamp ? stamp.condition : noProvenance;
 
     // the two stores take the document in different shapes, so the store builds its own request
     const store = getStore(env, daCtx, source);

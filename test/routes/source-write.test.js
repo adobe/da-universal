@@ -182,23 +182,28 @@ describe('a UE session, which saves many times against one page load', () => {
 describe('writing with the content source resolved', () => {
   describe('a stamped source-bus save', () => {
     it('goes to the source bus', async () => {
-      const { seen } = await post({ source: BUS_SOURCE }, `${AT}?ab-src=sb.busetag`);
+      const { seen } = await post({ source: BUS_SOURCE }, `${AT}?ab-src=sb`);
 
       assert.strictEqual(seen.legacy.length, 0);
       assert.strictEqual(seen.bus.length, 1);
       assert.strictEqual(seen.bus[0].url, 'https://api.aem.live/org/sites/site/source/folder/content.html');
     });
 
-    // this is the whole point: the etag came from the read, so a write conditioned on it cannot
-    // land on a document the author never saw
-    it('carries the etag the read returned as an If-Match', async () => {
-      const { seen } = await post({ source: BUS_SOURCE }, `${AT}?ab-src=sb.busetag`);
+    it('asks that the document still exist', async () => {
+      const { seen } = await post({ source: BUS_SOURCE }, `${AT}?ab-src=sb`);
 
-      assert.strictEqual(seen.bus[0].headers.get('If-Match'), '"busetag"');
+      assert.strictEqual(seen.bus[0].headers.get('If-Match'), '*');
+    });
+
+    it('pins no version, so the next save in the session is not refused', async () => {
+      const { seen } = await post({ source: BUS_SOURCE }, `${AT}?ab-src=sb`);
+
+      assert.strictEqual(seen.bus[0].headers.get('If-Match'), '*');
+      assert.strictEqual(seen.bus[0].headers.get('If-None-Match'), null);
     });
 
     it('sends the document as the raw body the source bus parses', async () => {
-      const { seen } = await post({ source: BUS_SOURCE }, `${AT}?ab-src=sb.busetag`);
+      const { seen } = await post({ source: BUS_SOURCE }, `${AT}?ab-src=sb`);
 
       assert.strictEqual(seen.bus[0].body, DOC);
       assert.strictEqual(seen.bus[0].contentType, 'text/html');
@@ -206,33 +211,27 @@ describe('writing with the content source resolved', () => {
 
     // helix-api-service parses no form data; the envelope would be stored as the document text
     it('never wraps the body in a multipart envelope', async () => {
-      const { seen } = await post({ source: BUS_SOURCE }, `${AT}?ab-src=sb.busetag`);
+      const { seen } = await post({ source: BUS_SOURCE }, `${AT}?ab-src=sb`);
 
       assert.ok(!seen.bus[0].body.includes('Content-Disposition'), seen.bus[0].body);
       assert.ok(!/boundary/i.test(seen.bus[0].contentType ?? ''), seen.bus[0].contentType);
     });
 
     it('passes the store answer back, so a 412 reaches the editor', async () => {
-      const { res } = await post({ source: BUS_SOURCE, status: 412 }, `${AT}?ab-src=sb.busetag`);
+      const { res } = await post({ source: BUS_SOURCE, status: 412 }, `${AT}?ab-src=sb`);
 
       assert.strictEqual(res.status, 412);
     });
   });
 
   describe('a save of a page the read did not find', () => {
-    it('may only create, so an existing page is refused by the store', async () => {
+    // If-None-Match: * would create on the first save and refuse every one after it
+    it('carries no precondition, so it creates and then overwrites', async () => {
       const { seen } = await post({ source: BUS_SOURCE }, `${AT}?ab-src=sb.new`);
 
-      assert.strictEqual(seen.bus[0].headers.get('If-None-Match'), '*');
+      assert.strictEqual(seen.bus.length, 1);
+      assert.strictEqual(seen.bus[0].headers.get('If-None-Match'), null);
       assert.strictEqual(seen.bus[0].headers.get('If-Match'), null);
-    });
-  });
-
-  describe('a source-bus save whose read carried no etag', () => {
-    it('may overwrite but not create', async () => {
-      const { seen } = await post({ source: BUS_SOURCE }, `${AT}?ab-src=sb`);
-
-      assert.strictEqual(seen.bus[0].headers.get('If-Match'), '*');
     });
   });
 
@@ -267,7 +266,7 @@ describe('writing with the content source resolved', () => {
     });
 
     it('refuses a source-bus-stamped save to a site now on da-admin', async () => {
-      const { res, seen } = await post({ source: LEGACY_SOURCE }, `${AT}?ab-src=sb.busetag`);
+      const { res, seen } = await post({ source: LEGACY_SOURCE }, `${AT}?ab-src=sb`);
 
       assert.strictEqual(res.status, 409);
       assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
@@ -303,7 +302,8 @@ describe('writing with the content source resolved', () => {
   describe('a save carrying a stamp that cannot be trusted', () => {
     [
       ['an unknown store', 'gcs.abc'],
-      ['an etag with a quote in it', 'sb.a"b'],
+      ['a version pin, which this no longer emits', 'sb.9e8311043aab12b1'],
+      ['a value with a quote in it', 'sb.a"b'],
       ['a header injection attempt', 'sb.abc%0d%0aX-Evil:%201'],
       ['an empty value', ''],
     ].forEach(([what, value]) => {
@@ -324,7 +324,7 @@ describe('writing with the content source resolved', () => {
 
   describe('when the content source could not be resolved', () => {
     it('refuses with 503 and touches neither store', async () => {
-      const { res, seen } = await post({ source: UNKNOWN_SOURCE }, `${AT}?ab-src=sb.busetag`);
+      const { res, seen } = await post({ source: UNKNOWN_SOURCE }, `${AT}?ab-src=sb`);
 
       assert.strictEqual(res.status, 503);
       assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
@@ -347,7 +347,7 @@ describe('writing with the content source resolved', () => {
     it('strips the UE data attributes before the store sees them', async () => {
       const { daSourcePost, env, seen } = await build({ source: BUS_SOURCE });
       const req = uePost(
-        `${AT}?ab-src=sb.busetag`,
+        `${AT}?ab-src=sb`,
         '<body><main><div data-aue-resource="urn:ab:page"><p>text</p></div></main></body>',
       );
 
@@ -371,7 +371,7 @@ describe('writing with the content source resolved', () => {
     it('keeps the case the source bus stores it under', async () => {
       const { seen } = await post(
         { source: BUS_SOURCE },
-        'https://main--site--org.ue.da.live/Folder/Content?ab-src=sb.busetag',
+        'https://main--site--org.ue.da.live/Folder/Content?ab-src=sb',
       );
 
       assert.strictEqual(seen.bus[0].url, 'https://api.aem.live/org/sites/site/source/Folder/content.html');

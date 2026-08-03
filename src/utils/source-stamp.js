@@ -14,7 +14,7 @@ import { LEGACY, SOURCE_BUS } from '../storage/content-source.js';
 /**
  * The query param that carries the stamp on the Universal Editor connection uri.
  *
- * A read and its save are two requests, and a fresh probe on the save can disagree with the one
+ * A read and its save are two requests, and a fresh lookup on the save can disagree with the one
  * that served the read. The Universal Editor Service fetches and posts back to
  * `editable.connection.uri.toString()` verbatim, so a param on that uri is what links them.
  */
@@ -23,52 +23,43 @@ export const SOURCE_STAMP_PARAM = 'ab-src';
 const SOURCE_BUS_STAMP = 'sb';
 const LEGACY_STAMP = 'da';
 const NEW_DOCUMENT = 'new';
-// what may go in a url and come back meaning the same thing
-const ETAG = /^[A-Za-z0-9._~-]+$/;
-
-function bareEtag(etag) {
-  return etag?.replace(/^W\//, '').replace(/"/g, '');
-}
 
 /**
- * Stamps a read with the store it came from and, where the store gave one, the version it read.
+ * Stamps a read with the store it came from, and whether it found a document there.
  *
- * Only the source bus sets an etag on a read, and it is the store holding the content a wrong
- * write would destroy, so that is where the version matters.
+ * The stamp says nothing about which version was read. One page load produces many saves: the
+ * editor keeps the connection uri it was served and posts back to it for every edit, so a
+ * precondition pinned to a version would land the first save and refuse the rest. Nothing on the
+ * write path can refresh it either, because the source bus sets no etag on a write response.
  *
  * @param {{kind: string}} source the resolved content source
- * @param {string} [etag] the etag the read returned
  * @param {boolean} [found] whether the read found a document
  * @returns {string} the stamp
  */
-export function formatSourceStamp(source, etag, found = false) {
+export function formatSourceStamp(source, found = false) {
   if (source.kind !== SOURCE_BUS) return LEGACY_STAMP;
-  const bare = bareEtag(etag);
-  if (bare && ETAG.test(bare)) return `${SOURCE_BUS_STAMP}.${bare}`;
-  // no usable etag: either the document is not there yet, so the write may only create it, or it
-  // is there but unversioned, so the write may only overwrite it
   return found ? SOURCE_BUS_STAMP : `${SOURCE_BUS_STAMP}.${NEW_DOCUMENT}`;
 }
 
 /**
  * Reads a stamp back into the store it names and the precondition a write to it carries.
  *
- * The stamp arrives on a client-supplied url, so nothing is taken on trust: an etag that does not
- * look like an etag makes the whole stamp unusable rather than being passed to a store.
+ * Each precondition holds for every save in a session, not only the first. `If-Match: *` asks the
+ * source bus that the document exist, which it does once created; a read that found nothing
+ * carries no precondition, so the save creates the document and the next one overwrites it.
+ *
+ * The stamp arrives on a client-supplied url, so a value that is not one of the three forms makes
+ * the whole stamp unusable rather than being passed to a store.
  *
  * @param {string} [value] the raw param value
  * @returns {{kind: string, condition?: Object}|undefined} undefined when there is no stamp to
- * trust, which leaves the fresh probe to decide on its own
+ * trust, which leaves the fresh lookup to decide on its own
  */
 export function parseSourceStamp(value) {
-  if (!value) return undefined;
   if (value === LEGACY_STAMP) return { kind: LEGACY, condition: undefined };
   if (value === SOURCE_BUS_STAMP) return { kind: SOURCE_BUS, condition: { 'If-Match': '*' } };
-
-  const [store, ...rest] = value.split('.');
-  const etag = rest.join('.');
-  if (store !== SOURCE_BUS_STAMP || !etag) return undefined;
-  if (etag === NEW_DOCUMENT) return { kind: SOURCE_BUS, condition: { 'If-None-Match': '*' } };
-  if (!ETAG.test(etag)) return undefined;
-  return { kind: SOURCE_BUS, condition: { 'If-Match': `"${etag}"` } };
+  if (value === `${SOURCE_BUS_STAMP}.${NEW_DOCUMENT}`) {
+    return { kind: SOURCE_BUS, condition: undefined };
+  }
+  return undefined;
 }

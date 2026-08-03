@@ -26,59 +26,47 @@ describe('formatSourceStamp', () => {
     assert.strictEqual(SOURCE_STAMP_PARAM, 'ab-src');
   });
 
-  it('stamps a source-bus read with the etag it read', () => {
-    assert.strictEqual(formatSourceStamp(bus, '"9e8311043aab12b1"'), 'sb.9e8311043aab12b1');
+  it('stamps a source-bus read that found a document', () => {
+    assert.strictEqual(formatSourceStamp(bus, true), 'sb');
   });
 
-  it('strips the quotes, so the stamp needs no url encoding', () => {
-    assert.doesNotMatch(formatSourceStamp(bus, '"abc123"'), /["%]/);
+  it('stamps a source-bus read that found nothing', () => {
+    assert.strictEqual(formatSourceStamp(bus, false), 'sb.new');
   });
 
-  it('unwraps a weak etag', () => {
-    assert.strictEqual(formatSourceStamp(bus, 'W/"abc123"'), 'sb.abc123');
+  // one page load produces many saves against the same stamp, so a version in it would land the
+  // first save and refuse the rest
+  it('carries no version, whatever etag the read returned', () => {
+    assert.doesNotMatch(formatSourceStamp(bus, true), /[0-9a-f]{8}/);
   });
 
-  it('keeps a multipart etag suffix', () => {
-    assert.strictEqual(formatSourceStamp(bus, '"abc123-7"'), 'sb.abc123-7');
+  it('needs no url encoding', () => {
+    ['sb', 'sb.new', 'da'].forEach((v) => assert.strictEqual(encodeURIComponent(v), v));
   });
 
-  it('stamps a source-bus read that found nothing, so the write can only create', () => {
-    assert.strictEqual(formatSourceStamp(bus, undefined), 'sb.new');
-  });
-
-  it('stamps a source-bus read with no etag as a bare source-bus read', () => {
-    assert.strictEqual(formatSourceStamp(bus, null, true), 'sb');
-  });
-
-  it('falls back to a bare source-bus read for an etag it cannot put in a url', () => {
-    assert.strictEqual(formatSourceStamp(bus, '"has spaces and /"', true), 'sb');
-  });
-
-  it('stamps a legacy read, which has no etag to carry', () => {
-    assert.strictEqual(formatSourceStamp(legacy, undefined), 'da');
+  it('stamps a legacy read, which has no version to carry either', () => {
+    assert.strictEqual(formatSourceStamp(legacy, false), 'da');
   });
 
   it('stamps a legacy read the same whether or not the document was found', () => {
-    assert.strictEqual(formatSourceStamp(legacy, undefined, true), 'da');
+    assert.strictEqual(formatSourceStamp(legacy, true), 'da');
   });
 });
 
 describe('parseSourceStamp', () => {
   describe('a source-bus stamp', () => {
     it('reads the store back', () => {
-      assert.strictEqual(parseSourceStamp('sb.abc123').kind, SOURCE_BUS);
+      assert.strictEqual(parseSourceStamp('sb').kind, SOURCE_BUS);
+      assert.strictEqual(parseSourceStamp('sb.new').kind, SOURCE_BUS);
     });
 
-    it('turns the etag into an If-Match, so a changed page is refused', () => {
-      assert.deepStrictEqual(parseSourceStamp('sb.abc123').condition, { 'If-Match': '"abc123"' });
-    });
-
-    it('turns a new-page stamp into If-None-Match, so an existing page is refused', () => {
-      assert.deepStrictEqual(parseSourceStamp('sb.new').condition, { 'If-None-Match': '*' });
-    });
-
-    it('turns a bare stamp into If-Match: *, so it can overwrite but not create', () => {
+    it('asks that the document still exist, which holds for every save in a session', () => {
       assert.deepStrictEqual(parseSourceStamp('sb').condition, { 'If-Match': '*' });
+    });
+
+    // If-None-Match: * would refuse every save after the one that created the document
+    it('carries no precondition when the read found nothing, so the save can create it', () => {
+      assert.strictEqual(parseSourceStamp('sb.new').condition, undefined);
     });
   });
 
@@ -100,10 +88,12 @@ describe('parseSourceStamp', () => {
       ['an empty stamp', ''],
       ['an unknown store', 'gcs.abc'],
       ['a stamp shaped like a path', 'sb/abc'],
-      ['an etag with a url-unsafe character', 'sb.a"b'],
-      ['an etag with a slash', 'sb.a/b'],
-      ['a stamp with an empty etag', 'sb.'],
-      ['a stamp trying to inject a header', 'sb.abc\r\nX-Evil: 1'],
+      ['a version pin, which this no longer emits', 'sb.9e8311043aab12b1'],
+      ['a url-unsafe character', 'sb.a"b'],
+      ['a slash', 'sb.a/b'],
+      ['a trailing dot', 'sb.'],
+      ['a header injection attempt', 'sb.abc\r\nX-Evil: 1'],
+      ['a case variation', 'SB'],
     ].forEach(([what, value]) => {
       it(`is not trusted: ${what}`, () => {
         assert.strictEqual(parseSourceStamp(value), undefined);
@@ -112,19 +102,12 @@ describe('parseSourceStamp', () => {
   });
 
   describe('round trip', () => {
-    it('parses back what a source-bus read stamped', () => {
-      const stamp = formatSourceStamp(bus, '"9e8311043aab12b156073d30f8bb3710"');
+    [[bus, true], [bus, false], [legacy, true], [legacy, false]].forEach(([source, found]) => {
+      it(`parses back what a ${source.kind} read stamped, found=${found}`, () => {
+        const parsed = parseSourceStamp(formatSourceStamp(source, found));
 
-      assert.deepStrictEqual(parseSourceStamp(stamp), {
-        kind: SOURCE_BUS,
-        condition: { 'If-Match': '"9e8311043aab12b156073d30f8bb3710"' },
-      });
-    });
-
-    it('parses back what a legacy read stamped', () => {
-      assert.deepStrictEqual(parseSourceStamp(formatSourceStamp(legacy)), {
-        kind: LEGACY,
-        condition: undefined,
+        assert.ok(parsed, 'a stamp this code emits must parse back');
+        assert.strictEqual(parsed.kind, source.kind);
       });
     });
   });
