@@ -34,7 +34,7 @@ export default async function headHandler({ req, env, daCtx }) {
     return aemHead({ req, env, daCtx });
   }
 
-  const assetRegex = /\.(png|jpg|jpeg|webp|gif|svg|ico)$/i;
+  const assetRegex = /\.(png|jpg|jpeg|webp|gif|svg|ico|avif)$/i;
   if (assetRegex.test(path)) {
     const [daSourceHeadRes, aemHeadRes] = await Promise.allSettled([
       daSourceHead({ env, daCtx }),
