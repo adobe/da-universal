@@ -32,7 +32,62 @@ const HANDLER_MOCKS = {
   },
 };
 
+const throwingWorker = async (handler) => (await esmock('../src/index.js', {
+  ...HANDLER_MOCKS,
+  [handler]: {
+    default: async () => {
+      throw new TypeError('fetch failed');
+    },
+  },
+})).default;
+
 describe('worker fetch handler', () => {
+  describe('when a handler throws', () => {
+    // a throw used to reject worker.fetch, and the runtime answered a bare 500 with no CORS on it,
+    // which the editor cannot read at all
+    it('answers 500 rather than rejecting', async () => {
+      const worker = await throwingWorker('../src/handlers/get.js');
+      const req = new Request('https://main--site--org.ue.da.live/some/path');
+
+      const res = await worker.fetch(req, {});
+
+      assert.ok(res instanceof Response, 'must return a Response');
+      assert.strictEqual(res.status, 500);
+    });
+
+    // the assertion that pins the catch inside the switch: wrapped around withCorsHeaders instead,
+    // the status would still be 500 and the headers would be gone
+    it('keeps the CORS headers on it', async () => {
+      const worker = await throwingWorker('../src/handlers/get.js');
+      const req = new Request('https://main--site--org.ue.da.live/some/path', {
+        headers: { Origin: 'https://da.live' },
+      });
+
+      const res = await worker.fetch(req, {});
+
+      assert.strictEqual(res.headers.get('Access-Control-Allow-Origin'), 'https://da.live');
+      assert.strictEqual(res.headers.get('Access-Control-Allow-Credentials'), 'true');
+    });
+
+    it('answers the same on a POST', async () => {
+      const worker = await throwingWorker('../src/handlers/post.js');
+      const req = new Request('https://main--site--org.ue.da.live/some/path', { method: 'POST' });
+
+      const res = await worker.fetch(req, {});
+
+      assert.strictEqual(res.status, 500);
+    });
+
+    it('sends no body, so nothing internal reaches the browser', async () => {
+      const worker = await throwingWorker('../src/handlers/get.js');
+      const req = new Request('https://main--site--org.ue.da.live/some/path');
+
+      const res = await worker.fetch(req, {});
+
+      assert.strictEqual(await res.text(), '');
+    });
+  });
+
   describe('/.rum/ routing', () => {
     let worker;
 
