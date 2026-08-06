@@ -28,7 +28,7 @@ export default async function getHandler({ req, env, daCtx }) {
     return handleAEMProxyRequest({ req, env, daCtx });
   }
 
-  const assetRegex = /\.(png|jpg|jpeg|webp|gif|svg|ico)$/i;
+  const assetRegex = /\.(png|jpg|jpeg|webp|gif|svg|ico|avif)$/i;
   if (assetRegex.test(path)) {
     const [daSourceGetRes, aemProxyRes] = await Promise.allSettled([
       daSourceGet({ req, env, daCtx }),
