@@ -19,16 +19,6 @@ export const LEGACY = 'legacy';
 export const UNKNOWN = 'unknown';
 export const UNAUTHORIZED = 'unauthorized';
 
-// getStore appends the path to this and calls `new URL` on the result, where a throw escapes
-// `worker.fetch` before CORS headers are added, so an unusable AEM_API is refused here instead.
-function sourceBusBase(env, org, site) {
-  try {
-    return new URL(`${env.AEM_API?.replace(/\/$/, '')}/${org}/sites/${site}/source`).toString();
-  } catch (e) {
-    return undefined;
-  }
-}
-
 /**
  * Asks `/ping` whether a site is on the source bus, for a read.
  *
@@ -49,26 +39,17 @@ export async function fastSourceBus(env, daCtx) {
   const { org, site } = daCtx;
   if (!org || !site) return undefined;
 
-  // built before the probe, since a base that cannot be used makes the answer unusable too
-  const base = sourceBusBase(env, org, site);
-  if (!base) return undefined;
-
-  let url;
+  const url = new URL(`/ping/${org}/${site}`, env.HLX_ADMIN);
   try {
-    url = new URL(`/ping/${org}/${site}`, env.HLX_ADMIN);
-  } catch (e) {
-    return undefined;
-  }
-
-  try {
-    // no token: /ping is exempt from authorize() and answers the same either way
     const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
     if (response.status !== 200) return undefined;
     if (response.headers.get(UPGRADE_HEADER) !== 'true') return undefined;
   } catch (e) {
+    console.warn(`[source] ${org}/${site} ping failed: ${e.name}: ${e.message}`);
     return undefined;
   }
-  return { kind: SOURCE_BUS, base };
+
+  return { kind: SOURCE_BUS, base: `${env.AEM_API}/${org}/sites/${site}/source` };
 }
 
 function unknown(org, site, reason) {
@@ -103,14 +84,7 @@ export default async function resolveContentSource(env, daCtx) {
     return unknown(org, site, 'no org or site in the request');
   }
 
-  const api = env.AEM_API?.replace(/\/$/, '');
-  let url;
-  try {
-    url = new URL(`/${org}/sites/${site}/sidekick`, api);
-  } catch (e) {
-    return unknown(org, site, `AEM_API is not a url: ${e.message}`);
-  }
-
+  const url = new URL(`/${org}/sites/${site}/sidekick`, env.AEM_API);
   const headers = new Headers();
   if (authToken) headers.set('Authorization', authToken);
 
@@ -143,7 +117,7 @@ export default async function resolveContentSource(env, daCtx) {
   if (typeof sourceUrl !== 'string') {
     return unknown(org, site, `${url} named no content source`);
   }
-  if (sourceUrl.startsWith(`${api}/`)) {
+  if (sourceUrl.startsWith(`${env.AEM_API}/`)) {
     return { kind: SOURCE_BUS, base: sourceUrl.replace(/\/$/, '') };
   }
   if (sourceUrl.startsWith(LEGACY_PREFIX)) {

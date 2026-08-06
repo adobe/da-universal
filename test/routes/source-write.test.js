@@ -253,16 +253,16 @@ describe('writing to the store that holds the site', () => {
   });
 
   describe('the path a save is written to', () => {
-    it('keeps the case the source bus stores it under', async () => {
+    it('is stored under the normalized path on the source bus', async () => {
       const { seen } = await post(
         { source: BUS_SOURCE },
         'https://main--site--org.ue.da.live/Folder/Content',
       );
 
-      assert.strictEqual(seen.bus[0].url, 'https://api.aem.live/org/sites/site/source/Folder/content.html');
+      assert.strictEqual(seen.bus[0].url, 'https://api.aem.live/org/sites/site/source/folder/content.html');
     });
 
-    it('lowercases the whole path for da-admin', async () => {
+    it('normalizes the whole path for da-admin', async () => {
       const { seen } = await post(
         { source: LEGACY_SOURCE },
         'https://main--site--org.ue.da.live/Folder/Content',

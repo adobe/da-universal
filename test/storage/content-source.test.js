@@ -277,24 +277,6 @@ describe('resolveContentSource', () => {
   });
 
   describe('the API host', () => {
-    // the caller turns unknown into a 503 it can return; a throw here escapes into
-    // withCorsHeaders, which reads response.headers and throws again on undefined
-    it('answers unknown rather than throwing when it is not set', async () => {
-      stubFetch(legacyBody);
-
-      const source = await resolveContentSource({}, daCtx());
-
-      assert.strictEqual(source.kind, 'unknown');
-    });
-
-    it('answers unknown rather than throwing when it is not a url', async () => {
-      stubFetch(legacyBody);
-
-      const source = await resolveContentSource({ AEM_API: 'not-a-url' }, daCtx());
-
-      assert.strictEqual(source.kind, 'unknown');
-    });
-
     it('comes from env, so stage can point elsewhere', async () => {
       stubFetch(legacyBody);
 
@@ -417,30 +399,6 @@ describe('fastSourceBus', () => {
 
       assert.strictEqual(await fastSourceBus(env, daCtx({ site: undefined })), undefined);
       assert.strictEqual(calls.length, 0);
-    });
-
-    it('answers undefined when the admin host is unusable', async () => {
-      stubFetch(() => ping({ 'x-api-upgrade-available': 'true' }));
-
-      assert.strictEqual(await fastSourceBus({ ...env, HLX_ADMIN: 'nope' }, daCtx()), undefined);
-    });
-
-    // getStore builds the store url from this base and its `new URL` is unguarded, so a base that
-    // cannot parse throws out of `worker.fetch` before withCorsHeaders runs: an opaque 500 with no
-    // CORS on a document read, and a 404 on the raced image path where allSettled swallows it. The
-    // config read answers unknown for the same env, so the caller gets a 503 instead.
-    [
-      ['AEM_API is unset', undefined],
-      ['AEM_API has no scheme', 'api.aem.live'],
-      ['AEM_API is protocol-relative', '//api.aem.live'],
-      ['AEM_API has a trailing space', 'https://api.aem.live '],
-    ].forEach(([what, AEM_API]) => {
-      it(`answers undefined without asking when ${what}`, async () => {
-        stubFetch(() => ping({ 'x-api-upgrade-available': 'true' }));
-
-        assert.strictEqual(await fastSourceBus({ ...env, AEM_API }, daCtx()), undefined);
-        assert.strictEqual(calls.length, 0);
-      });
     });
   });
 });

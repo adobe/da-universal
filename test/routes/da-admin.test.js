@@ -33,6 +33,7 @@ const recorder = () => {
   const env = {
     DA_ADMIN: 'https://admin.da.live',
     AEM_API: 'https://api.aem.live',
+    HLX_ADMIN: 'https://admin.hlx.page',
     daadmin: {
       fetch: async (input) => {
         fetched.push(input instanceof Request ? input.url : input.href);
@@ -103,6 +104,7 @@ describe('daSourceGet', () => {
     return (await esmock('../../src/routes/da-admin.js', {
       '../../src/storage/content-source.js': {
         default: async () => ({ kind: 'legacy' }),
+        fastSourceBus: async () => undefined,
         SOURCE_BUS: 'sourcebus',
         LEGACY: 'legacy',
         UNKNOWN: 'unknown',

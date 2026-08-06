@@ -88,13 +88,10 @@ async function getPageTemplate(env, daCtx, aemCtx) {
 
 /**
  * Sends a request to a store and answers 503 when it could not be reached at all.
- *
- * A throw escaping a handler reaches withCorsHeaders, which reads `response.headers` and throws
- * again, so the caller gets an opaque 500 with no CORS headers on it.
  */
-async function reachStore(store, input, init) {
+async function reachStore(store, send) {
   try {
-    return await store.fetch(input, init);
+    return await send();
   } catch (e) {
     console.warn(`503 ${store.url}, the store could not be reached: ${e.name}: ${e.message}`);
     return undefined;
@@ -102,12 +99,16 @@ async function reachStore(store, input, init) {
 }
 
 /**
- * Reads from the store that holds the site, taking `/ping`'s fast answer when it produced content.
+ * Reads from the store that holds the site, taking `/ping`'s fast answer when the store replied.
  *
  * The two lookups run at once: `/ping` answers an enrolled site from the Fastly edge in ~37ms,
  * where the config read is ~529ms, and a legacy site learns nothing from `/ping` so it would
- * otherwise pay both in series. The fast answer is trusted only on a 200, because `/ping` cannot
- * say "legacy" and a yes that found nothing would otherwise become the starter template.
+ * otherwise pay both in series.
+ *
+ * A 404 is the one answer that falls through to the config read, since a wrong yes is what
+ * produces one and the starter template would then be composed over a document that exists in the
+ * other store. Any other status is about the store rather than about which store, so returning it
+ * saves fetching the same url twice.
  *
  * @returns {Promise<{source: Object, response?: Response}>} `response` is absent when the store
  * could not be reached, and when `source.kind` is unauthorized or unknown
@@ -118,10 +119,8 @@ async function readSource(env, daCtx, init) {
   if (fast) {
     const store = getStore(env, daCtx, fast);
     console.log(`-> ${init.method} ${store.url.toString()} (fast)`);
-    const response = await reachStore(store, store.url, init);
-    if (response?.status === 200) return { source: fast, response };
-    // a refusal is about the token, not about which store, so the config read would repeat it
-    if (response?.status === 401 || response?.status === 403) return { source: fast, response };
+    const response = await reachStore(store, () => store.fetch(store.url, init));
+    if (response && response.status !== 404) return { source: fast, response };
   }
 
   const source = await config;
@@ -129,7 +128,7 @@ async function readSource(env, daCtx, init) {
 
   const store = getStore(env, daCtx, source);
   console.log(`-> ${init.method} ${store.url.toString()}`);
-  const response = await reachStore(store, store.url, init);
+  const response = await reachStore(store, () => store.fetch(store.url, init));
   return { source, response };
 }
 
@@ -306,12 +305,10 @@ export async function daSourcePost({ req, env, daCtx }) {
       return post503(SOURCE_UNRESOLVED_MESSAGE);
     }
 
-    // the two stores take the document in different shapes, so the store builds its own request
+    // the two stores take the document in different shapes, so the store sends its own request
     const store = getStore(env, daCtx, source);
-    // eslint-disable-next-line no-param-reassign
-    req = new Request(store.url, store.writeInit(bodyContent, authToken));
     console.log(`-> ${store.url.toString()}`);
-    const response = await reachStore(store, req);
+    const response = await reachStore(store, () => store.write(bodyContent, authToken));
     if (!response) return post503(SOURCE_UNREACHABLE_MESSAGE);
     console.log(`<- ${store.url.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
     return response;

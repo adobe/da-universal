@@ -110,12 +110,12 @@ describe('the /ping fast path on a read', () => {
 
   it('takes it on a non-html read too, which is the per-image path', async () => {
     const { daSourceGet, env, seen } = await build({ source: UNKNOWN_SOURCE, fast: FAST });
-    const req = authedReq('https://main--site--org.ue.da.live/Media/Holiday.PNG');
+    const req = authedReq('https://main--site--org.ue.da.live/media/holiday.png');
 
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
     assert.strictEqual(res.status, 200);
-    assert.strictEqual(seen.bus[0].url, 'https://api.aem.live/org/sites/site/source/Media/holiday.PNG');
+    assert.strictEqual(seen.bus[0].url, 'https://api.aem.live/org/sites/site/source/media/holiday.png');
   });
 
   it('takes it on a HEAD', async () => {
@@ -222,22 +222,23 @@ describe('the /ping fast path on a read', () => {
     assert.strictEqual(await res.text(), '');
   });
 
-  // any other store answer says nothing about which store holds the site, so the config read
-  // decides. keeping the fast source there would answer 503 to a session that cannot recover by
-  // retrying, since the token is the thing that needs replacing
-  it('lets the config read answer when the fast store neither served nor refused', async () => {
-    const { daSourceGet, env, seen } = await build({
-      source: DENIED_SOURCE,
-      fast: FAST,
-      bus: () => new Response('', { status: 500 }),
+  // 404 is the only answer a wrong yes produces, so anything else is about the store rather than
+  // about which store, and refetching it from the config read would hit the same url twice
+  [429, 500, 502].forEach((status) => {
+    it(`keeps the fast answer on a store ${status} rather than fetching again`, async () => {
+      const { daSourceGet, env, seen } = await build({
+        source: LEGACY_SOURCE,
+        fast: FAST,
+        bus: () => new Response('', { status }),
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, status);
+      assert.strictEqual(seen.bus.length, 1);
+      assert.strictEqual(seen.legacy.length, 0);
     });
-    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-    assert.strictEqual(res.status, 401);
-    assert.match(await res.text(), /content="da:401"/);
-    assert.strictEqual(seen.config, 1);
   });
 });
 
@@ -420,8 +421,6 @@ describe('reading with the content source resolved', () => {
   });
 
   describe('when the store cannot be reached at all', () => {
-    // withCorsHeaders reads response.headers, so a throw escaping a handler is an opaque 500
-    // with no CORS headers on it
     it('answers 503 rather than throwing on an html read', async () => {
       const { daSourceGet, env } = await build({
         source: BUS_SOURCE,
@@ -536,6 +535,7 @@ describe('reading with the content source resolved', () => {
       const { daSourceGet } = await esmock('../../src/routes/da-admin.js', {
         '../../src/storage/content-source.js': {
           default: async () => BUS_SOURCE,
+          fastSourceBus: async () => undefined,
           SOURCE_BUS: 'sourcebus',
           LEGACY: 'legacy',
           UNKNOWN: 'unknown',
@@ -556,13 +556,13 @@ describe('reading with the content source resolved', () => {
   });
 
   describe('a non-html read', () => {
-    it('goes to the source bus with the case it stored the file under', async () => {
+    it('goes to the source bus fully normalized', async () => {
       const { daSourceGet, env, seen } = await build({ source: BUS_SOURCE });
       const req = authedReq('https://main--site--org.ue.da.live/Media/Holiday.PNG');
 
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-      assert.strictEqual(seen.bus[0].url, 'https://api.aem.live/org/sites/site/source/Media/holiday.PNG');
+      assert.strictEqual(seen.bus[0].url, 'https://api.aem.live/org/sites/site/source/media/holiday.png');
     });
 
     it('goes to da-admin fully lowercased on a legacy site', async () => {
