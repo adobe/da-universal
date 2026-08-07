@@ -14,12 +14,10 @@
 import assert from 'assert';
 import esmock from 'esmock';
 
-const HANDLER_MOCKS = {
+// everything but the POST handler, so a write can be driven through the real route
+const READ_HANDLER_MOCKS = {
   '../src/handlers/get.js': {
     default: async () => new Response('get-handled', { status: 200 }),
-  },
-  '../src/handlers/post.js': {
-    default: async () => new Response('post-handled', { status: 200 }),
   },
   '../src/handlers/options.js': {
     default: async () => new Response('options-handled', { status: 204 }),
@@ -29,6 +27,13 @@ const HANDLER_MOCKS = {
   },
   '../src/handlers/unknown.js': {
     default: () => new Response('unknown', { status: 405 }),
+  },
+};
+
+const HANDLER_MOCKS = {
+  ...READ_HANDLER_MOCKS,
+  '../src/handlers/post.js': {
+    default: async () => new Response('post-handled', { status: 200 }),
   },
 };
 
@@ -177,6 +182,44 @@ describe('worker fetch handler', () => {
 
       assert.strictEqual(res.headers.get('Access-Control-Allow-Methods'), 'GET, HEAD, POST, OPTIONS');
       assert.strictEqual(res.headers.get('Access-Control-Allow-Headers'), 'Authorization, Content-Type, x-site-token');
+    });
+  });
+
+  // withCorsHeaders rebuilds every response from the handler, so a header the route set only
+  // reaches the caller if that rebuild carries it
+  describe('a refused write on a source-bus site', () => {
+    const busWorker = async () => (await esmock('../src/index.js', READ_HANDLER_MOCKS, {
+      '../src/storage/source-bus.js': { default: async () => true },
+    })).default;
+
+    const uePost = (origin) => {
+      const body = new FormData();
+      body.set('data', new File(['<body><main><p>x</p></main></body>'], 'c.html', { type: 'text/html' }));
+      return new Request('https://main--site--org.ue.da.live/folder/content', {
+        method: 'POST',
+        body,
+        headers: { Authorization: 'Bearer t', Origin: origin },
+      });
+    };
+
+    it('keeps the Allow header alongside the CORS headers', async () => {
+      const worker = await busWorker();
+
+      const res = await worker.fetch(uePost('https://da.live'), {});
+
+      assert.strictEqual(res.status, 405);
+      assert.strictEqual(res.headers.get('Allow'), 'GET, HEAD, OPTIONS');
+      assert.strictEqual(res.headers.get('Access-Control-Allow-Origin'), 'https://da.live');
+      assert.strictEqual(res.headers.get('Access-Control-Allow-Credentials'), 'true');
+    });
+
+    it('keeps it for an untrusted origin too', async () => {
+      const worker = await busWorker();
+
+      const res = await worker.fetch(uePost('https://evil.example.com'), {});
+
+      assert.strictEqual(res.headers.get('Allow'), 'GET, HEAD, OPTIONS');
+      assert.strictEqual(res.headers.get('Access-Control-Allow-Origin'), '*');
     });
   });
 });

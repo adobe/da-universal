@@ -44,12 +44,23 @@ const recorder = () => {
   return { env, fetched };
 };
 
+// answers the real /ping, which is the only lookup the routes make. `upgraded` is the set of
+// `org/site` keys the probe reports as enrolled.
+const stubPing = (upgraded = []) => {
+  const asked = [];
+  globalThis.fetch = async (input) => {
+    const url = input.toString();
+    asked.push(url);
+    const key = url.slice(url.indexOf('/ping/') + '/ping/'.length);
+    const headers = upgraded.includes(key) ? { 'x-api-upgrade-available': 'true' } : {};
+    return new Response('', { status: 200, headers });
+  };
+  return asked;
+};
+
 const mockRoutes = async () => esmock('../../src/routes/da-admin.js', {
-  '../../src/storage/content-source.js': {
-    default: async () => ({ kind: 'legacy' }),
-    SOURCE_BUS: 'sourcebus',
-    LEGACY: 'legacy',
-    UNKNOWN: 'unknown',
+  '../../src/storage/source-bus.js': {
+    default: async () => false,
   },
   '../../src/utils/aemCtx.js': {
     getAemCtx: () => ({}),
@@ -102,12 +113,8 @@ describe('daSourceGet', () => {
     const headHtml = 'headHtml' in overrides ? overrides.headHtml : '<meta name="from" content="aem" />';
     calls = { compose: [], ue: 0, quickEdit: 0 };
     return (await esmock('../../src/routes/da-admin.js', {
-      '../../src/storage/content-source.js': {
-        default: async () => ({ kind: 'legacy' }),
-        fastSourceBus: async () => undefined,
-        SOURCE_BUS: 'sourcebus',
-        LEGACY: 'legacy',
-        UNKNOWN: 'unknown',
+      '../../src/storage/source-bus.js': {
+        default: async () => false,
       },
       '../../src/utils/aemCtx.js': {
         getAemCtx: () => ({}),
@@ -257,13 +264,10 @@ describe('daSourceGet', () => {
 });
 
 describe('source URLs', () => {
-  // these drive the unmocked module, so the content-source lookup really does reach out;
-  // answer it as the legacy store, which is the store these tests describe
+  // these drive the unmocked module, so the /ping lookup really does reach out; answer it
+  // without the upgrade header, which is the legacy store these tests describe
   beforeEach(() => {
-    globalThis.fetch = async () => new Response(
-      JSON.stringify({ contentSourceUrl: 'https://content.da.live/org/site/' }),
-      { status: 200 },
-    );
+    stubPing();
   });
 
   afterEach(() => {
@@ -398,17 +402,48 @@ describe('daSourcePost to a non-HTML path', () => {
 });
 
 describe('daSourcePost', () => {
-  // these drive the unmocked module, so the content-source lookup really does reach out;
-  // answer it as the legacy store, which is the store these tests describe
+  // these drive the unmocked module, so the /ping lookup really does reach out; answer it
+  // without the upgrade header, which is the legacy store these tests describe
   beforeEach(() => {
-    globalThis.fetch = async () => new Response(
-      JSON.stringify({ contentSourceUrl: 'https://content.da.live/org/site/' }),
-      { status: 200 },
-    );
+    stubPing();
   });
 
   afterEach(() => {
     delete globalThis.fetch;
+  });
+
+  describe('on a site /ping reports as enrolled', () => {
+    const write = async (site, env) => {
+      const html = new File(['<body>hello</body>'], 'page.html', { type: 'text/html' });
+      const req = formReq(`https://main--${site}--org.ue.da.live/page`, html);
+      return daSourcePost({ req, env, daCtx: getDaCtx(req) });
+    };
+
+    it('is refused with 405 and nothing is written', async () => {
+      stubPing(['org/refused']);
+      const { env, fetched } = recorder();
+
+      const res = await write('refused', env);
+
+      assert.strictEqual(res.status, 405);
+      assert.strictEqual(res.headers.get('Allow'), 'GET, HEAD, OPTIONS');
+      assert.deepStrictEqual(fetched, []);
+    });
+
+    // nothing is remembered between requests, so a site enrolled or un-enrolled mid-session takes
+    // effect on the next one
+    it('probes once per write', async () => {
+      const asked = stubPing(['org/probedeach']);
+      const { env } = recorder();
+
+      await write('probedeach', env);
+      await write('probedeach', env);
+
+      assert.deepStrictEqual(asked, [
+        'https://admin.hlx.page/ping/org/probedeach',
+        'https://admin.hlx.page/ping/org/probedeach',
+      ]);
+    });
   });
 
   // on an HTML path, so the path check does not answer first and this exercises

@@ -69,6 +69,16 @@ export function post503(message = '') {
   });
 }
 
+// RFC 9110 requires an Allow header on a 405, and reads are what is left once the write is gone.
+export function post405(message = '') {
+  return daResp({
+    body: message,
+    status: 405,
+    contentType: 'text/plain; charset=utf-8',
+    headers: [['Allow', 'GET, HEAD, OPTIONS']],
+  });
+}
+
 export function head401() {
   return new Response(null, { status: 401 });
 }

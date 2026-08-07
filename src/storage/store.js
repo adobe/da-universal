@@ -9,50 +9,29 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { SOURCE_BUS } from './content-source.js';
-
 /**
- * Picks the store for a request, the way to reach it, and the shape it takes a write in.
+ * Picks the store that holds a site's content, the url the document has in it, and the way to
+ * reach it.
  *
  * da-admin answers over a service binding and the source bus over the public network, so one
- * fetch cannot serve both. They also differ on the write body: helix-api-service reads the raw
- * request body and types it from the path extension, parsing no form data anywhere, while
- * da-admin takes the document as a `data` form part. Handing either the other's shape stores
- * something other than the document and answers 201. `write` sends the document so the caller
- * never assembles either shape.
+ * fetch cannot serve both and the caller cannot pick the transport for itself.
  *
  * @param {Object} env worker env
  * @param {Object} daCtx
- * @param {{kind: string, base?: string}} source the resolved content source
+ * @param {boolean} onSourceBus whether the site is enrolled on the source bus
  */
-export default function getStore(env, daCtx, source) {
+export default function getStore(env, daCtx, onSourceBus) {
   const { org, site, sourcePath } = daCtx;
 
-  if (source.kind === SOURCE_BUS) {
-    const url = new URL(`${source.base}${sourcePath}`);
+  if (onSourceBus) {
     return {
-      url,
+      url: new URL(`/${org}/sites/${site}/source${sourcePath}`, env.AEM_API),
       fetch: (input, init) => fetch(input, init),
-      write: (html, authToken) => fetch(new Request(url, {
-        method: 'POST',
-        body: html,
-        headers: { Authorization: authToken, 'Content-Type': 'text/html' },
-      })),
     };
   }
 
-  const url = new URL(`/source/${org}/${site}${sourcePath}`, env.DA_ADMIN);
   return {
-    url,
+    url: new URL(`/source/${org}/${site}${sourcePath}`, env.DA_ADMIN),
     fetch: (input, init) => env.daadmin.fetch(input, init),
-    write: (html, authToken) => {
-      const body = new FormData();
-      body.set('data', new Blob([html], { type: 'text/html' }));
-      return env.daadmin.fetch(new Request(url, {
-        method: 'POST',
-        body,
-        headers: { Authorization: authToken },
-      }));
-    },
   };
 }
