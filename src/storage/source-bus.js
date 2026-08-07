@@ -15,9 +15,13 @@ const UPGRADE_HEADER = 'x-api-upgrade-available';
 
 /**
  * Asks `/ping` whether a site is on the source bus.
+ *
+ * An answer without the header is legacy: helix-admin sets it when config resolution succeeded and
+ * named the API. No answer at all is not, so the caller refuses rather than picking a store.
+ *
  * @param {Object} env worker env, `HLX_ADMIN` is where the probe goes
  * @param {Object} daCtx
- * @returns {Promise<boolean>}
+ * @returns {Promise<boolean|undefined>} undefined when the probe could not answer
  */
 export default async function isSourceBus(env, daCtx) {
   const { org, site } = daCtx;
@@ -31,6 +35,6 @@ export default async function isSourceBus(env, daCtx) {
     return response.headers.get(UPGRADE_HEADER) !== null;
   } catch (e) {
     console.warn(`[source] ${key} ping failed: ${e.name}: ${e.message}`);
-    return false;
+    return undefined;
   }
 }

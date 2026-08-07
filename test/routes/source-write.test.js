@@ -14,7 +14,7 @@
 import assert from 'assert';
 import esmock from 'esmock';
 import { getDaCtx } from '../../src/utils/daCtx.js';
-import { SOURCE_BUS_READ_ONLY_MESSAGE } from '../../src/utils/constants.js';
+import { SOURCE_BUS_READ_ONLY_MESSAGE, SOURCE_UNDETERMINED_MESSAGE } from '../../src/utils/constants.js';
 
 const AT = 'https://main--site--org.ue.da.live/folder/content';
 const DOC = '<body><main><div><p>the author typed this</p></div></main></body>';
@@ -26,7 +26,11 @@ const uePost = (url, html = DOC) => {
   return new Request(url, { method: 'POST', body, headers: { Authorization: 'Bearer t' } });
 };
 
-const build = async ({ onSourceBus = false, status = 201 } = {}) => {
+const build = async (overrides = {}) => {
+  const { status = 201 } = overrides;
+  // `in overrides` rather than a destructured default, so passing an explicit undefined really
+  // does simulate a probe that could not answer
+  const onSourceBus = 'onSourceBus' in overrides ? overrides.onSourceBus : false;
   const seen = {
     bus: [], legacy: [], lookups: 0, order: [],
   };
@@ -117,6 +121,30 @@ describe('writing to the store that holds the site', () => {
 
       assert.match(res.headers.get('Content-Type'), /^text\/plain/);
       assert.strictEqual(await res.text(), SOURCE_BUS_READ_ONLY_MESSAGE);
+    });
+  });
+
+  // a write is the one operation a wrong store cannot be walked back from, so no answer means no
+  // write rather than a guess
+  describe('when /ping cannot say which store holds the site', () => {
+    it('is refused with 503 and touches neither store', async () => {
+      const { res, seen } = await post({ onSourceBus: undefined });
+
+      assert.strictEqual(res.status, 503);
+      assert.strictEqual(seen.bus.length, 0);
+      assert.strictEqual(seen.legacy.length, 0);
+    });
+
+    it('asks the caller to retry, unlike the source-bus refusal', async () => {
+      const { res } = await post({ onSourceBus: undefined });
+
+      assert.ok(Number(res.headers.get('Retry-After')) > 0);
+    });
+
+    it('says which of the two refusals it is', async () => {
+      const { res } = await post({ onSourceBus: undefined });
+
+      assert.strictEqual(await res.text(), SOURCE_UNDETERMINED_MESSAGE);
     });
   });
 

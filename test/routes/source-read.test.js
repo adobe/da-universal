@@ -24,13 +24,13 @@ const authedReq = (url) => new Request(url, { headers: { Authorization: 'Bearer 
  */
 const build = async (overrides = {}) => {
   const {
-    onSourceBus = false,
     bus = () => new Response('<body>from the source bus</body>', { status: 200, headers: { etag: '"busetag"' } }),
     legacy = () => new Response('<body>from da-admin</body>', { status: 200 }),
   } = overrides;
-  // 'headHtml' in overrides rather than a destructured default, so passing
-  // `{ headHtml: undefined }` really does simulate a missing head.html
+  // `in overrides` rather than a destructured default on these two, so passing an explicit
+  // undefined really does simulate a missing head.html and a probe that could not answer
   const headHtml = 'headHtml' in overrides ? overrides.headHtml : '<meta name="from" content="aem" />';
+  const onSourceBus = 'onSourceBus' in overrides ? overrides.onSourceBus : false;
   const seen = {
     bus: [], legacy: [], ue: 0, lookups: 0,
   };
@@ -74,6 +74,54 @@ const build = async (overrides = {}) => {
   });
   return { ...mod, env, seen };
 };
+
+describe('when /ping cannot say which store holds the site', () => {
+  afterEach(() => {
+    delete globalThis.fetch;
+  });
+
+  // picking a store without an answer is a coin flip, and reading the wrong one hands the author
+  // the wrong document at 200
+  it('refuses an html read with 503 and touches neither store', async () => {
+    const { daSourceGet, env, seen } = await build({ onSourceBus: undefined });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 503);
+    assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
+  });
+
+  it('asks the caller to retry', async () => {
+    const { daSourceGet, env } = await build({ onSourceBus: undefined });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.ok(Number(res.headers.get('Retry-After')) > 0);
+  });
+
+  it('refuses a non-html read too', async () => {
+    const { daSourceGet, env, seen } = await build({ onSourceBus: undefined });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 503);
+    assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
+  });
+
+  it('refuses a HEAD with 503 and no body', async () => {
+    const { daSourceHead, env, seen } = await build({ onSourceBus: undefined });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceHead({ env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 503);
+    assert.strictEqual(await res.text(), '');
+    assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
+  });
+});
 
 describe('reading from the store that holds the site', () => {
   afterEach(() => {
@@ -468,6 +516,26 @@ describe('reading from the store that holds the site', () => {
 
       it(`still prefers the store at 200 on a ${handler.toUpperCase()}`, async () => {
         assert.strictEqual(await raced(handler, 200, 404), 200);
+      });
+
+      // the reason an undetermined store answers 503 rather than throwing: allSettled turns a
+      // rejection into "no answer" and the proxy's 404 would win, claiming the image is absent
+      it(`answers 503 when the store is undetermined on a ${handler.toUpperCase()}`, async () => {
+        const mod = await esmock(`../../src/handlers/${handler}.js`, {
+          '../../src/routes/da-admin.js': {
+            daSourceGet: async () => { throw new TypeError('fetch failed'); },
+            daSourceHead: async () => { throw new TypeError('fetch failed'); },
+          },
+          '../../src/routes/aem-proxy.js': {
+            handleAEMProxyRequest: async () => new Response('', { status: 404 }),
+          },
+        });
+        const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
+
+        const thrown = (await mod.default({ req, env: {}, daCtx: getDaCtx(req) })).status;
+
+        assert.strictEqual(thrown, 404, 'a rejection is swallowed and the proxy answers');
+        assert.strictEqual(await raced(handler, 503, 404), 503, 'a 503 response is not');
       });
     });
 

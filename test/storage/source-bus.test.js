@@ -126,22 +126,38 @@ describe('isSourceBus', () => {
         assert.strictEqual(await isSourceBus(env, daCtx()), false);
       });
     });
+  });
 
-    it('answers false when the probe throws', async () => {
+  // an answer without the header is legacy. no answer is not an answer, and the caller refuses
+  // rather than picking a store on a coin flip
+  describe('when /ping cannot answer', () => {
+    it('answers undefined when the probe throws', async () => {
       stubFetch(() => {
         throw new TypeError('fetch failed');
       });
 
-      assert.strictEqual(await isSourceBus(env, daCtx()), false);
+      assert.strictEqual(await isSourceBus(env, daCtx()), undefined);
     });
 
-    // HLX_ADMIN is a wrangler.toml constant, so this is a broken deploy rather than a runtime
-    // condition. It answers legacy instead of throwing out of every read.
-    it('answers false without asking when HLX_ADMIN is unusable', async () => {
+    it('answers undefined when HLX_ADMIN is unusable, without asking', async () => {
       stubFetch(upgraded);
 
-      assert.strictEqual(await isSourceBus({ AEM_API: 'https://api.aem.live' }, daCtx()), false);
+      assert.strictEqual(
+        await isSourceBus({ AEM_API: 'https://api.aem.live' }, daCtx()),
+        undefined,
+      );
       assert.strictEqual(calls.length, 0);
+    });
+
+    // the distinction the caller acts on: false is a store, undefined is no store
+    it('is distinguishable from a legacy answer', async () => {
+      stubFetch(() => ping());
+      assert.strictEqual(await isSourceBus(env, daCtx()), false);
+
+      stubFetch(() => {
+        throw new TypeError('fetch failed');
+      });
+      assert.strictEqual(await isSourceBus(env, daCtx()), undefined);
     });
   });
 

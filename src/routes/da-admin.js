@@ -28,6 +28,7 @@ import {
   BRANCH_NOT_FOUND_HTML_MESSAGE,
   DEFAULT_HTML_TEMPLATE,
   SOURCE_BUS_READ_ONLY_MESSAGE,
+  SOURCE_UNDETERMINED_MESSAGE,
   SOURCE_UNREACHABLE_HTML_MESSAGE,
   SOURCE_UNREACHABLE_MESSAGE,
   UNAUTHORIZED_HTML_MESSAGE,
@@ -103,7 +104,15 @@ async function reachStore(store, send) {
  * @returns {Promise<Response|undefined>} undefined when the store could not be reached
  */
 async function readSource(env, daCtx, init) {
-  const store = getStore(env, daCtx, await isSourceBus(env, daCtx));
+  const onSourceBus = await isSourceBus(env, daCtx);
+  // a store picked without an answer is a coin flip, and reading the wrong one serves the wrong
+  // document at 200
+  if (onSourceBus === undefined) {
+    console.warn(`503 ${init.method} ${daCtx.sourcePath}, the store could not be determined`);
+    return undefined;
+  }
+
+  const store = getStore(env, daCtx, onSourceBus);
   console.log(`-> ${init.method} ${store.url.toString()}`);
   return reachStore(store, () => store.fetch(store.url, init));
 }
@@ -249,6 +258,10 @@ export async function daSourcePost({ req, env, daCtx }) {
 
     // the payload is settled, so the only question left is where it goes
     const onSourceBus = await isSourceBus(env, daCtx);
+    if (onSourceBus === undefined) {
+      console.warn(`503 POST ${sourcePath}, the store could not be determined`);
+      return post503(SOURCE_UNDETERMINED_MESSAGE);
+    }
 
     if (onSourceBus) {
       console.log(`405 POST ${sourcePath}, writes to the source bus are refused through the preview proxy. write directly to the source bus instead.`);
