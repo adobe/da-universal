@@ -51,4 +51,12 @@ export const DEFAULT_HTML_TEMPLATE = '<body><header></header><main><div></div></
 
 export const BRANCH_NOT_FOUND_HTML_MESSAGE = '<html><body><h1>Not found: Unable to retrieve AEM branch</h1></body></html>';
 
+export const SOURCE_UNREACHABLE_HTML_MESSAGE = '<html><body><h1>503: Content store unreachable</h1><p>The store that holds this document did not answer. Please retry.</p></body></html>';
+
+export const SOURCE_UNREACHABLE_MESSAGE = 'The store that holds this document did not answer, so nothing was written. Please retry.';
+
+export const SOURCE_UNDETERMINED_MESSAGE = 'Which store holds this document could not be determined, so nothing was written. Please retry.';
+
+export const SOURCE_BUS_READ_ONLY_MESSAGE = 'This site is on the source bus, which this proxy only reads. Nothing was written, and retrying will not help.';
+
 export const DEFAULT_UNAUTHORIZED_HTML_MESSAGE = '<html><body><h1>401: Unauthorized</h1></body></html>';

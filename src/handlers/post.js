@@ -9,9 +9,12 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+import { get404 } from '../responses/index.js';
 import { daSourcePost } from '../routes/da-admin.js';
 
 export default async function postHandler({ req, env, daCtx }) {
+  if (!daCtx.site) return get404();
+
   // for now forward all POST requests to the da-admin
   return daSourcePost({ req, env, daCtx });
 }

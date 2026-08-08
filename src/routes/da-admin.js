@@ -22,10 +22,20 @@ import {
   applyQuickEditToDocument, buildQuickEditCookie, buildQuickEditNotFoundResponse,
 } from '../utils/quick-edit.js';
 import {
-  daResp, get401, get404, get415, head401,
+  daResp, get401, get404, get415, get503, head401, head503, post405, post503,
 } from '../responses/index.js';
-import { BRANCH_NOT_FOUND_HTML_MESSAGE, DEFAULT_HTML_TEMPLATE, UNAUTHORIZED_HTML_MESSAGE } from '../utils/constants.js';
+import {
+  BRANCH_NOT_FOUND_HTML_MESSAGE,
+  DEFAULT_HTML_TEMPLATE,
+  SOURCE_BUS_READ_ONLY_MESSAGE,
+  SOURCE_UNDETERMINED_MESSAGE,
+  SOURCE_UNREACHABLE_HTML_MESSAGE,
+  SOURCE_UNREACHABLE_MESSAGE,
+  UNAUTHORIZED_HTML_MESSAGE,
+} from '../utils/constants.js';
 import { getSiteConfig } from '../storage/config.js';
+import isSourceBus from '../storage/source-bus.js';
+import getStore from '../storage/store.js';
 import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 
 const HTML_POST_TYPE = 'text/html';
@@ -33,10 +43,6 @@ const HTML_POST_TYPE = 'text/html';
 export function isHtmlPostType(type) {
   if (!type) return true;
   return type.split(';')[0].trim().toLowerCase() === HTML_POST_TYPE;
-}
-
-function getSourceUrl(env, { org, site, sourcePath }) {
-  return new URL(`/source/${org}/${site}${sourcePath}`, env.DA_ADMIN);
 }
 
 async function getFileBody(data) {
@@ -80,6 +86,37 @@ async function getPageTemplate(env, daCtx, aemCtx) {
   return DEFAULT_HTML_TEMPLATE;
 }
 
+/**
+ * Sends a request to a store and answers 503 when it could not be reached at all.
+ */
+async function reachStore(store, send) {
+  try {
+    return await send();
+  } catch (e) {
+    console.warn(`503 ${store.url}, the store could not be reached: ${e.name}: ${e.message}`);
+    return undefined;
+  }
+}
+
+/**
+ * Reads from the store that holds the site.
+ *
+ * @returns {Promise<Response|undefined>} undefined when the store could not be reached
+ */
+async function readSource(env, daCtx, init) {
+  const onSourceBus = await isSourceBus(env, daCtx);
+  // a store picked without an answer is a coin flip, and reading the wrong one serves the wrong
+  // document at 200
+  if (onSourceBus === undefined) {
+    console.warn(`503 ${init.method} ${daCtx.sourcePath}, the store could not be determined`);
+    return undefined;
+  }
+
+  const store = getStore(env, daCtx, onSourceBus);
+  console.log(`-> ${init.method} ${store.url.toString()}`);
+  return reachStore(store, () => store.fetch(store.url, init));
+}
+
 export async function daSourceGet({ req, env, daCtx }) {
   const { ext, authToken } = daCtx;
 
@@ -100,17 +137,20 @@ export async function daSourceGet({ req, env, daCtx }) {
   headers.set('Authorization', authToken);
 
   if (ext !== 'html') {
-    // for non-HTML files, simply proxy the request without processing
-    const adminUrl = getSourceUrl(env, daCtx);
-    console.log(`-> ${adminUrl.toString()}`);
-    const response = await env.daadmin.fetch(adminUrl, { method: 'GET', headers });
-    console.log(`<- ${adminUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+    // for non-HTML files, simply proxy the request without processing. A refusal is passed on as
+    // itself: nothing renders an image, so the da:401 shell would only corrupt it.
+    const response = await readSource(env, daCtx, { method: 'GET', headers });
+    if (!response) return get503(SOURCE_UNREACHABLE_HTML_MESSAGE);
+    console.log(`<- ${daCtx.sourcePath}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
     return response;
   }
 
-  // get the AEM parts (head.html)
+  // the store lookup costs a round trip, so it runs alongside head.html rather than after it
   const aemCtx = getAemCtx(env, daCtx);
-  const headHtml = await getAEMHtml(aemCtx, '/head.html');
+  const [headHtml, sourceResp] = await Promise.all([
+    getAEMHtml(aemCtx, '/head.html'),
+    readSource(env, daCtx, { method: 'GET', headers }),
+  ]);
   if (!headHtml) {
     // quick-edit still needs a working shell (with the import map) so the editor
     // can load into this page, even when the AEM branch doesn't exist yet.
@@ -119,22 +159,24 @@ export async function daSourceGet({ req, env, daCtx }) {
     }
     return get404(BRANCH_NOT_FOUND_HTML_MESSAGE);
   }
+  if (!sourceResp) return get503(SOURCE_UNREACHABLE_HTML_MESSAGE);
+  console.log(`<- ${daCtx.sourcePath}. ${sourceResp.status} ${sourceResp.statusText}`, { status: sourceResp.status, statusText: sourceResp.statusText });
 
-  // get the content from DA admin
-  const adminUrl = getSourceUrl(env, daCtx);
+  // the store is the only thing to see the token, and the authorbus extension recovers off the
+  // da:401 meta rather than the status, so a refusal from the store gets that shell
+  if (sourceResp.status === 401 || sourceResp.status === 403) {
+    return daResp({ body: UNAUTHORIZED_HTML_MESSAGE, status: sourceResp.status, contentType: 'text/html' });
+  }
 
-  // eslint-disable-next-line no-param-reassign
-  req = new Request(adminUrl, {
-    method: 'GET',
-    headers,
-  });
-  console.log(`-> ${adminUrl.toString()}`);
-  const daAdminResp = await env.daadmin.fetch(req);
-  console.log(`<- ${adminUrl.toString()}. ${daAdminResp.status} ${daAdminResp.statusText}`, { status: daAdminResp.status, statusText: daAdminResp.statusText });
+  // only a 404 means "this document is not here". Composing the starter template over anything
+  // else hands the author a blank page to save over a document that exists.
+  if (sourceResp.status !== 200 && sourceResp.status !== 404) {
+    return sourceResp;
+  }
 
   // use the stored content when available, otherwise fall back to a template
-  const bodyHtml = daAdminResp && daAdminResp.status === 200
-    ? await daAdminResp.text()
+  const bodyHtml = sourceResp.status === 200
+    ? await sourceResp.text()
     : await getPageTemplate(env, daCtx, aemCtx, headHtml);
 
   // compose the page the same way for every request type
@@ -174,10 +216,9 @@ export async function daSourceHead({ env, daCtx }) {
   const headers = new Headers();
   headers.set('Authorization', authToken);
 
-  const adminUrl = getSourceUrl(env, daCtx);
-  console.log(`-> HEAD ${adminUrl.toString()}`);
-  const response = await env.daadmin.fetch(adminUrl, { method: 'HEAD', headers });
-  console.log(`<- HEAD ${adminUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+  const response = await readSource(env, daCtx, { method: 'HEAD', headers });
+  if (!response) return head503();
+  console.log(`<- HEAD ${daCtx.sourcePath}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
   return new Response(null, { status: response.status, headers: response.headers });
 }
 
@@ -213,22 +254,32 @@ export async function daSourcePost({ req, env, daCtx }) {
 
     minifyWhitespace(bodyNode);
 
-    // create new POST request with the body content
-    const body = new FormData();
     const bodyContent = toHtml(bodyNode);
-    const data = new Blob([bodyContent], { type: 'text/html' });
-    body.set('data', data);
-    const headers = { Authorization: authToken };
-    const adminUrl = getSourceUrl(env, daCtx);
-    // eslint-disable-next-line no-param-reassign
-    req = new Request(adminUrl, {
+
+    // the payload is settled, so the only question left is where it goes
+    const onSourceBus = await isSourceBus(env, daCtx);
+    if (onSourceBus === undefined) {
+      console.warn(`503 POST ${sourcePath}, the store could not be determined`);
+      return post503(SOURCE_UNDETERMINED_MESSAGE);
+    }
+
+    if (onSourceBus) {
+      console.log(`405 POST ${sourcePath}, writes to the source bus are refused through the preview proxy. write directly to the source bus instead.`);
+      return post405(SOURCE_BUS_READ_ONLY_MESSAGE);
+    }
+
+    // da-admin takes the document as a `data` form part
+    const store = getStore(env, daCtx, onSourceBus);
+    const body = new FormData();
+    body.set('data', new Blob([bodyContent], { type: 'text/html' }));
+    console.log(`-> ${store.url.toString()}`);
+    const response = await reachStore(store, () => store.fetch(new Request(store.url, {
       method: 'POST',
       body,
-      headers,
-    });
-    console.log(`-> ${adminUrl.toString()}`);
-    const response = await env.daadmin.fetch(req);
-    console.log(`<- ${adminUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+      headers: { Authorization: authToken },
+    })));
+    if (!response) return post503(SOURCE_UNREACHABLE_MESSAGE);
+    console.log(`<- ${store.url.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
     return response;
   }
 
