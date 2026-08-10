@@ -44,8 +44,6 @@ export default async function getHandler({ req, env, daCtx }) {
     } else if (aemRes?.status === 200) {
       response = aemRes;
     } else if (storeRes && storeRes.status >= 500) {
-      // the store could not answer, so neither can we. Taking the proxy's 404 here would say the
-      // image does not exist when the truth is that we could not find out.
       response = storeRes;
     } else if (aemRes) {
       response = aemRes;

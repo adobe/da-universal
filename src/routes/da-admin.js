@@ -40,6 +40,8 @@ import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 
 const HTML_POST_TYPE = 'text/html';
 
+const PROBE_FAILED = 'the /ping probe failed, so which store holds this site is unknown';
+
 export function isHtmlPostType(type) {
   if (!type) return true;
   return type.split(';')[0].trim().toLowerCase() === HTML_POST_TYPE;
@@ -87,29 +89,35 @@ async function getPageTemplate(env, daCtx, aemCtx) {
 }
 
 /**
- * Sends a request to a store and answers 503 when it could not be reached at all.
+ * Sends a request to a store and reports why it could not be reached at all.
+ *
+ * The cause is collapsed onto one line because it is answered as a header, which cannot span
+ * lines, and a `TypeError` carrying a stack would otherwise throw where the 503 is built.
+ *
+ * @returns {Promise<{response?: Response, error?: string}>}
  */
 async function reachStore(store, send) {
   try {
-    return await send();
+    return { response: await send() };
   } catch (e) {
-    console.warn(`503 ${store.url}, the store could not be reached: ${e.name}: ${e.message}`);
-    return undefined;
+    const error = `${e.name}: ${e.message}`.replace(/\s+/g, ' ').trim();
+    console.warn(`503 ${store.url}, the store could not be reached: ${error}`);
+    return { error };
   }
 }
 
 /**
  * Reads from the store that holds the site.
  *
- * @returns {Promise<Response|undefined>} undefined when the store could not be reached
+ * @returns {Promise<{response?: Response, error?: string}>} `error` says why there is no response
  */
 async function readSource(env, daCtx, init) {
   const onSourceBus = await isSourceBus(env, daCtx);
   // a store picked without an answer is a coin flip, and reading the wrong one serves the wrong
   // document at 200
   if (onSourceBus === undefined) {
-    console.warn(`503 ${init.method} ${daCtx.sourcePath}, the store could not be determined`);
-    return undefined;
+    console.warn(`503 ${init.method} ${daCtx.sourcePath}, ${PROBE_FAILED}`);
+    return { error: PROBE_FAILED };
   }
 
   const store = getStore(env, daCtx, onSourceBus);
@@ -139,15 +147,15 @@ export async function daSourceGet({ req, env, daCtx }) {
   if (ext !== 'html') {
     // for non-HTML files, simply proxy the request without processing. A refusal is passed on as
     // itself: nothing renders an image, so the da:401 shell would only corrupt it.
-    const response = await readSource(env, daCtx, { method: 'GET', headers });
-    if (!response) return get503(SOURCE_UNREACHABLE_HTML_MESSAGE);
+    const { response, error } = await readSource(env, daCtx, { method: 'GET', headers });
+    if (!response) return get503(SOURCE_UNREACHABLE_HTML_MESSAGE, error);
     console.log(`<- ${daCtx.sourcePath}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
     return response;
   }
 
   // the store lookup costs a round trip, so it runs alongside head.html rather than after it
   const aemCtx = getAemCtx(env, daCtx);
-  const [headHtml, sourceResp] = await Promise.all([
+  const [headHtml, { response: sourceResp, error: sourceError }] = await Promise.all([
     getAEMHtml(aemCtx, '/head.html'),
     readSource(env, daCtx, { method: 'GET', headers }),
   ]);
@@ -159,7 +167,7 @@ export async function daSourceGet({ req, env, daCtx }) {
     }
     return get404(BRANCH_NOT_FOUND_HTML_MESSAGE);
   }
-  if (!sourceResp) return get503(SOURCE_UNREACHABLE_HTML_MESSAGE);
+  if (!sourceResp) return get503(SOURCE_UNREACHABLE_HTML_MESSAGE, sourceError);
   console.log(`<- ${daCtx.sourcePath}. ${sourceResp.status} ${sourceResp.statusText}`, { status: sourceResp.status, statusText: sourceResp.statusText });
 
   // the store is the only thing to see the token, and the authorbus extension recovers off the
@@ -216,8 +224,8 @@ export async function daSourceHead({ env, daCtx }) {
   const headers = new Headers();
   headers.set('Authorization', authToken);
 
-  const response = await readSource(env, daCtx, { method: 'HEAD', headers });
-  if (!response) return head503();
+  const { response, error } = await readSource(env, daCtx, { method: 'HEAD', headers });
+  if (!response) return head503(error);
   console.log(`<- HEAD ${daCtx.sourcePath}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
   return new Response(null, { status: response.status, headers: response.headers });
 }
@@ -259,8 +267,8 @@ export async function daSourcePost({ req, env, daCtx }) {
     // the payload is settled, so the only question left is where it goes
     const onSourceBus = await isSourceBus(env, daCtx);
     if (onSourceBus === undefined) {
-      console.warn(`503 POST ${sourcePath}, the store could not be determined`);
-      return post503(SOURCE_UNDETERMINED_MESSAGE);
+      console.warn(`503 POST ${sourcePath}, ${PROBE_FAILED}`);
+      return post503(SOURCE_UNDETERMINED_MESSAGE, PROBE_FAILED);
     }
 
     if (onSourceBus) {
@@ -273,12 +281,12 @@ export async function daSourcePost({ req, env, daCtx }) {
     const body = new FormData();
     body.set('data', new Blob([bodyContent], { type: 'text/html' }));
     console.log(`-> ${store.url.toString()}`);
-    const response = await reachStore(store, () => store.fetch(new Request(store.url, {
+    const { response, error } = await reachStore(store, () => store.fetch(new Request(store.url, {
       method: 'POST',
       body,
       headers: { Authorization: authToken },
     })));
-    if (!response) return post503(SOURCE_UNREACHABLE_MESSAGE);
+    if (!response) return post503(SOURCE_UNREACHABLE_MESSAGE, error);
     console.log(`<- ${store.url.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
     return response;
   }
