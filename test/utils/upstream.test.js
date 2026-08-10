@@ -54,6 +54,23 @@ describe('UpstreamError', () => {
   it('is an Error', () => {
     assert.ok(new UpstreamError(CONTENT_STORE, new Error('x')) instanceof Error);
   });
+
+  // one upstream names itself by a path out of the site config sheet, and a newline in that cell
+  // would throw where the header is appended, turning the 503 back into a bodyless 500
+  it('collapses whitespace in the upstream name too', () => {
+    const e = new UpstreamError('/templates/a\nx-injected: 1', new TypeError('x'));
+    assert.strictEqual(e.error, '/templates/a x-injected: 1 failed: TypeError: x');
+  });
+
+  it('caps the whole header value at 1024 characters', () => {
+    const e = new UpstreamError('/'.padEnd(900, 'a'), new Error('y'.repeat(900)));
+    assert.strictEqual(e.error.length, 1024);
+  });
+
+  it('renders a header value a Response accepts', () => {
+    const e = new UpstreamError('/t\r\n\u0000', new Error('boom'));
+    assert.doesNotThrow(() => new Response('', { headers: { 'x-error': e.error } }));
+  });
 });
 
 describe('reach', () => {

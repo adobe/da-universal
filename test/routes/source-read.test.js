@@ -35,7 +35,7 @@ const build = async (overrides = {}) => {
   const onSourceBus = 'onSourceBus' in overrides ? overrides.onSourceBus : false;
   const probeError = 'probeError' in overrides ? overrides.probeError : new TypeError('fetch failed');
   const seen = {
-    bus: [], legacy: [], ue: 0, lookups: 0,
+    bus: [], legacy: [], ue: 0, lookups: 0, composedHead: [],
   };
   globalThis.fetch = async (input, init) => {
     const request = input instanceof Request ? input : new Request(input, init);
@@ -67,7 +67,10 @@ const build = async (overrides = {}) => {
       getAEMHtml: async (ctx, path) => head(path),
     },
     '../../src/render/compose.js': {
-      composeHtml: async (daCtx, aemCtx, bodyHtml) => ({ bodyHtml }),
+      composeHtml: async (daCtx, aemCtx, bodyHtml, headHtml) => {
+        seen.composedHead.push(headHtml);
+        return { bodyHtml };
+      },
       serializeHtml: (tree) => `<html>${tree.bodyHtml}</html>`,
     },
     '../../src/ue/ue.js': {
@@ -765,12 +768,21 @@ describe('reading from the store that holds the site', () => {
     });
 
     it('composes without the project head entries', async () => {
-      const { daSourceGet, env } = await build({ onSourceBus: true, head: missingHead });
+      const { daSourceGet, env, seen } = await build({ onSourceBus: true, head: missingHead });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+      await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-      assert.doesNotMatch(await res.text(), /content="aem"/);
+      assert.deepStrictEqual(seen.composedHead, [undefined]);
+    });
+
+    it('composes with them when head.html is there', async () => {
+      const { daSourceGet, env, seen } = await build({ onSourceBus: true });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.deepStrictEqual(seen.composedHead, ['<meta name="from" content="aem" />']);
     });
 
     it('still instruments the canvas for UE', async () => {
@@ -934,6 +946,71 @@ describe('reading from the store that holds the site', () => {
 
       assert.strictEqual(res.status, 503);
       assert.strictEqual(res.headers.get('x-error'), '/templates/basic failed: TypeError: Network connection lost');
+    });
+  });
+
+  // 204, 205 and 304 cannot carry a body, so reflecting one into a rendered page throws where
+  // the Response is built and the read comes back as the worker's bodyless 500
+  describe('a head.html status that forbids a body', () => {
+    [204, 205, 304].forEach((status) => {
+      it(`answers ${status} without a body`, async () => {
+        const head = () => ({ status });
+        const { daSourceGet, env } = await build({ onSourceBus: true, head });
+        const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+        const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+        assert.strictEqual(res.status, status);
+        assert.strictEqual(await res.text(), '');
+      });
+    });
+
+    it('still names head.html in x-error', async () => {
+      const head = () => ({ status: 204 });
+      const { daSourceGet, env } = await build({ onSourceBus: true, head });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.headers.get('x-error'), '/head.html answered 204');
+    });
+  });
+
+  // the body is what an author reads in the editor; the header is not
+  describe('which system the 503 body names', () => {
+    it('names the preview host when head.html is what did not answer', async () => {
+      const { daSourceGet, env } = await build({
+        onSourceBus: true,
+        head: () => {
+          throw new UpstreamError('/head.html', new TypeError('fetch failed'));
+        },
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.match(await res.text(), /AEM unreachable/);
+    });
+
+    it('names the store when the store is what did not answer', async () => {
+      const { daSourceGet, env } = await build({
+        onSourceBus: true,
+        bus: () => { throw new TypeError('fetch failed'); },
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.match(await res.text(), /Content store unreachable/);
+    });
+
+    it('names the store when the probe is what did not answer', async () => {
+      const { daSourceGet, env } = await build({ onSourceBus: undefined });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.match(await res.text(), /Content store unreachable/);
     });
   });
 });
