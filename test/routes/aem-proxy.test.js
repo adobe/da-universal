@@ -14,6 +14,7 @@
 import assert from 'assert';
 import esmock from 'esmock';
 import { getDaCtx } from '../../src/utils/daCtx.js';
+import { AEM_PAGE, UpstreamError } from '../../src/utils/upstream.js';
 
 describe('AEM proxy quick-edit', () => {
   let handleAEMProxyRequest;
@@ -101,37 +102,29 @@ describe('AEM proxy when the origin does not answer', () => {
   });
 
   // this response is the whole answer for a css/js/json request, so a rejection used to reach
-  // the worker's catch and leave the browser with a bodyless 500
-  it('answers 503 instead of rejecting', async () => {
+  // the worker's catch and leave the browser with a bodyless 500. It now reports the upstream
+  // and the boundary builds the 503.
+  it('reports the upstream rather than a bare rejection', async () => {
     globalThis.fetch = async () => {
       throw new TypeError('Network connection lost');
     };
     const { req, daCtx } = stylesheet();
 
-    const res = await handleAEMProxyRequest({ req, env, daCtx });
-
-    assert.strictEqual(res.status, 503);
+    await assert.rejects(
+      () => handleAEMProxyRequest({ req, env, daCtx }),
+      (e) => e instanceof UpstreamError && e.upstream === AEM_PAGE,
+    );
   });
 
-  it('names the cause in x-error', async () => {
+  it('names the cause', async () => {
     globalThis.fetch = async () => {
       throw new TypeError('Network connection lost');
     };
     const { req, daCtx } = stylesheet();
 
-    const res = await handleAEMProxyRequest({ req, env, daCtx });
-
-    assert.strictEqual(res.headers.get('x-error'), 'aem.page failed: TypeError: Network connection lost');
-  });
-
-  it('asks the caller to retry', async () => {
-    globalThis.fetch = async () => {
-      throw new DOMException('timed out', 'TimeoutError');
-    };
-    const { req, daCtx } = stylesheet();
-
-    const res = await handleAEMProxyRequest({ req, env, daCtx });
-
-    assert.ok(Number(res.headers.get('Retry-After')) > 0);
+    await assert.rejects(
+      () => handleAEMProxyRequest({ req, env, daCtx }),
+      (e) => e.error === 'aem.page failed: TypeError: Network connection lost',
+    );
   });
 });

@@ -156,8 +156,6 @@ export class Modifiers {
   }
 }
 
-// the sheet only adds metadata to a page that composes without it, so an origin that cannot be
-// reached degrades the same way a 404 does instead of taking the read down
 export async function fetchBulkMetadata(aemCtx) {
   const url = new URL('/metadata.json', aemCtx.previewUrl);
   try {
@@ -178,6 +176,9 @@ export async function fetchBulkMetadata(aemCtx) {
       return Modifiers.fromModifierSheet(metadata.data);
     }
   } catch (e) {
+    // the page renders without the sheet, so an unreachable origin degrades like a 404.
+    // swallowed on purpose rather than thrown to the boundary: a 503 here would fail a read
+    // that already has the document and the head
     console.warn(`${url} could not be read: ${causeOf(e)}`);
   }
   return Modifiers.EMPTY;

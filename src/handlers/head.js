@@ -57,6 +57,9 @@ export default async function headHandler({ req, env, daCtx }) {
     if (storeRes.status >= 500) {
       return storeRes;
     }
+    if (aemHeadRes.status === 'rejected') {
+      throw aemHeadRes.reason;
+    }
     if (aemResponse && aemResponse.status < 500) {
       return aemResponse;
     }

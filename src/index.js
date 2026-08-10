@@ -68,8 +68,6 @@ export default {
           resp = unknownHandler();
       }
     } catch (e) {
-      // an upstream that did not answer is the one failure a route reports rather than throws
-      // over; anything else reaching here is a bug
       if (e instanceof UpstreamError) {
         console.warn(`503 ${req.method} ${url.pathname}: ${e.error}`);
         resp = upstreamFailure(e, req.method);

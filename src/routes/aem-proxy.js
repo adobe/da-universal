@@ -14,9 +14,7 @@ import {
   applyQuickEditToScript,
   getQuickEditCookiePath,
 } from '../utils/quick-edit.js';
-import { AEM_PAGE, UpstreamError, reach } from '../utils/upstream.js';
-import { get503 } from '../responses/index.js';
-import { AEM_UNREACHABLE_HTML_MESSAGE } from '../utils/constants.js';
+import { AEM_PAGE, reach } from '../utils/upstream.js';
 
 export async function handleAEMProxyRequest({ req, env, daCtx }) {
   const requestUrl = new URL(req.url);
@@ -50,15 +48,7 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
   }
 
   console.log(`-> ${aemUrl.toString()}`);
-  let response;
-  try {
-    response = await reach(AEM_PAGE, () => fetch(req, { cf: { cacheTtl: 0 } }));
-  } catch (e) {
-    // this is the whole answer for a css/js/json request, so a rejection would leave the browser
-    // with the worker's bodyless 500
-    if (!(e instanceof UpstreamError)) throw e;
-    return get503(AEM_UNREACHABLE_HTML_MESSAGE, e.error);
-  }
+  let response = await reach(AEM_PAGE, () => fetch(req, { cf: { cacheTtl: 0 } }));
   console.log(`<- ${aemUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
 
   const contentType = (response.headers.get('Content-Type') || '').toLowerCase();

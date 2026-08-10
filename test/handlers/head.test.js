@@ -14,6 +14,7 @@
 import assert from 'assert';
 import esmock from 'esmock';
 import reqs from '../mocks/req.js';
+import { AEM_PAGE, UpstreamError } from '../../src/utils/upstream.js';
 
 const { getDaCtx } = await import('../../src/utils/daCtx.js');
 
@@ -265,6 +266,33 @@ describe('HEAD handler', () => {
         const res = await headHandler({ req, env, daCtx });
 
         assert.strictEqual(res.status, 404);
+      });
+    });
+
+    // an aem.page that did not answer leaves the image unknown; 404 would say it is not there
+    describe('when the store has no image and AEM could not be reached', () => {
+      let headHandler;
+
+      beforeEach(async () => {
+        headHandler = (await esmock('../../src/handlers/head.js', {
+          '../../src/routes/da-admin.js': {
+            daSourceHead: async () => new Response(null, { status: 404 }),
+          },
+          '../../src/routes/aem-proxy.js': {
+            handleAEMProxyRequest: async () => {
+              throw new UpstreamError(AEM_PAGE, new TypeError('fetch failed'));
+            },
+          },
+        })).default;
+      });
+
+      it('propagates rather than claiming the image is absent', async () => {
+        const req = new Request('https://main--site--org.ue.da.live/image.png', { method: 'HEAD' });
+
+        await assert.rejects(
+          () => headHandler({ req, env: {}, daCtx: getDaCtx(req) }),
+          (e) => e instanceof UpstreamError && e.upstream === AEM_PAGE,
+        );
       });
     });
 

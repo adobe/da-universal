@@ -131,15 +131,12 @@ export async function daSourceGet({ req, env, daCtx }) {
     return response;
   }
 
-  // the store lookup costs a round trip, so it runs alongside head.html rather than after it.
-  // allSettled rather than all, so which of the two is reported does not depend on which
-  // rejected first
+  // the store lookup costs a round trip, so it runs alongside head.html rather than after it
   const aemCtx = getAemCtx(env, daCtx);
   const [headResult, sourceResult] = await Promise.allSettled([
     getAEMHtml(aemCtx, HEAD_PATH),
     readSource(env, daCtx, { method: 'GET', headers }),
   ]);
-  // the store holds the document, so a store that did not answer is the thing to report
   if (sourceResult.status === 'rejected') throw sourceResult.reason;
   if (headResult.status === 'rejected') throw headResult.reason;
   const head = headResult.value;

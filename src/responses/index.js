@@ -113,13 +113,6 @@ Disallow: /`;
   return daResp({ body, status: 200 });
 }
 
-/**
- * Renders an UpstreamError as the response for the method that asked. This is the only place a
- * 503 is built, so a route reports which upstream did not answer and nothing else.
- *
- * @param {import('../utils/upstream.js').UpstreamError} failure
- * @param {string} method
- */
 export function upstreamFailure({ upstream, error }, method) {
   if (method === 'HEAD') return head503(error);
   if (method === 'POST') {
@@ -128,7 +121,6 @@ export function upstreamFailure({ upstream, error }, method) {
       error,
     );
   }
-  // the body is what an author reads in the editor, so it names the system that failed
   return get503(
     upstream === PING || upstream === CONTENT_STORE
       ? SOURCE_UNREACHABLE_HTML_MESSAGE

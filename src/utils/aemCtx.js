@@ -50,7 +50,7 @@ export function withAemAuth(aemCtx, init = {}) {
 /**
  * Reads an HTML fragment from the site's preview host.
  *
- * A status that is not 200 is reported rather than collapsed, because a 404 means the branch
+ * A status that is not 200 is reported, because a 404 means the branch
  * does not serve this fragment while a 429 or a 5xx says nothing about the branch at all.
  * A host that does not answer throws an UpstreamError.
  *

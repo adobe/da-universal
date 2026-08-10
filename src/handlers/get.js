@@ -48,6 +48,8 @@ export default async function getHandler({ req, env, daCtx }) {
       throw daSourceGetRes.reason;
     } else if (storeRes.status >= 500) {
       response = storeRes;
+    } else if (aemProxyRes.status === 'rejected') {
+      throw aemProxyRes.reason;
     } else if (aemRes) {
       response = aemRes;
     } else {
