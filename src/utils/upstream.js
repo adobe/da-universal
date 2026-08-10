@@ -15,11 +15,12 @@ export const CONTENT_STORE = 'content store';
 export const AEM_PAGE = 'aem.page';
 
 /**
- * Renders a failure for the `x-error` header. A header value cannot span lines, so a message
- * carrying a stack would throw where the response is built.
+ * Makes a string safe to append as a header value. A header value cannot span lines, so a
+ * message carrying a stack, or a template path out of the site config sheet, would throw
+ * where the response is built.
  */
-export function causeOf(e) {
-  return `${e?.name ?? 'Error'}: ${e?.message ?? e}`
+function headerSafe(text) {
+  return String(text)
     // eslint-disable-next-line no-control-regex
     .replace(/[^\x20-\x7e]/g, ' ')
     .replace(/\s+/g, ' ')
@@ -28,12 +29,19 @@ export function causeOf(e) {
 }
 
 /**
+ * Renders a failure for the `x-error` header.
+ */
+export function causeOf(e) {
+  return headerSafe(`${e?.name ?? 'Error'}: ${e?.message ?? e}`);
+}
+
+/**
  * An upstream did not answer at all, which is different from answering a status. The route that
  * builds the 503 catches this and puts `error` in the `x-error` header.
  */
 export class UpstreamError extends Error {
   constructor(upstream, cause) {
-    const error = `${upstream} failed: ${causeOf(cause)}`;
+    const error = headerSafe(`${upstream} failed: ${causeOf(cause)}`);
     super(error);
     this.name = 'UpstreamError';
     this.upstream = upstream;
@@ -50,7 +58,8 @@ export async function reach(upstream, send) {
     return await send();
   } catch (e) {
     if (e instanceof UpstreamError) throw e;
-    console.warn(`${upstream} could not be reached: ${causeOf(e)}`);
-    throw new UpstreamError(upstream, e);
+    const failure = new UpstreamError(upstream, e);
+    console.warn(failure.error);
+    throw failure;
   }
 }

@@ -25,6 +25,7 @@ import {
   daResp, get401, get404, get415, get503, head401, head503, post405, post503,
 } from '../responses/index.js';
 import {
+  AEM_UNREACHABLE_HTML_MESSAGE,
   BRANCH_NOT_FOUND_HTML_MESSAGE,
   BRANCH_UNAVAILABLE_HTML_MESSAGE,
   DEFAULT_HTML_TEMPLATE,
@@ -44,6 +45,8 @@ import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 
 const HTML_POST_TYPE = 'text/html';
 const HEAD_PATH = '/head.html';
+const NO_BODY_STATUSES = new Set([204, 205, 304]);
+const STORE_UPSTREAMS = new Set([PING, CONTENT_STORE]);
 
 export function isHtmlPostType(type) {
   if (!type) return true;
@@ -166,10 +169,12 @@ async function readAndCompose({ req, env, daCtx }) {
     return daResp({ body: UNAUTHORIZED_HTML_MESSAGE, status: head.status, contentType: 'text/html' });
   }
   if (head.status !== 200 && head.status !== 404) {
+    // 204, 205 and 304 forbid a body, and handing one to the Response constructor throws
+    const bodied = !NO_BODY_STATUSES.has(head.status);
     return daResp({
-      body: BRANCH_UNAVAILABLE_HTML_MESSAGE,
+      body: bodied ? BRANCH_UNAVAILABLE_HTML_MESSAGE : null,
       status: head.status,
-      contentType: 'text/html',
+      contentType: bodied ? 'text/html' : undefined,
       headers: [['x-error', `${HEAD_PATH} answered ${head.status}`]],
     });
   }
@@ -229,7 +234,13 @@ export async function daSourceGet({ req, env, daCtx }) {
   try {
     return await readAndCompose({ req, env, daCtx });
   } catch (e) {
-    return unreachable(e, ({ error }) => get503(SOURCE_UNREACHABLE_HTML_MESSAGE, error));
+    // the body is what an author reads in the editor, so it names the system that failed
+    return unreachable(e, ({ upstream, error }) => get503(
+      STORE_UPSTREAMS.has(upstream)
+        ? SOURCE_UNREACHABLE_HTML_MESSAGE
+        : AEM_UNREACHABLE_HTML_MESSAGE,
+      error,
+    ));
   }
 }
 
