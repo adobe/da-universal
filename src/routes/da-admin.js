@@ -43,10 +43,10 @@ const HTML_POST_TYPE = 'text/html';
 const HEAD_HTML_PATH = '/head.html';
 const NO_BODY_STATUSES = new Set([204, 205, 304]);
 
-/** Names what stopped head.html being a head fragment, or undefined if nothing did. */
+/** Names what went wrong with head.html, or undefined if nothing did. A 404 is an answer. */
 function headUnusable(failure, head) {
-  if (failure) return failure.error;
-  if (head.status === 200) return undefined;
+  if (failure) return failure.error ?? causeOf(failure);
+  if (head.status === 200 || head.status === 404) return undefined;
   return `${HEAD_HTML_PATH} answered ${head.status}`;
 }
 
@@ -54,7 +54,11 @@ function headUnusable(failure, head) {
 function withHeader(response, name, value) {
   const headers = new Headers(response.headers);
   headers.set(name, value);
-  return new Response(response.body, { status: response.status, headers });
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 export function isHtmlPostType(type) {
@@ -184,7 +188,12 @@ export async function daSourceGet({ req, env, daCtx }) {
   // a 401 or 403 is answered rather than composed head-less, because the authorbus extension
   // refreshes the token off the da:401 shell
   if (head?.status === 401 || head?.status === 403) {
-    return daResp({ body: UNAUTHORIZED_HTML_MESSAGE, status: head.status, contentType: 'text/html' });
+    return daResp({
+      body: UNAUTHORIZED_HTML_MESSAGE,
+      status: head.status,
+      contentType: 'text/html',
+      headers: headHeaders,
+    });
   }
 
   // with nothing in the store, head.html is the only thing that knows the site exists
@@ -216,7 +225,8 @@ export async function daSourceGet({ req, env, daCtx }) {
     : await getPageTemplate(env, daCtx, aemCtx);
 
   // compose the page the same way for every request type
-  const documentTree = await composeHtml(daCtx, aemCtx, bodyHtml, head?.html);
+  const headHtml = head?.status === 200 ? head.html : undefined;
+  const documentTree = await composeHtml(daCtx, aemCtx, bodyHtml, headHtml);
 
   // layer the request-specific instrumentation on top of the composed page
   const extraHeaders = [...headHeaders];
