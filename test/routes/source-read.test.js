@@ -703,12 +703,13 @@ describe('reading from the store that holds the site', () => {
       assert.strictEqual(await res.text(), 'upstream said no');
     });
 
-    it('reports head.html when it is the only one that did not answer', async () => {
+    it('reports head.html when the store has nothing either', async () => {
       const { daSourceGet, env } = await build({
         onSourceBus: true,
         head: () => {
           throw new UpstreamError('/head.html', new TypeError('fetch failed'));
         },
+        bus: () => new Response('', { status: 404 }),
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
@@ -716,6 +717,104 @@ describe('reading from the store that holds the site', () => {
         () => daSourceGet({ req, env, daCtx: getDaCtx(req) }),
         refuses('/head.html', '/head.html failed: TypeError: fetch failed'),
       );
+    });
+  });
+
+  // the document is in the store, so head.html's own status does not stop it being served,
+  // composed without the project head entries as on a 404
+  describe('a document the store has, with head.html unusable', () => {
+    const doc = () => new Response('<body>from the source bus</body>', { status: 200 });
+
+    [429, 500, 502, 204].forEach((status) => {
+      it(`serves the document when head.html answered ${status}`, async () => {
+        const { daSourceGet, env, seen } = await build({
+          onSourceBus: true,
+          bus: doc,
+          head: () => ({ status }),
+        });
+        const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+        const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+        assert.strictEqual(res.status, 200);
+        assert.match(await res.text(), /from the source bus/);
+        assert.deepStrictEqual(seen.composedHead, [undefined]);
+      });
+    });
+
+    it('serves the document when head.html did not answer at all', async () => {
+      const { daSourceGet, env, seen } = await build({
+        onSourceBus: true,
+        bus: doc,
+        head: () => {
+          throw new UpstreamError('/head.html', new TypeError('fetch failed'));
+        },
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 200);
+      assert.deepStrictEqual(seen.composedHead, [undefined]);
+    });
+
+    it('names what happened to head.html in x-error', async () => {
+      const { daSourceGet, env } = await build({
+        onSourceBus: true,
+        bus: doc,
+        head: () => ({ status: 429 }),
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.headers.get('x-error'), '/head.html answered 429');
+    });
+
+    it('names an unreachable head.html too', async () => {
+      const { daSourceGet, env } = await build({
+        onSourceBus: true,
+        bus: doc,
+        head: () => {
+          throw new UpstreamError('/head.html', new TypeError('fetch failed'));
+        },
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.headers.get('x-error'), '/head.html failed: TypeError: fetch failed');
+    });
+
+    // the authorbus extension refreshes the token off the da:401 shell, and a head-less page
+    // would leave the author with no way to refresh it
+    [401, 403].forEach((status) => {
+      it(`still answers a head.html ${status} with the da:401 shell`, async () => {
+        const { daSourceGet, env } = await build({
+          onSourceBus: true,
+          bus: doc,
+          head: () => ({ status }),
+        });
+        const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+        const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+        assert.strictEqual(res.status, status);
+        assert.match(await res.text(), /da:401/);
+      });
+    });
+
+    it('still instruments the canvas for UE', async () => {
+      const { daSourceGet, env, seen } = await build({
+        onSourceBus: true,
+        bus: doc,
+        head: () => ({ status: 500 }),
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(seen.ue, 1);
     });
   });
 
@@ -803,11 +902,12 @@ describe('reading from the store that holds the site', () => {
 
     // a 429 or a 502 from aem.page says nothing about the branch, and answering 404 told the
     // author their site was gone
-    [401, 403, 429, 500, 502].forEach((status) => {
-      it(`keeps head.html's ${status} as the status`, async () => {
+    [429, 500, 502].forEach((status) => {
+      it(`keeps head.html's ${status} as the status when the store has nothing`, async () => {
         const { daSourceGet, env } = await build({
           onSourceBus: true,
           head: () => ({ status }),
+          bus: () => new Response('', { status: 404 }),
         });
         const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
@@ -819,7 +919,11 @@ describe('reading from the store that holds the site', () => {
 
     it('names head.html in x-error on a pass-through status', async () => {
       const head = () => ({ status: 429 });
-      const { daSourceGet, env } = await build({ onSourceBus: true, head });
+      const { daSourceGet, env } = await build({
+        onSourceBus: true,
+        head,
+        bus: () => new Response('', { status: 404 }),
+      });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
@@ -845,7 +949,11 @@ describe('reading from the store that holds the site', () => {
     // a branch that is missing, so quick-edit sees it now
     it('gives quick-edit the head status rather than the shell on a 429', async () => {
       const head = () => ({ status: 429 });
-      const { daSourceGet, env } = await build({ onSourceBus: true, head });
+      const { daSourceGet, env } = await build({
+        onSourceBus: true,
+        head,
+        bus: () => new Response('', { status: 404 }),
+      });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content?quick-edit');
 
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
@@ -938,7 +1046,11 @@ describe('reading from the store that holds the site', () => {
     [204, 205, 304].forEach((status) => {
       it(`answers ${status} without a body`, async () => {
         const head = () => ({ status });
-        const { daSourceGet, env } = await build({ onSourceBus: true, head });
+        const { daSourceGet, env } = await build({
+          onSourceBus: true,
+          head,
+          bus: () => new Response('', { status: 404 }),
+        });
         const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
         const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
@@ -950,7 +1062,11 @@ describe('reading from the store that holds the site', () => {
 
     it('still names head.html in x-error', async () => {
       const head = () => ({ status: 204 });
-      const { daSourceGet, env } = await build({ onSourceBus: true, head });
+      const { daSourceGet, env } = await build({
+        onSourceBus: true,
+        head,
+        bus: () => new Response('', { status: 404 }),
+      });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });

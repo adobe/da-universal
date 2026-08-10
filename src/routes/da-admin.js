@@ -43,6 +43,13 @@ const HTML_POST_TYPE = 'text/html';
 const HEAD_HTML_PATH = '/head.html';
 const NO_BODY_STATUSES = new Set([204, 205, 304]);
 
+/** Names what stopped head.html being a head fragment, or undefined if nothing did. */
+function headUnusable(failure, head) {
+  if (failure) return failure.error;
+  if (head.status === 200) return undefined;
+  return `${HEAD_HTML_PATH} answered ${head.status}`;
+}
+
 /** Adds a header to an upstream response without reading its body. */
 function withHeader(response, name, value) {
   const headers = new Headers(response.headers);
@@ -150,11 +157,12 @@ export async function daSourceGet({ req, env, daCtx }) {
   const sourceResp = sourceResult.value;
   console.log(`<- ${daCtx.sourcePath}. ${sourceResp.status} ${sourceResp.statusText}`, { status: sourceResp.status, statusText: sourceResp.statusText });
 
-  // the store's status is the answer, so a head.html that did not answer is named rather than
-  // thrown. otherwise an aem.page outage hides behind the store's status
   const headFailure = headResult.status === 'rejected' ? headResult.reason : undefined;
-  if (headFailure) console.warn(`${daCtx.sourcePath}: ${headFailure.error}`);
-  const headErrorHeaders = headFailure ? [['x-error', headFailure.error]] : [];
+  const head = headFailure ? undefined : headResult.value;
+  // an unusable head.html is named, otherwise an aem.page outage hides behind the store's status
+  const headNote = headUnusable(headFailure, head);
+  if (headNote) console.warn(`${daCtx.sourcePath}: ${headNote}`);
+  const headHeaders = headNote ? [['x-error', headNote]] : [];
 
   // the store is the only thing to see the token, and the authorbus extension recovers off the
   // da:401 meta rather than the status, so a refusal from the store gets that shell
@@ -163,44 +171,43 @@ export async function daSourceGet({ req, env, daCtx }) {
       body: UNAUTHORIZED_HTML_MESSAGE,
       status: sourceResp.status,
       contentType: 'text/html',
-      headers: headErrorHeaders,
+      headers: headHeaders,
     });
   }
 
   // only a 404 means "this document is not here". Composing the starter template over anything
   // else hands the author a blank page to save over a document that exists.
   if (sourceResp.status !== 200 && sourceResp.status !== 404) {
-    return headFailure ? withHeader(sourceResp, 'x-error', headFailure.error) : sourceResp;
+    return headNote ? withHeader(sourceResp, 'x-error', headNote) : sourceResp;
   }
 
-  // the store answered 200 or 404, so a head.html failure is reported
-  if (headFailure) throw headFailure;
-  const head = headResult.value;
-
-  // head.html carries the project's scripts and styles, not the answer to whether the document
-  // is there, so only a 404 is read as "this branch has no head". Anything else is passed on.
-  if (head.status === 401 || head.status === 403) {
+  // a 401 or 403 is answered rather than composed head-less, because the authorbus extension
+  // refreshes the token off the da:401 shell
+  if (head?.status === 401 || head?.status === 403) {
     return daResp({ body: UNAUTHORIZED_HTML_MESSAGE, status: head.status, contentType: 'text/html' });
   }
-  if (head.status !== 200 && head.status !== 404) {
-    // 204, 205 and 304 forbid a body, and handing one to the Response constructor throws
-    const bodied = !NO_BODY_STATUSES.has(head.status);
-    return daResp({
-      body: bodied ? BRANCH_UNAVAILABLE_HTML_MESSAGE : null,
-      status: head.status,
-      contentType: bodied ? 'text/html' : undefined,
-      headers: [['x-error', `${HEAD_HTML_PATH} answered ${head.status}`]],
-    });
-  }
 
-  // only head.html knows the site exists, so 404 from both is a missing branch, not a new document
-  if (sourceResp.status === 404 && head.status === 404) {
-    // quick-edit still needs a working shell (with the import map) so the editor
-    // can load into this page, even when the AEM branch doesn't exist yet.
-    if (isQuickEdit) {
-      return buildQuickEditNotFoundResponse();
+  // with nothing in the store, head.html is the only thing that knows the site exists
+  if (sourceResp.status === 404) {
+    if (headFailure) throw headFailure;
+    if (head.status === 404) {
+      // quick-edit still needs a working shell (with the import map) so the editor
+      // can load into this page, even when the AEM branch doesn't exist yet.
+      if (isQuickEdit) {
+        return buildQuickEditNotFoundResponse();
+      }
+      return get404(BRANCH_NOT_FOUND_HTML_MESSAGE);
     }
-    return get404(BRANCH_NOT_FOUND_HTML_MESSAGE);
+    if (head.status !== 200) {
+      // 204, 205 and 304 forbid a body, and handing one to the Response constructor throws
+      const bodied = !NO_BODY_STATUSES.has(head.status);
+      return daResp({
+        body: bodied ? BRANCH_UNAVAILABLE_HTML_MESSAGE : null,
+        status: head.status,
+        contentType: bodied ? 'text/html' : undefined,
+        headers: headHeaders,
+      });
+    }
   }
 
   // use the stored content when available, otherwise fall back to a template
@@ -209,10 +216,10 @@ export async function daSourceGet({ req, env, daCtx }) {
     : await getPageTemplate(env, daCtx, aemCtx);
 
   // compose the page the same way for every request type
-  const documentTree = await composeHtml(daCtx, aemCtx, bodyHtml, head.html);
+  const documentTree = await composeHtml(daCtx, aemCtx, bodyHtml, head?.html);
 
   // layer the request-specific instrumentation on top of the composed page
-  const extraHeaders = [];
+  const extraHeaders = [...headHeaders];
   if (isQuickEdit) {
     // no upstream AEM CSP to satisfy here, so no nonce is applied
     const entryPath = applyQuickEditToDocument(documentTree, undefined);
