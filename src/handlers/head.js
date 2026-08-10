@@ -43,6 +43,10 @@ export default async function headHandler({ req, env, daCtx }) {
 
     const storeRes = daSourceHeadRes.status === 'fulfilled' ? daSourceHeadRes.value : undefined;
     const aemResponse = aemHeadRes.status === 'fulfilled' ? aemHeadRes.value : null;
+    // the loser is dropped when the other answers 200, so it is logged here
+    [daSourceHeadRes, aemHeadRes].forEach(({ status, reason }) => {
+      if (status === 'rejected') console.warn(`${daCtx.path}: ${reason?.error ?? reason}`);
+    });
 
     if (storeRes?.status === 200) {
       return storeRes;

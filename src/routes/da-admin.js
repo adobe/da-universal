@@ -43,6 +43,13 @@ const HTML_POST_TYPE = 'text/html';
 const HEAD_HTML_PATH = '/head.html';
 const NO_BODY_STATUSES = new Set([204, 205, 304]);
 
+/** Adds a header to an upstream response without reading its body. */
+function withHeader(response, name, value) {
+  const headers = new Headers(response.headers);
+  headers.set(name, value);
+  return new Response(response.body, { status: response.status, headers });
+}
+
 export function isHtmlPostType(type) {
   if (!type) return true;
   return type.split(';')[0].trim().toLowerCase() === HTML_POST_TYPE;
@@ -143,20 +150,31 @@ export async function daSourceGet({ req, env, daCtx }) {
   const sourceResp = sourceResult.value;
   console.log(`<- ${daCtx.sourcePath}. ${sourceResp.status} ${sourceResp.statusText}`, { status: sourceResp.status, statusText: sourceResp.statusText });
 
+  // the store's status is the answer, so a head.html that did not answer is named rather than
+  // thrown. otherwise an aem.page outage hides behind the store's status
+  const headFailure = headResult.status === 'rejected' ? headResult.reason : undefined;
+  if (headFailure) console.warn(`${daCtx.sourcePath}: ${headFailure.error}`);
+  const headErrorHeaders = headFailure ? [['x-error', headFailure.error]] : [];
+
   // the store is the only thing to see the token, and the authorbus extension recovers off the
   // da:401 meta rather than the status, so a refusal from the store gets that shell
   if (sourceResp.status === 401 || sourceResp.status === 403) {
-    return daResp({ body: UNAUTHORIZED_HTML_MESSAGE, status: sourceResp.status, contentType: 'text/html' });
+    return daResp({
+      body: UNAUTHORIZED_HTML_MESSAGE,
+      status: sourceResp.status,
+      contentType: 'text/html',
+      headers: headErrorHeaders,
+    });
   }
 
   // only a 404 means "this document is not here". Composing the starter template over anything
   // else hands the author a blank page to save over a document that exists.
   if (sourceResp.status !== 200 && sourceResp.status !== 404) {
-    return sourceResp;
+    return headFailure ? withHeader(sourceResp, 'x-error', headFailure.error) : sourceResp;
   }
 
-  // the store has answered by now, so a head.html failure is reported here
-  if (headResult.status === 'rejected') throw headResult.reason;
+  // the store answered 200 or 404, so a head.html failure is reported
+  if (headFailure) throw headFailure;
   const head = headResult.value;
 
   // head.html carries the project's scripts and styles, not the answer to whether the document

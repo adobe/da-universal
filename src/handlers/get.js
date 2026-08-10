@@ -37,6 +37,10 @@ export default async function getHandler({ req, env, daCtx }) {
 
     const storeRes = daSourceGetRes.status === 'fulfilled' ? daSourceGetRes.value : undefined;
     const aemRes = aemProxyRes.status === 'fulfilled' ? aemProxyRes.value : undefined;
+    // the loser is dropped when the other answers 200, so it is logged here
+    [daSourceGetRes, aemProxyRes].forEach(({ status, reason }) => {
+      if (status === 'rejected') console.warn(`${daCtx.path}: ${reason?.error ?? reason}`);
+    });
 
     let response;
     if (storeRes?.status === 200) {

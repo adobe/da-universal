@@ -668,6 +668,41 @@ describe('reading from the store that holds the site', () => {
       assert.strictEqual(res.status, 429);
     });
 
+    // the store's status is the answer, but dropping the head.html failure would hide an
+    // aem.page outage
+    [401, 429, 500].forEach((status) => {
+      it(`names the head.html failure alongside a store ${status}`, async () => {
+        const { daSourceGet, env } = await build({
+          onSourceBus: true,
+          head: () => {
+            throw new UpstreamError('/head.html', new TypeError('fetch failed'));
+          },
+          bus: () => new Response('upstream said no', { status }),
+        });
+        const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+        const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+        assert.strictEqual(res.status, status);
+        assert.strictEqual(res.headers.get('x-error'), '/head.html failed: TypeError: fetch failed');
+      });
+    });
+
+    it('keeps the store body on a pass-through that also lost head.html', async () => {
+      const { daSourceGet, env } = await build({
+        onSourceBus: true,
+        head: () => {
+          throw new UpstreamError('/head.html', new TypeError('fetch failed'));
+        },
+        bus: () => new Response('upstream said no', { status: 502 }),
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(await res.text(), 'upstream said no');
+    });
+
     it('reports head.html when it is the only one that did not answer', async () => {
       const { daSourceGet, env } = await build({
         onSourceBus: true,
