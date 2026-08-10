@@ -871,6 +871,19 @@ describe('reading from the store that holds the site', () => {
       assert.match(await res.text(), /da:401/);
     });
 
+    // on main any non-ok head.html gave quick-edit its shell. a status that says "retry" is not
+    // a branch that is missing, so quick-edit sees it now
+    it('gives quick-edit the head status rather than the shell on a 429', async () => {
+      const head = () => ({ status: 429 });
+      const { daSourceGet, env } = await build({ onSourceBus: true, head });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content?quick-edit');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 429);
+      assert.doesNotMatch(await res.text(), /importmap/);
+    });
+
     // the store answered first and its status is about the document, which is the more specific
     // thing to report
     it('lets a store refusal outrank a head.html refusal', async () => {
