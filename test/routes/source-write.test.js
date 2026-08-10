@@ -14,7 +14,8 @@
 import assert from 'assert';
 import esmock from 'esmock';
 import { getDaCtx } from '../../src/utils/daCtx.js';
-import { SOURCE_BUS_READ_ONLY_MESSAGE, SOURCE_UNDETERMINED_MESSAGE } from '../../src/utils/constants.js';
+import { SOURCE_BUS_READ_ONLY_MESSAGE } from '../../src/utils/constants.js';
+import { CONTENT_STORE, PING, UpstreamError } from '../../src/utils/upstream.js';
 
 const AT = 'https://main--site--org.ue.da.live/folder/content';
 const DOC = '<body><main><div><p>the author typed this</p></div></main></body>';
@@ -89,6 +90,22 @@ const post = async (opts, url = AT) => {
   return { res, seen };
 };
 
+// a write that could not reach its upstream throws; the 503 is built once, at the worker
+// boundary, and is covered in test/responses/index.test.js
+const refusedPost = async (opts, url = AT) => {
+  const { daSourcePost, env, seen } = await build(opts);
+  const req = uePost(url);
+  let failure;
+  await assert.rejects(
+    () => daSourcePost({ req, env, daCtx: getDaCtx(req) }),
+    (e) => {
+      failure = e;
+      return e instanceof UpstreamError;
+    },
+  );
+  return { failure, seen };
+};
+
 describe('writing to the store that holds the site', () => {
   afterEach(() => {
     delete globalThis.fetch;
@@ -130,39 +147,21 @@ describe('writing to the store that holds the site', () => {
   // a write is the one operation a wrong store cannot be walked back from, so no answer means no
   // write rather than a guess
   describe('when /ping cannot say which store holds the site', () => {
-    it('is refused with 503 and touches neither store', async () => {
-      const { res, seen } = await post({ onSourceBus: undefined });
+    it('is refused and touches neither store', async () => {
+      const { failure, seen } = await refusedPost({ onSourceBus: undefined });
 
-      assert.strictEqual(res.status, 503);
+      assert.strictEqual(failure.upstream, PING);
       assert.strictEqual(seen.bus.length, 0);
       assert.strictEqual(seen.legacy.length, 0);
     });
 
-    it('asks the caller to retry, unlike the source-bus refusal', async () => {
-      const { res } = await post({ onSourceBus: undefined });
-
-      assert.ok(Number(res.headers.get('Retry-After')) > 0);
-    });
-
-    it('says which of the two refusals it is', async () => {
-      const { res } = await post({ onSourceBus: undefined });
-
-      assert.strictEqual(await res.text(), SOURCE_UNDETERMINED_MESSAGE);
-    });
-
-    it('names the failed probe in x-error', async () => {
-      const { res } = await post({ onSourceBus: undefined });
-
-      assert.match(res.headers.get('x-error'), /ping/);
-    });
-
     it('carries the probe cause, not a category', async () => {
-      const { res } = await post({
+      const { failure } = await refusedPost({
         onSourceBus: undefined,
         probeError: new DOMException('timed out', 'TimeoutError'),
       });
 
-      assert.strictEqual(res.headers.get('x-error'), '/ping failed: TimeoutError: timed out');
+      assert.strictEqual(failure.error, '/ping failed: TimeoutError: timed out');
     });
   });
 
@@ -271,9 +270,10 @@ describe('writing to the store that holds the site', () => {
       };
       const req = uePost(AT);
 
-      const res = await daSourcePost({ req, env, daCtx: getDaCtx(req) });
-
-      assert.strictEqual(res.status, 503);
+      await assert.rejects(
+        () => daSourcePost({ req, env, daCtx: getDaCtx(req) }),
+        (e) => e instanceof UpstreamError && e.upstream === CONTENT_STORE,
+      );
     });
 
     // a save that failed on a rate limit and one that failed on a dropped connection are the same
@@ -285,9 +285,10 @@ describe('writing to the store that holds the site', () => {
       };
       const req = uePost(AT);
 
-      const res = await daSourcePost({ req, env, daCtx: getDaCtx(req) });
-
-      assert.strictEqual(res.headers.get('x-error'), 'content store failed: TypeError: Network connection lost');
+      await assert.rejects(
+        () => daSourcePost({ req, env, daCtx: getDaCtx(req) }),
+        (e) => e.error === 'content store failed: TypeError: Network connection lost',
+      );
     });
   });
 

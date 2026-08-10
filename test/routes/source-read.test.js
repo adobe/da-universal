@@ -14,7 +14,13 @@
 import assert from 'assert';
 import esmock from 'esmock';
 import { getDaCtx } from '../../src/utils/daCtx.js';
-import { UpstreamError } from '../../src/utils/upstream.js';
+import { CONTENT_STORE, PING, UpstreamError } from '../../src/utils/upstream.js';
+
+// the routes throw; the 503 itself is built once, at the worker boundary, and is covered in
+// test/responses/index.test.js
+const refuses = (upstream, error) => (e) => e instanceof UpstreamError
+  && e.upstream === upstream
+  && (error === undefined || e.error === error);
 
 const authedReq = (url) => new Request(url, { headers: { Authorization: 'Bearer t' } });
 
@@ -90,68 +96,41 @@ describe('when /ping cannot say which store holds the site', () => {
 
   // picking a store without an answer is a coin flip, and reading the wrong one hands the author
   // the wrong document at 200
-  it('refuses an html read with 503 and touches neither store', async () => {
+  it('refuses an html read and touches neither store', async () => {
     const { daSourceGet, env, seen } = await build({ onSourceBus: undefined });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
-    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-    assert.strictEqual(res.status, 503);
+    await assert.rejects(
+      () => daSourceGet({ req, env, daCtx: getDaCtx(req) }),
+      refuses(PING),
+    );
     assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
-  });
-
-  it('asks the caller to retry', async () => {
-    const { daSourceGet, env } = await build({ onSourceBus: undefined });
-    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-    assert.ok(Number(res.headers.get('Retry-After')) > 0);
   });
 
   it('refuses a non-html read too', async () => {
     const { daSourceGet, env, seen } = await build({ onSourceBus: undefined });
     const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
 
-    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-    assert.strictEqual(res.status, 503);
+    await assert.rejects(
+      () => daSourceGet({ req, env, daCtx: getDaCtx(req) }),
+      refuses(PING),
+    );
     assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
   });
 
-  it('refuses a HEAD with 503 and no body', async () => {
+  it('refuses a HEAD too', async () => {
     const { daSourceHead, env, seen } = await build({ onSourceBus: undefined });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
-    const res = await daSourceHead({ env, daCtx: getDaCtx(req) });
-
-    assert.strictEqual(res.status, 503);
-    assert.strictEqual(await res.text(), '');
+    await assert.rejects(
+      () => daSourceHead({ env, daCtx: getDaCtx(req) }),
+      refuses(PING),
+    );
     assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
   });
 
-  // both 503s carry the same status and a body nobody parses, so the header is what tells an
-  // unanswerable probe apart from a store that was picked and then failed
-  it('names the failed probe in x-error', async () => {
-    const { daSourceGet, env } = await build({ onSourceBus: undefined });
-    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-    assert.match(res.headers.get('x-error'), /ping/);
-  });
-
-  it('names the failed probe on a HEAD too', async () => {
-    const { daSourceHead, env } = await build({ onSourceBus: undefined });
-    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-    const res = await daSourceHead({ env, daCtx: getDaCtx(req) });
-
-    assert.match(res.headers.get('x-error'), /ping/);
-  });
-
-  // a read answers the same 503 and the same body whichever of the two failed, so the header is
-  // the only thing on the wire that separates a timeout from a dropped connection
+  // a read fails the same way whichever of the two did not answer, so which upstream is named is
+  // the only thing that separates them
   it('carries the probe cause, not a category', async () => {
     const { daSourceGet, env } = await build({
       onSourceBus: undefined,
@@ -159,9 +138,10 @@ describe('when /ping cannot say which store holds the site', () => {
     });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
-    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-    assert.strictEqual(res.headers.get('x-error'), '/ping failed: TimeoutError: timed out');
+    await assert.rejects(
+      () => daSourceGet({ req, env, daCtx: getDaCtx(req) }),
+      refuses(PING, '/ping failed: TimeoutError: timed out'),
+    );
   });
 
   // rendering a thrown non-Error as "undefined: undefined" would leave the 503 saying nothing
@@ -169,10 +149,10 @@ describe('when /ping cannot say which store holds the site', () => {
     const { daSourceGet, env } = await build({ onSourceBus: undefined, probeError: 'boom' });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
-    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-    assert.strictEqual(res.status, 503);
-    assert.strictEqual(res.headers.get('x-error'), '/ping failed: Error: boom');
+    await assert.rejects(
+      () => daSourceGet({ req, env, daCtx: getDaCtx(req) }),
+      refuses(PING, '/ping failed: Error: boom'),
+    );
   });
 
   it('tells a probe failure apart from a store failure', async () => {
@@ -182,9 +162,10 @@ describe('when /ping cannot say which store holds the site', () => {
     });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
-    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-    assert.strictEqual(res.headers.get('x-error'), 'content store failed: TypeError: fetch failed');
+    await assert.rejects(
+      () => daSourceGet({ req, env, daCtx: getDaCtx(req) }),
+      refuses(CONTENT_STORE, 'content store failed: TypeError: fetch failed'),
+    );
   });
 });
 
@@ -250,136 +231,51 @@ describe('reading from the store that holds the site', () => {
   });
 
   describe('when the store cannot be reached at all', () => {
-    it('answers 503 rather than throwing on an html read', async () => {
-      const { daSourceGet, env } = await build({
-        onSourceBus: true,
-        bus: () => { throw new TypeError('fetch failed'); },
-      });
+    const dropped = () => {
+      throw new TypeError('Network connection lost');
+    };
+
+    it('refuses an html read', async () => {
+      const { daSourceGet, env } = await build({ onSourceBus: true, bus: dropped });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.strictEqual(res.status, 503);
+      await assert.rejects(
+        () => daSourceGet({ req, env, daCtx: getDaCtx(req) }),
+        refuses(CONTENT_STORE, 'content store failed: TypeError: Network connection lost'),
+      );
     });
 
-    it('answers 503 rather than throwing on a non-html read', async () => {
-      const { daSourceGet, env } = await build({
-        onSourceBus: true,
-        bus: () => { throw new TypeError('fetch failed'); },
-      });
+    it('refuses a non-html read', async () => {
+      const { daSourceGet, env } = await build({ onSourceBus: true, bus: dropped });
       const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
 
-      assert.strictEqual((await daSourceGet({ req, env, daCtx: getDaCtx(req) })).status, 503);
+      await assert.rejects(
+        () => daSourceGet({ req, env, daCtx: getDaCtx(req) }),
+        refuses(CONTENT_STORE, 'content store failed: TypeError: Network connection lost'),
+      );
     });
 
-    it('answers 503 rather than throwing on a HEAD', async () => {
-      const { daSourceHead, env } = await build({
-        onSourceBus: true,
-        bus: () => { throw new TypeError('fetch failed'); },
-      });
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-      assert.strictEqual((await daSourceHead({ env, daCtx: getDaCtx(req) })).status, 503);
-    });
-
-    it('answers 503 rather than throwing when da-admin is unreachable', async () => {
-      const { daSourceGet, env } = await build({
-        legacy: () => { throw new TypeError('fetch failed'); },
-      });
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-      assert.strictEqual((await daSourceGet({ req, env, daCtx: getDaCtx(req) })).status, 503);
-    });
-
-    it('asks the caller to retry', async () => {
-      const { daSourceGet, env } = await build({
-        onSourceBus: true,
-        bus: () => { throw new TypeError('fetch failed'); },
-      });
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.ok(Number(res.headers.get('Retry-After')) > 0);
-    });
-
-    // the read refusals are rendered, by the preview iframe and by quick-edit, so they carry a
-    // body that says what happened rather than an empty page
-    it('says what happened, on both GET paths', async () => {
-      const { daSourceGet, env } = await build({
-        onSourceBus: true,
-        bus: () => { throw new TypeError('fetch failed'); },
-      });
-      const html = authedReq('https://main--site--org.ue.da.live/folder/content');
-      const asset = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
-
-      const htmlRes = await daSourceGet({ req: html, env, daCtx: getDaCtx(html) });
-      const assetRes = await daSourceGet({ req: asset, env, daCtx: getDaCtx(asset) });
-
-      assert.match(await htmlRes.text(), /503/);
-      assert.match(await assetRes.text(), /503/);
-    });
-
-    it('answers 503 with no body on a HEAD', async () => {
-      const { daSourceHead, env } = await build({
-        onSourceBus: true,
-        bus: () => { throw new TypeError('fetch failed'); },
-      });
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-      const res = await daSourceHead({ env, daCtx: getDaCtx(req) });
-
-      assert.strictEqual(await res.text(), '');
-      assert.ok(Number(res.headers.get('Retry-After')) > 0);
-    });
-
-    // a rate limit, a DNS failure and a timeout all arrive here as the same 503, and the worker
-    // log is not where the caller is looking
-    it('names the cause in x-error on an html read', async () => {
-      const { daSourceGet, env } = await build({
-        onSourceBus: true,
-        bus: () => { throw new TypeError('Network connection lost'); },
-      });
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.strictEqual(res.headers.get('x-error'), 'content store failed: TypeError: Network connection lost');
-    });
-
-    it('names the cause on a non-html read', async () => {
-      const { daSourceGet, env } = await build({
-        onSourceBus: true,
-        bus: () => { throw new TypeError('Network connection lost'); },
-      });
-      const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
-
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.strictEqual(res.headers.get('x-error'), 'content store failed: TypeError: Network connection lost');
-    });
-
-    it('names the cause on a HEAD', async () => {
+    it('refuses a HEAD', async () => {
       const { daSourceHead, env } = await build({
         onSourceBus: true,
         bus: () => { throw new DOMException('The operation timed out', 'TimeoutError'); },
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
-      const res = await daSourceHead({ env, daCtx: getDaCtx(req) });
-
-      assert.strictEqual(res.headers.get('x-error'), 'content store failed: TimeoutError: The operation timed out');
+      await assert.rejects(
+        () => daSourceHead({ env, daCtx: getDaCtx(req) }),
+        refuses(CONTENT_STORE, 'content store failed: TimeoutError: The operation timed out'),
+      );
     });
 
-    it('names the cause when da-admin is unreachable', async () => {
-      const { daSourceGet, env } = await build({
-        legacy: () => { throw new TypeError('Network connection lost'); },
-      });
+    it('refuses a read when da-admin is unreachable', async () => {
+      const { daSourceGet, env } = await build({ legacy: dropped });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.strictEqual(res.headers.get('x-error'), 'content store failed: TypeError: Network connection lost');
+      await assert.rejects(
+        () => daSourceGet({ req, env, daCtx: getDaCtx(req) }),
+        refuses(CONTENT_STORE, 'content store failed: TypeError: Network connection lost'),
+      );
     });
 
     // a header value cannot span lines, so a message carrying a stack would throw where the 503
@@ -391,9 +287,10 @@ describe('reading from the store that holds the site', () => {
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.strictEqual(res.headers.get('x-error'), 'content store failed: TypeError: lost at fetch');
+      await assert.rejects(
+        () => daSourceGet({ req, env, daCtx: getDaCtx(req) }),
+        refuses(CONTENT_STORE, 'content store failed: TypeError: lost at fetch'),
+      );
     });
   });
 
@@ -702,9 +599,10 @@ describe('reading from the store that holds the site', () => {
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/clip.mp4');
 
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.strictEqual(res.status, 503);
+      await assert.rejects(
+        () => daSourceGet({ req, env, daCtx: getDaCtx(req) }),
+        refuses(CONTENT_STORE),
+      );
     });
 
     it('reads a video from the source bus on a source-bus site', async () => {
@@ -730,10 +628,10 @@ describe('reading from the store that holds the site', () => {
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.strictEqual(res.status, 503);
-      assert.strictEqual(res.headers.get('x-error'), 'content store failed: TypeError: Network connection lost');
+      await assert.rejects(
+        () => daSourceGet({ req, env, daCtx: getDaCtx(req) }),
+        refuses(CONTENT_STORE, 'content store failed: TypeError: Network connection lost'),
+      );
     });
 
     it('reports head.html when it is the only one that did not answer', async () => {
@@ -745,10 +643,10 @@ describe('reading from the store that holds the site', () => {
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.strictEqual(res.status, 503);
-      assert.strictEqual(res.headers.get('x-error'), '/head.html failed: TypeError: fetch failed');
+      await assert.rejects(
+        () => daSourceGet({ req, env, daCtx: getDaCtx(req) }),
+        refuses('/head.html', '/head.html failed: TypeError: fetch failed'),
+      );
     });
   });
 
@@ -940,8 +838,8 @@ describe('reading from the store that holds the site', () => {
     });
 
     // the template is fetched from the same host head.html came from, so a host that stops
-    // answering mid-request is the same 503 rather than a blank page at 200
-    it('answers 503 when the configured template cannot be fetched', async () => {
+    // answering mid-request is refused rather than handed a blank page at 200
+    it('refuses when the configured template cannot be fetched', async () => {
       const { daSourceGet, env } = await build({
         onSourceBus: true,
         bus: absent,
@@ -955,10 +853,10 @@ describe('reading from the store that holds the site', () => {
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.strictEqual(res.status, 503);
-      assert.strictEqual(res.headers.get('x-error'), '/templates/basic failed: TypeError: Network connection lost');
+      await assert.rejects(
+        () => daSourceGet({ req, env, daCtx: getDaCtx(req) }),
+        refuses('/templates/basic', '/templates/basic failed: TypeError: Network connection lost'),
+      );
     });
   });
 
@@ -986,44 +884,6 @@ describe('reading from the store that holds the site', () => {
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
       assert.strictEqual(res.headers.get('x-error'), '/head.html answered 204');
-    });
-  });
-
-  // the body is what an author reads in the editor; the header is not
-  describe('which system the 503 body names', () => {
-    it('names the preview host when head.html is what did not answer', async () => {
-      const { daSourceGet, env } = await build({
-        onSourceBus: true,
-        head: () => {
-          throw new UpstreamError('/head.html', new TypeError('fetch failed'));
-        },
-      });
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.match(await res.text(), /AEM unreachable/);
-    });
-
-    it('names the store when the store is what did not answer', async () => {
-      const { daSourceGet, env } = await build({
-        onSourceBus: true,
-        bus: () => { throw new TypeError('fetch failed'); },
-      });
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.match(await res.text(), /Content store unreachable/);
-    });
-
-    it('names the store when the probe is what did not answer', async () => {
-      const { daSourceGet, env } = await build({ onSourceBus: undefined });
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.match(await res.text(), /Content store unreachable/);
     });
   });
 });
