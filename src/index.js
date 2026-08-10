@@ -49,21 +49,26 @@ export default {
     const daCtx = getDaCtx(req);
 
     let resp;
-    switch (req.method) {
-      case 'OPTIONS':
-        resp = await optionsHandler({ req });
-        break;
-      case 'HEAD':
-        resp = await headHandler({ req, env, daCtx });
-        break;
-      case 'GET':
-        resp = await getHandler({ req, env, daCtx });
-        break;
-      case 'POST':
-        resp = await postHandlers({ req, env, daCtx });
-        break;
-      default:
-        resp = unknownHandler();
+    try {
+      switch (req.method) {
+        case 'OPTIONS':
+          resp = await optionsHandler({ req });
+          break;
+        case 'HEAD':
+          resp = await headHandler({ req, env, daCtx });
+          break;
+        case 'GET':
+          resp = await getHandler({ req, env, daCtx });
+          break;
+        case 'POST':
+          resp = await postHandlers({ req, env, daCtx });
+          break;
+        default:
+          resp = unknownHandler();
+      }
+    } catch (e) {
+      console.error(`500 ${req.method} ${url.pathname}: ${e.name}: ${e.message}`, e);
+      resp = new Response(null, { status: 500 });
     }
     return withCorsHeaders(resp, req);
   },

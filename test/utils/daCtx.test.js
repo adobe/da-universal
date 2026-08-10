@@ -193,6 +193,18 @@ describe('DA context', () => {
       assert.strictEqual(ctx.ext, 'png');
     });
 
+    it('maps /A/B/c.JSON to /a/b/c.json', () => {
+      const ctx = ctxFor('/A/B/c.JSON');
+      assert.strictEqual(ctx.sourcePath, '/a/b/c.json');
+      assert.strictEqual(ctx.ext, 'json');
+    });
+
+    it('maps /folder/Sub-Folder/ to /folder/sub-folder/index.html', () => {
+      const ctx = ctxFor('/folder/Sub-Folder/');
+      assert.strictEqual(ctx.sourcePath, '/folder/sub-folder/index.html');
+      assert.strictEqual(ctx.ext, 'html');
+    });
+
     it('maps /sheet.json to /sheet.json', () => {
       const ctx = ctxFor('/sheet.json');
       assert.strictEqual(ctx.sourcePath, '/sheet.json');

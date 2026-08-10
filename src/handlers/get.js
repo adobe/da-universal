@@ -35,11 +35,18 @@ export default async function getHandler({ req, env, daCtx }) {
       handleAEMProxyRequest({ req, env, daCtx }),
     ]);
 
+    const storeRes = daSourceGetRes.status === 'fulfilled' ? daSourceGetRes.value : undefined;
+    const aemRes = aemProxyRes.status === 'fulfilled' ? aemProxyRes.value : undefined;
+
     let response;
-    if (daSourceGetRes.status === 'fulfilled' && daSourceGetRes.value.status === 200) {
-      response = daSourceGetRes.value;
-    } else if (aemProxyRes.status === 'fulfilled') {
-      response = aemProxyRes.value;
+    if (storeRes?.status === 200) {
+      response = storeRes;
+    } else if (aemRes?.status === 200) {
+      response = aemRes;
+    } else if (storeRes && storeRes.status >= 500) {
+      response = storeRes;
+    } else if (aemRes) {
+      response = aemRes;
     } else {
       return get404();
     }
