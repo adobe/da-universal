@@ -12,6 +12,7 @@
 import { fromHtml } from 'hast-util-from-html';
 import { selectAll } from 'hast-util-select';
 import { toHtml } from 'hast-util-to-html';
+import { reach } from './upstream.js';
 
 export function getAemCtx(env, daCtx) {
   const {
@@ -46,12 +47,24 @@ export function withAemAuth(aemCtx, init = {}) {
   return { ...init, headers };
 }
 
+/**
+ * Reads an HTML fragment from the site's preview host.
+ *
+ * A status that is not 200 is reported rather than collapsed, because a 404 means the branch
+ * does not serve this fragment while a 429 or a 5xx says nothing about the branch at all.
+ * A host that does not answer throws an UpstreamError.
+ *
+ * @param {Object} aemCtx The AEM context
+ * @param {string} path
+ * @returns {Promise<{status: number, html?: string}>}
+ */
 export async function getAEMHtml(aemCtx, path) {
   const { previewUrl } = aemCtx;
-  const resp = await fetch(`${previewUrl}${path}`, withAemAuth(aemCtx));
-  if (!resp.ok) return undefined;
-  const headHtml = await resp.text();
-  return headHtml;
+  return reach(path, async () => {
+    const resp = await fetch(`${previewUrl}${path}`, withAemAuth(aemCtx));
+    if (!resp.ok) return { status: resp.status };
+    return { status: resp.status, html: await resp.text() };
+  });
 }
 
 /**

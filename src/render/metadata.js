@@ -13,6 +13,7 @@
 import { select } from 'hast-util-select';
 import { readBlockConfig } from '../utils/hast.js';
 import { withAemAuth } from '../utils/aemCtx.js';
+import { causeOf } from '../utils/upstream.js';
 
 export function extractLocalMetadata(bodyTree) {
   const metaBlock = select('div.metadata', bodyTree);
@@ -155,23 +156,29 @@ export class Modifiers {
   }
 }
 
+// the sheet only adds metadata to a page that composes without it, so an origin that cannot be
+// reached degrades the same way a 404 does instead of taking the read down
 export async function fetchBulkMetadata(aemCtx) {
   const url = new URL('/metadata.json', aemCtx.previewUrl);
-  const response = await fetch(url, withAemAuth(aemCtx));
+  try {
+    const response = await fetch(url, withAemAuth(aemCtx));
 
-  if (response.ok) {
-    const json = await response.json();
-    const metadata = json.default ?? json;
-    if (!metadata) {
-      console.log('Metadata sheet is not valid');
-      return Modifiers.EMPTY;
-    }
+    if (response.ok) {
+      const json = await response.json();
+      const metadata = json?.default ?? json;
+      if (!metadata) {
+        console.log('Metadata sheet is not valid');
+        return Modifiers.EMPTY;
+      }
 
-    if (!Array.isArray(metadata.data)) {
-      console.log('Metadata sheet is not valid');
-      return Modifiers.EMPTY;
+      if (!Array.isArray(metadata.data)) {
+        console.log('Metadata sheet is not valid');
+        return Modifiers.EMPTY;
+      }
+      return Modifiers.fromModifierSheet(metadata.data);
     }
-    return Modifiers.fromModifierSheet(metadata.data);
+  } catch (e) {
+    console.warn(`${url} could not be read: ${causeOf(e)}`);
   }
   return Modifiers.EMPTY;
 }

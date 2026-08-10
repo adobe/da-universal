@@ -64,7 +64,7 @@ const build = async (overrides = {}) => {
     },
     '../../src/utils/aemCtx.js': {
       getAemCtx: () => ({}),
-      getAEMHtml: async () => head(),
+      getAEMHtml: async (ctx, path) => head(path),
     },
     '../../src/render/compose.js': {
       composeHtml: async (daCtx, aemCtx, bodyHtml) => ({ bodyHtml }),
@@ -74,7 +74,7 @@ const build = async (overrides = {}) => {
       applyUEInstrumentation: async () => { seen.ue += 1; },
     },
     '../../src/storage/config.js': {
-      getSiteConfig: async () => { throw new Error('no config'); },
+      getSiteConfig: overrides.siteConfig ?? (async () => { throw new Error('no config'); }),
     },
   });
   return { ...mod, env, seen };
@@ -539,7 +539,7 @@ describe('reading from the store that holds the site', () => {
         '../../src/storage/source-bus.js': { default: async () => true },
         '../../src/utils/aemCtx.js': {
           getAemCtx: () => ({ ueHostname: 'ue.da.live', previewUrl: 'https://p.example' }),
-          getAEMHtml: async () => '<meta name="from" content="aem" />',
+          getAEMHtml: async () => ({ status: 200, html: '<meta name="from" content="aem" />' }),
         },
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -872,6 +872,68 @@ describe('reading from the store that holds the site', () => {
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
       assert.strictEqual(res.status, 500);
+    });
+  });
+
+  // a configured starter template is fetched from the preview host like head.html is
+  describe('the configured page template', () => {
+    const absent = () => new Response('', { status: 404 });
+    const configured = async () => [{ key: 'editor.ue.template', value: '/folder=/templates/basic' }];
+    const template = '<body><main><div>from the template</div></main></body>';
+
+    it('composes the configured template for a document that is not there yet', async () => {
+      const { daSourceGet, env } = await build({
+        onSourceBus: true,
+        bus: absent,
+        head: (path) => (path === '/templates/basic'
+          ? { status: 200, html: template }
+          : { status: 200, html: '<meta name="from" content="aem" />' }),
+        siteConfig: configured,
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.match(await res.text(), /from the template/);
+    });
+
+    it('falls back to the starter template when the configured one is not there', async () => {
+      const { daSourceGet, env } = await build({
+        onSourceBus: true,
+        bus: absent,
+        head: (path) => (path === '/templates/basic'
+          ? { status: 404 }
+          : { status: 200, html: '<meta name="from" content="aem" />' }),
+        siteConfig: configured,
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 200);
+      assert.doesNotMatch(await res.text(), /from the template/);
+    });
+
+    // the template is fetched from the same host head.html came from, so a host that stops
+    // answering mid-request is the same 503 rather than a blank page at 200
+    it('answers 503 when the configured template cannot be fetched', async () => {
+      const { daSourceGet, env } = await build({
+        onSourceBus: true,
+        bus: absent,
+        head: (path) => {
+          if (path === '/templates/basic') {
+            throw new UpstreamError(path, new TypeError('Network connection lost'));
+          }
+          return { status: 200, html: '<meta name="from" content="aem" />' };
+        },
+        siteConfig: configured,
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 503);
+      assert.strictEqual(res.headers.get('x-error'), '/templates/basic failed: TypeError: Network connection lost');
     });
   });
 });

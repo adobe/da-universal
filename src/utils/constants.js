@@ -51,7 +51,11 @@ export const DEFAULT_HTML_TEMPLATE = '<body><header></header><main><div></div></
 
 export const BRANCH_NOT_FOUND_HTML_MESSAGE = '<html><body><h1>Not found: Unable to retrieve AEM branch</h1></body></html>';
 
+export const BRANCH_UNAVAILABLE_HTML_MESSAGE = '<html><body><h1>Unable to retrieve AEM branch</h1><p>The preview host refused the request for head.html. The status is its own.</p></body></html>';
+
 export const SOURCE_UNREACHABLE_HTML_MESSAGE = '<html><body><h1>503: Content store unreachable</h1><p>The store that holds this document did not answer. Please retry.</p></body></html>';
+
+export const AEM_UNREACHABLE_HTML_MESSAGE = '<html><body><h1>503: AEM unreachable</h1><p>The site\'s preview host did not answer. Please retry.</p></body></html>';
 
 export const SOURCE_UNREACHABLE_MESSAGE = 'The store that holds this document did not answer, so nothing was written. Please retry.';
 

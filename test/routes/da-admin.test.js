@@ -64,7 +64,7 @@ const mockRoutes = async () => esmock('../../src/routes/da-admin.js', {
   },
   '../../src/utils/aemCtx.js': {
     getAemCtx: () => ({}),
-    getAEMHtml: async () => '<meta name="from" content="aem" />',
+    getAEMHtml: async () => ({ status: 200, html: '<meta name="from" content="aem" />' }),
   },
   '../../src/render/compose.js': {
     composeHtml: async () => ({ tree: true }),
@@ -103,6 +103,13 @@ describe('daSourceGet', () => {
     daadmin: { fetch: async () => new Response('<body>stored</body>', { status: 200 }) },
   };
 
+  // a store that holds nothing at this path, which is both a new document and a site that is
+  // not there; head.html is what tells the two apart
+  const emptyStore = {
+    ...env,
+    daadmin: { fetch: async () => new Response('not found', { status: 404 }) },
+  };
+
   // record which composition / instrumentation calls happen and with what
   let calls;
 
@@ -110,14 +117,10 @@ describe('daSourceGet', () => {
     // `head` is a function so a test can make head.html answer a status or fail outright
     const head = overrides.head
       ?? (() => ({ status: 200, html: '<meta name="from" content="aem" />' }));
-    const store = overrides.store ?? (() => new Response('<body>stored</body>', { status: 200 }));
     calls = { compose: [], ue: 0, quickEdit: 0 };
     return (await esmock('../../src/routes/da-admin.js', {
       '../../src/storage/source-bus.js': {
         default: async () => false,
-      },
-      '../../src/storage/store.js': {
-        default: () => ({ url: new URL('https://admin.da.live/source/org/site/folder/content.html'), fetch: async () => store() }),
       },
       '../../src/utils/aemCtx.js': {
         getAemCtx: () => ({}),
@@ -237,14 +240,11 @@ describe('daSourceGet', () => {
   });
 
   it('returns a working 404 shell for quick-edit when the branch has nothing at all', async () => {
-    const daSourceGet = await mockDaSourceGet({
-      head: () => ({ status: 404 }),
-      store: () => new Response('', { status: 404 }),
-    });
+    const daSourceGet = await mockDaSourceGet({ head: () => ({ status: 404 }) });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content?quick-edit');
     const daCtx = getDaCtx(req);
 
-    const res = await daSourceGet({ req, env, daCtx });
+    const res = await daSourceGet({ req, env: emptyStore, daCtx });
 
     assert.strictEqual(res.status, 404);
     // the heavy compose pipeline is skipped entirely for this degraded path
@@ -255,14 +255,11 @@ describe('daSourceGet', () => {
   });
 
   it('still returns branch-not-found for non-quick-edit when the branch has nothing at all', async () => {
-    const daSourceGet = await mockDaSourceGet({
-      head: () => ({ status: 404 }),
-      store: () => new Response('', { status: 404 }),
-    });
+    const daSourceGet = await mockDaSourceGet({ head: () => ({ status: 404 }) });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
     const daCtx = getDaCtx(req);
 
-    const res = await daSourceGet({ req, env, daCtx });
+    const res = await daSourceGet({ req, env: emptyStore, daCtx });
 
     assert.strictEqual(res.status, 404);
     assert.strictEqual(calls.compose.length, 0);
