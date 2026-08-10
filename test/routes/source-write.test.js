@@ -287,7 +287,7 @@ describe('writing to the store that holds the site', () => {
 
       const res = await daSourcePost({ req, env, daCtx: getDaCtx(req) });
 
-      assert.strictEqual(res.headers.get('x-error'), 'TypeError: Network connection lost');
+      assert.strictEqual(res.headers.get('x-error'), 'content store failed: TypeError: Network connection lost');
     });
   });
 

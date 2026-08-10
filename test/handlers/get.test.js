@@ -208,6 +208,34 @@ describe('GET handler', () => {
       });
     });
 
+    // the store not holding an image is normal; aem.page not answering is not, and reporting
+    // that pair as 404 told the author the image does not exist
+    describe('when the store has no image and AEM could not be reached', () => {
+      let getHandler;
+
+      beforeEach(async () => {
+        getHandler = (await esmock('../../src/handlers/get.js', {
+          '../../src/routes/da-admin.js': {
+            daSourceGet: async () => new Response('', { status: 404 }),
+          },
+          '../../src/routes/aem-proxy.js': {
+            handleAEMProxyRequest: async () => new Response('', { status: 503, headers: { 'x-error': 'aem.page failed: TypeError: fetch failed' } }),
+          },
+        })).default;
+      });
+
+      it('returns the 503 rather than claiming the image is absent', async () => {
+        const req = new Request('https://main--site--org.ue.da.live/image.png');
+        const daCtx = getDaCtx(req);
+        const env = {};
+
+        const res = await getHandler({ req, env, daCtx });
+
+        assert.strictEqual(res.status, 503);
+        assert.strictEqual(res.headers.get('x-error'), 'aem.page failed: TypeError: fetch failed');
+      });
+    });
+
     describe('when daSourceGet fails and AEM proxy succeeds', () => {
       let getHandler;
 

@@ -107,18 +107,21 @@ describe('daSourceGet', () => {
   let calls;
 
   const mockDaSourceGet = async (overrides = {}) => {
-    // 'headHtml' in overrides (rather than a destructured default) so passing
-    // `{ headHtml: undefined }` actually simulates a missing head.html, instead
-    // of being masked by the default parameter value.
-    const headHtml = 'headHtml' in overrides ? overrides.headHtml : '<meta name="from" content="aem" />';
+    // `head` is a function so a test can make head.html answer a status or fail outright
+    const head = overrides.head
+      ?? (() => ({ status: 200, html: '<meta name="from" content="aem" />' }));
+    const store = overrides.store ?? (() => new Response('<body>stored</body>', { status: 200 }));
     calls = { compose: [], ue: 0, quickEdit: 0 };
     return (await esmock('../../src/routes/da-admin.js', {
       '../../src/storage/source-bus.js': {
         default: async () => false,
       },
+      '../../src/storage/store.js': {
+        default: () => ({ url: new URL('https://admin.da.live/source/org/site/folder/content.html'), fetch: async () => store() }),
+      },
       '../../src/utils/aemCtx.js': {
         getAemCtx: () => ({}),
-        getAEMHtml: async () => headHtml,
+        getAEMHtml: async () => head(),
       },
       '../../src/render/compose.js': {
         composeHtml: async (daCtx, aemCtx, bodyHtml) => {
@@ -233,8 +236,11 @@ describe('daSourceGet', () => {
     assert.strictEqual(await res.text(), '<html>composed</html>');
   });
 
-  it('returns a working 404 shell for quick-edit when head.html is missing', async () => {
-    const daSourceGet = await mockDaSourceGet({ headHtml: undefined });
+  it('returns a working 404 shell for quick-edit when the branch has nothing at all', async () => {
+    const daSourceGet = await mockDaSourceGet({
+      head: () => ({ status: 404 }),
+      store: () => new Response('', { status: 404 }),
+    });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content?quick-edit');
     const daCtx = getDaCtx(req);
 
@@ -248,8 +254,11 @@ describe('daSourceGet', () => {
     assert.ok(!html.includes('Unable to retrieve AEM branch'));
   });
 
-  it('still returns branch-not-found for non-quick-edit when head.html is missing', async () => {
-    const daSourceGet = await mockDaSourceGet({ headHtml: undefined });
+  it('still returns branch-not-found for non-quick-edit when the branch has nothing at all', async () => {
+    const daSourceGet = await mockDaSourceGet({
+      head: () => ({ status: 404 }),
+      store: () => new Response('', { status: 404 }),
+    });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
     const daCtx = getDaCtx(req);
 
@@ -260,6 +269,30 @@ describe('daSourceGet', () => {
     assert.strictEqual(calls.ue, 0);
     const html = await res.text();
     assert.ok(html.includes('Unable to retrieve AEM branch'));
+  });
+
+  // the shell is an empty page, so an author whose document exists is better served by the
+  // document, unstyled, than by a scaffold that hides it
+  it('composes the stored document for quick-edit when only head.html is missing', async () => {
+    const daSourceGet = await mockDaSourceGet({ head: () => ({ status: 404 }) });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content?quick-edit');
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourceGet({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(calls.compose.length, 1);
+    assert.ok(calls.compose[0].includes('stored'));
+  });
+
+  it('still injects the quick-edit import map when only head.html is missing', async () => {
+    const daSourceGet = await mockDaSourceGet({ head: () => ({ status: 404 }) });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content?quick-edit');
+    const daCtx = getDaCtx(req);
+
+    await daSourceGet({ req, env, daCtx });
+
+    assert.strictEqual(calls.quickEdit, 1);
   });
 });
 

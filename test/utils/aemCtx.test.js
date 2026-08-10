@@ -73,10 +73,10 @@ describe('AEM context', () => {
 
     beforeEach(async () => {
       // Mock global fetch
-      global.fetch = async (url) => ({
-        ok: url.includes('success'),
-        text: async () => '<html>test content</html>',
-      });
+      global.fetch = async (url) => new Response(
+        '<html>test content</html>',
+        { status: url.includes('success') ? 200 : 404 },
+      );
     });
 
     afterEach(() => {
@@ -84,13 +84,51 @@ describe('AEM context', () => {
     });
 
     it('should return HTML content for successful request', async () => {
-      const html = await getAEMHtml(mockAemCtx, '/success-path');
+      const { html } = await getAEMHtml(mockAemCtx, '/success-path');
       assert.strictEqual(html, '<html>test content</html>');
     });
 
+    it('reports the status alongside the html', async () => {
+      const { status } = await getAEMHtml(mockAemCtx, '/success-path');
+      assert.strictEqual(status, 200);
+    });
+
     it('should return undefined for failed request', async () => {
-      const html = await getAEMHtml(mockAemCtx, '/fail-path');
+      const { html } = await getAEMHtml(mockAemCtx, '/fail-path');
       assert.strictEqual(html, undefined);
+    });
+
+    // a 404 says the branch has no head.html; a 429 or a 503 says the caller should not read
+    // that as an answer about the branch at all
+    it('reports which status a refusal carried', async () => {
+      global.fetch = async () => new Response('slow down', { status: 429 });
+      const { status } = await getAEMHtml(mockAemCtx, '/any-path');
+      assert.strictEqual(status, 429);
+    });
+
+    it('throws an UpstreamError naming the path when the origin does not answer', async () => {
+      global.fetch = async () => {
+        throw new TypeError('Network connection lost');
+      };
+      await assert.rejects(
+        () => getAEMHtml(mockAemCtx, '/head.html'),
+        (e) => e.name === 'UpstreamError'
+          && e.error === '/head.html failed: TypeError: Network connection lost',
+      );
+    });
+
+    it('throws when the body cannot be read', async () => {
+      global.fetch = async () => ({
+        ok: true,
+        status: 200,
+        text: async () => {
+          throw new TypeError('Network connection lost');
+        },
+      });
+      await assert.rejects(
+        () => getAEMHtml(mockAemCtx, '/head.html'),
+        (e) => e.name === 'UpstreamError',
+      );
     });
   });
 

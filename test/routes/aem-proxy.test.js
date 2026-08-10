@@ -82,3 +82,56 @@ describe('AEM proxy quick-edit', () => {
     assert.strictEqual(res.headers.get('Set-Cookie'), null);
   });
 });
+
+describe('AEM proxy when the origin does not answer', () => {
+  let handleAEMProxyRequest;
+  const env = { UE_HOST: 'test-host', UE_SERVICE: 'test-service' };
+  const stylesheet = () => {
+    const req = new Request('https://main--site--org.ue.da.live/styles/styles.css');
+    return { req, daCtx: getDaCtx(req) };
+  };
+
+  beforeEach(async () => {
+    const mod = await esmock('../../src/routes/aem-proxy.js');
+    handleAEMProxyRequest = mod.handleAEMProxyRequest;
+  });
+
+  afterEach(() => {
+    delete globalThis.fetch;
+  });
+
+  // this response is the whole answer for a css/js/json request, so a rejection used to reach
+  // the worker's catch and leave the browser with a bodyless 500
+  it('answers 503 instead of rejecting', async () => {
+    globalThis.fetch = async () => {
+      throw new TypeError('Network connection lost');
+    };
+    const { req, daCtx } = stylesheet();
+
+    const res = await handleAEMProxyRequest({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 503);
+  });
+
+  it('names the cause in x-error', async () => {
+    globalThis.fetch = async () => {
+      throw new TypeError('Network connection lost');
+    };
+    const { req, daCtx } = stylesheet();
+
+    const res = await handleAEMProxyRequest({ req, env, daCtx });
+
+    assert.strictEqual(res.headers.get('x-error'), 'aem.page failed: TypeError: Network connection lost');
+  });
+
+  it('asks the caller to retry', async () => {
+    globalThis.fetch = async () => {
+      throw new DOMException('timed out', 'TimeoutError');
+    };
+    const { req, daCtx } = stylesheet();
+
+    const res = await handleAEMProxyRequest({ req, env, daCtx });
+
+    assert.ok(Number(res.headers.get('Retry-After')) > 0);
+  });
+});
