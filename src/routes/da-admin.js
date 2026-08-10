@@ -40,7 +40,22 @@ import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 
 const HTML_POST_TYPE = 'text/html';
 
-const PROBE_FAILED = 'the /ping probe failed, so which store holds this site is unknown';
+/**
+ * Renders a failure for the `x-error` header.
+ */
+function causeOf(e) {
+  return `${e?.name ?? 'Error'}: ${e?.message ?? e}`
+    .replace(/[^\x20-\x7e]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 1024);
+}
+
+function probeFailed(e, method, sourcePath) {
+  const cause = `/ping failed: ${causeOf(e)}`;
+  console.warn(`503 ${method} ${sourcePath}, ${cause}`);
+  return cause;
+}
 
 export function isHtmlPostType(type) {
   if (!type) return true;
@@ -91,16 +106,13 @@ async function getPageTemplate(env, daCtx, aemCtx) {
 /**
  * Sends a request to a store and reports why it could not be reached at all.
  *
- * The cause is collapsed onto one line because it is answered as a header, which cannot span
- * lines, and a `TypeError` carrying a stack would otherwise throw where the 503 is built.
- *
  * @returns {Promise<{response?: Response, error?: string}>}
  */
 async function reachStore(store, send) {
   try {
     return { response: await send() };
   } catch (e) {
-    const error = `${e.name}: ${e.message}`.replace(/\s+/g, ' ').trim();
+    const error = causeOf(e);
     console.warn(`503 ${store.url}, the store could not be reached: ${error}`);
     return { error };
   }
@@ -112,12 +124,11 @@ async function reachStore(store, send) {
  * @returns {Promise<{response?: Response, error?: string}>} `error` says why there is no response
  */
 async function readSource(env, daCtx, init) {
-  const onSourceBus = await isSourceBus(env, daCtx);
-  // a store picked without an answer is a coin flip, and reading the wrong one serves the wrong
-  // document at 200
-  if (onSourceBus === undefined) {
-    console.warn(`503 ${init.method} ${daCtx.sourcePath}, ${PROBE_FAILED}`);
-    return { error: PROBE_FAILED };
+  let onSourceBus;
+  try {
+    onSourceBus = await isSourceBus(env, daCtx);
+  } catch (e) {
+    return { error: probeFailed(e, init.method, daCtx.sourcePath) };
   }
 
   const store = getStore(env, daCtx, onSourceBus);
@@ -265,10 +276,12 @@ export async function daSourcePost({ req, env, daCtx }) {
     const bodyContent = toHtml(bodyNode);
 
     // the payload is settled, so the only question left is where it goes
-    const onSourceBus = await isSourceBus(env, daCtx);
-    if (onSourceBus === undefined) {
-      console.warn(`503 POST ${sourcePath}, ${PROBE_FAILED}`);
-      return post503(SOURCE_UNDETERMINED_MESSAGE, PROBE_FAILED);
+    let onSourceBus;
+    try {
+      onSourceBus = await isSourceBus(env, daCtx);
+    } catch (e) {
+      const cause = probeFailed(e, 'POST', sourcePath);
+      return post503(SOURCE_UNDETERMINED_MESSAGE, cause);
     }
 
     if (onSourceBus) {
