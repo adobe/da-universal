@@ -13,7 +13,8 @@ import { getDaCtx } from './utils/daCtx.js';
 import { isTrustedOrigin } from './utils/constants.js';
 
 import getHandler from './handlers/get.js';
-import { get404, getRobots } from './responses/index.js';
+import { get404, getRobots, upstreamFailure } from './responses/index.js';
+import { UpstreamError } from './utils/upstream.js';
 import headHandler from './handlers/head.js';
 import postHandlers from './handlers/post.js';
 import unknownHandler from './handlers/unknown.js';
@@ -67,8 +68,15 @@ export default {
           resp = unknownHandler();
       }
     } catch (e) {
-      console.error(`500 ${req.method} ${url.pathname}: ${e.name}: ${e.message}`, e);
-      resp = new Response(null, { status: 500 });
+      // an upstream that did not answer is the one failure a route reports rather than throws
+      // over; anything else reaching here is a bug
+      if (e instanceof UpstreamError) {
+        console.warn(`503 ${req.method} ${url.pathname}: ${e.error}`);
+        resp = upstreamFailure(e, req.method);
+      } else {
+        console.error(`500 ${req.method} ${url.pathname}: ${e.name}: ${e.message}`, e);
+        resp = new Response(null, { status: 500 });
+      }
     }
     return withCorsHeaders(resp, req);
   },

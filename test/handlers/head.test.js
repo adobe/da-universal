@@ -282,14 +282,16 @@ describe('HEAD handler', () => {
         })).default;
       });
 
-      it('returns 404', async () => {
+      // a rejection here is a bug in the read, not evidence the image is absent
+      it('propagates the failure rather than calling the image absent', async () => {
         const req = new Request('https://main--site--org.ue.da.live/image.png', { method: 'HEAD' });
         const daCtx = getDaCtx(req);
         const env = {};
 
-        const res = await headHandler({ req, env, daCtx });
-
-        assert.strictEqual(res.status, 404);
+        await assert.rejects(
+          () => headHandler({ req, env, daCtx }),
+          (e) => e.message === 'fail',
+        );
       });
     });
   });

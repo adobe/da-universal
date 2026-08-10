@@ -43,7 +43,10 @@ export default async function getHandler({ req, env, daCtx }) {
       response = storeRes;
     } else if (aemRes?.status === 200) {
       response = aemRes;
-    } else if (storeRes && storeRes.status >= 500) {
+    } else if (daSourceGetRes.status === 'rejected') {
+      // the store not answering is the answer; aem.page's 404 would say the image is not there
+      throw daSourceGetRes.reason;
+    } else if (storeRes.status >= 500) {
       response = storeRes;
     } else if (aemRes) {
       response = aemRes;

@@ -9,7 +9,14 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { DEFAULT_UNAUTHORIZED_HTML_MESSAGE } from '../utils/constants.js';
+import {
+  AEM_UNREACHABLE_HTML_MESSAGE,
+  DEFAULT_UNAUTHORIZED_HTML_MESSAGE,
+  SOURCE_UNDETERMINED_MESSAGE,
+  SOURCE_UNREACHABLE_HTML_MESSAGE,
+  SOURCE_UNREACHABLE_MESSAGE,
+} from '../utils/constants.js';
+import { CONTENT_STORE, PING } from '../utils/upstream.js';
 
 const RETRY_AFTER_SECONDS = '5';
 
@@ -104,4 +111,28 @@ export function getRobots() {
 Disallow: /`;
 
   return daResp({ body, status: 200 });
+}
+
+/**
+ * Renders an UpstreamError as the response for the method that asked. This is the only place a
+ * 503 is built, so a route reports which upstream did not answer and nothing else.
+ *
+ * @param {import('../utils/upstream.js').UpstreamError} failure
+ * @param {string} method
+ */
+export function upstreamFailure({ upstream, error }, method) {
+  if (method === 'HEAD') return head503(error);
+  if (method === 'POST') {
+    return post503(
+      upstream === PING ? SOURCE_UNDETERMINED_MESSAGE : SOURCE_UNREACHABLE_MESSAGE,
+      error,
+    );
+  }
+  // the body is what an author reads in the editor, so it names the system that failed
+  return get503(
+    upstream === PING || upstream === CONTENT_STORE
+      ? SOURCE_UNREACHABLE_HTML_MESSAGE
+      : AEM_UNREACHABLE_HTML_MESSAGE,
+    error,
+  );
 }

@@ -13,6 +13,7 @@
 /* eslint-env mocha */
 import assert from 'assert';
 import esmock from 'esmock';
+import { CONTENT_STORE, PING, UpstreamError } from '../src/utils/upstream.js';
 
 // everything but the POST handler, so a write can be driven through the real route
 const READ_HANDLER_MOCKS = {
@@ -37,6 +38,15 @@ const HANDLER_MOCKS = {
   },
 };
 
+const refusingWorker = async (handler, failure) => (await esmock('../src/index.js', {
+  ...HANDLER_MOCKS,
+  [handler]: {
+    default: async () => {
+      throw failure;
+    },
+  },
+})).default;
+
 const throwingWorker = async (handler) => (await esmock('../src/index.js', {
   ...HANDLER_MOCKS,
   [handler]: {
@@ -47,6 +57,64 @@ const throwingWorker = async (handler) => (await esmock('../src/index.js', {
 })).default;
 
 describe('worker fetch handler', () => {
+  // the routes report which upstream did not answer and throw; this is the only place the 503
+  // is built, so it is the only place that can get it wrong
+  describe('when an upstream did not answer', () => {
+    const storeGone = () => new UpstreamError(CONTENT_STORE, new TypeError('Network connection lost'));
+
+    it('answers 503, not 500', async () => {
+      const worker = await refusingWorker('../src/handlers/get.js', storeGone());
+      const req = new Request('https://main--site--org.ue.da.live/some/path');
+
+      const res = await worker.fetch(req, {});
+
+      assert.strictEqual(res.status, 503);
+    });
+
+    it('names the cause in x-error', async () => {
+      const worker = await refusingWorker('../src/handlers/get.js', storeGone());
+      const req = new Request('https://main--site--org.ue.da.live/some/path');
+
+      const res = await worker.fetch(req, {});
+
+      assert.strictEqual(res.headers.get('x-error'), 'content store failed: TypeError: Network connection lost');
+    });
+
+    it('keeps the CORS headers on it', async () => {
+      const worker = await refusingWorker('../src/handlers/get.js', storeGone());
+      const req = new Request('https://main--site--org.ue.da.live/some/path', {
+        headers: { Origin: 'https://da.live' },
+      });
+
+      const res = await worker.fetch(req, {});
+
+      assert.strictEqual(res.headers.get('Access-Control-Allow-Origin'), 'https://da.live');
+    });
+
+    it('has no body on a HEAD', async () => {
+      const worker = await refusingWorker('../src/handlers/head.js', storeGone());
+      const req = new Request('https://main--site--org.ue.da.live/some/path', { method: 'HEAD' });
+
+      const res = await worker.fetch(req, {});
+
+      assert.strictEqual(res.status, 503);
+      assert.strictEqual(await res.text(), '');
+    });
+
+    it('tells a write which of the two refusals it is', async () => {
+      const worker = await refusingWorker(
+        '../src/handlers/post.js',
+        new UpstreamError(PING, new TypeError('fetch failed')),
+      );
+      const req = new Request('https://main--site--org.ue.da.live/some/path', { method: 'POST' });
+
+      const res = await worker.fetch(req, {});
+
+      assert.strictEqual(res.status, 503);
+      assert.match(await res.text(), /could not be determined/);
+    });
+  });
+
   describe('when a handler throws', () => {
     // a throw used to reject worker.fetch, and the runtime answered a bare 500 with no CORS on it,
     // which the editor cannot read at all

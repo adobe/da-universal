@@ -51,7 +51,10 @@ export default async function headHandler({ req, env, daCtx }) {
       return aemResponse;
     }
     // the store could not answer, so neither can we; the proxy's 404 would claim it does not exist
-    if (storeRes && storeRes.status >= 500) {
+    if (daSourceHeadRes.status === 'rejected') {
+      throw daSourceHeadRes.reason;
+    }
+    if (storeRes.status >= 500) {
       return storeRes;
     }
     if (aemResponse && aemResponse.status < 500) {

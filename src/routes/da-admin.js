@@ -22,21 +22,17 @@ import {
   applyQuickEditToDocument, buildQuickEditCookie, buildQuickEditNotFoundResponse,
 } from '../utils/quick-edit.js';
 import {
-  daResp, get401, get404, get415, get503, head401, head503, post405, post503,
+  daResp, get401, get404, get415, head401, post405,
 } from '../responses/index.js';
 import {
-  AEM_UNREACHABLE_HTML_MESSAGE,
   BRANCH_NOT_FOUND_HTML_MESSAGE,
   BRANCH_UNAVAILABLE_HTML_MESSAGE,
   DEFAULT_HTML_TEMPLATE,
   SOURCE_BUS_READ_ONLY_MESSAGE,
-  SOURCE_UNDETERMINED_MESSAGE,
-  SOURCE_UNREACHABLE_HTML_MESSAGE,
-  SOURCE_UNREACHABLE_MESSAGE,
   UNAUTHORIZED_HTML_MESSAGE,
 } from '../utils/constants.js';
 import {
-  CONTENT_STORE, PING, UpstreamError, causeOf, reach,
+  CONTENT_STORE, PING, causeOf, reach,
 } from '../utils/upstream.js';
 import { getSiteConfig } from '../storage/config.js';
 import isSourceBus from '../storage/source-bus.js';
@@ -46,7 +42,6 @@ import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 const HTML_POST_TYPE = 'text/html';
 const HEAD_PATH = '/head.html';
 const NO_BODY_STATUSES = new Set([204, 205, 304]);
-const STORE_UPSTREAMS = new Set([PING, CONTENT_STORE]);
 
 export function isHtmlPostType(type) {
   if (!type) return true;
@@ -109,7 +104,7 @@ async function readSource(env, daCtx, init) {
   return reach(CONTENT_STORE, () => store.fetch(store.url, init));
 }
 
-async function readAndCompose({ req, env, daCtx }) {
+export async function daSourceGet({ req, env, daCtx }) {
   const { ext, authToken } = daCtx;
 
   // check if Authorization header is present
@@ -222,29 +217,7 @@ async function readAndCompose({ req, env, daCtx }) {
   });
 }
 
-/**
- * An upstream that did not answer is a 503 naming the cause, and anything else is a bug.
- */
-function unreachable(e, respond) {
-  if (!(e instanceof UpstreamError)) throw e;
-  return respond(e);
-}
-
-export async function daSourceGet({ req, env, daCtx }) {
-  try {
-    return await readAndCompose({ req, env, daCtx });
-  } catch (e) {
-    // the body is what an author reads in the editor, so it names the system that failed
-    return unreachable(e, ({ upstream, error }) => get503(
-      STORE_UPSTREAMS.has(upstream)
-        ? SOURCE_UNREACHABLE_HTML_MESSAGE
-        : AEM_UNREACHABLE_HTML_MESSAGE,
-      error,
-    ));
-  }
-}
-
-async function readHead({ env, daCtx }) {
+export async function daSourceHead({ env, daCtx }) {
   const { authToken } = daCtx;
 
   if (!authToken) {
@@ -259,15 +232,7 @@ async function readHead({ env, daCtx }) {
   return new Response(null, { status: response.status, headers: response.headers });
 }
 
-export async function daSourceHead({ env, daCtx }) {
-  try {
-    return await readHead({ env, daCtx });
-  } catch (e) {
-    return unreachable(e, ({ error }) => head503(error));
-  }
-}
-
-async function writeSource({ req, env, daCtx }) {
+export async function daSourcePost({ req, env, daCtx }) {
   const { sourcePath, ext, authToken } = daCtx;
 
   // the body is rewritten as HTML below, so anything but an HTML document would be
@@ -324,16 +289,4 @@ async function writeSource({ req, env, daCtx }) {
   }
 
   return get415();
-}
-
-export async function daSourcePost({ req, env, daCtx }) {
-  try {
-    return await writeSource({ req, env, daCtx });
-  } catch (e) {
-    // nothing was written either way, and which of the two failed decides what an author is told
-    return unreachable(e, ({ upstream, error }) => post503(
-      upstream === PING ? SOURCE_UNDETERMINED_MESSAGE : SOURCE_UNREACHABLE_MESSAGE,
-      error,
-    ));
-  }
 }

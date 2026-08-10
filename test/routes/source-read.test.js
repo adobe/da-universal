@@ -543,9 +543,9 @@ describe('reading from the store that holds the site', () => {
         assert.strictEqual(await raced(handler, 200, 404), 200);
       });
 
-      // the reason an undetermined store answers 503 rather than throwing: allSettled turns a
-      // rejection into "no answer" and the proxy's 404 would win, claiming the image is absent
-      it(`answers 503 when the store is undetermined on a ${handler.toUpperCase()}`, async () => {
+      // allSettled turns a rejection into "no answer", so the race rethrows rather than let the
+      // proxy's 404 win and claim the image is absent
+      it(`propagates an unreachable store on a ${handler.toUpperCase()}`, async () => {
         const mod = await esmock(`../../src/handlers/${handler}.js`, {
           '../../src/routes/da-admin.js': {
             daSourceGet: async () => { throw new TypeError('fetch failed'); },
@@ -557,10 +557,11 @@ describe('reading from the store that holds the site', () => {
         });
         const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
 
-        const thrown = (await mod.default({ req, env: {}, daCtx: getDaCtx(req) })).status;
-
-        assert.strictEqual(thrown, 404, 'a rejection is swallowed and the proxy answers');
-        assert.strictEqual(await raced(handler, 503, 404), 503, 'a 503 response is not');
+        await assert.rejects(
+          () => mod.default({ req, env: {}, daCtx: getDaCtx(req) }),
+          (e) => e instanceof TypeError,
+        );
+        assert.strictEqual(await raced(handler, 503, 404), 503, 'a 503 response still wins too');
       });
     });
 
