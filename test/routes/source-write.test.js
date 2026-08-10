@@ -31,6 +31,7 @@ const build = async (overrides = {}) => {
   // `in overrides` rather than a destructured default, so passing an explicit undefined really
   // does simulate a probe that could not answer
   const onSourceBus = 'onSourceBus' in overrides ? overrides.onSourceBus : false;
+  const probeError = 'probeError' in overrides ? overrides.probeError : new TypeError('fetch failed');
   const seen = {
     bus: [], legacy: [], lookups: 0, order: [],
   };
@@ -72,6 +73,8 @@ const build = async (overrides = {}) => {
       default: async () => {
         seen.lookups += 1;
         seen.order.push('lookup');
+        // the probe reports a failure by throwing, so undefined stands for "could not answer"
+        if (onSourceBus === undefined) throw probeError;
         return onSourceBus;
       },
     },
@@ -151,6 +154,15 @@ describe('writing to the store that holds the site', () => {
       const { res } = await post({ onSourceBus: undefined });
 
       assert.match(res.headers.get('x-error'), /ping/);
+    });
+
+    it('carries the probe cause, not a category', async () => {
+      const { res } = await post({
+        onSourceBus: undefined,
+        probeError: new DOMException('timed out', 'TimeoutError'),
+      });
+
+      assert.strictEqual(res.headers.get('x-error'), '/ping failed: TimeoutError: timed out');
     });
   });
 

@@ -31,6 +31,7 @@ const build = async (overrides = {}) => {
   // undefined really does simulate a missing head.html and a probe that could not answer
   const headHtml = 'headHtml' in overrides ? overrides.headHtml : '<meta name="from" content="aem" />';
   const onSourceBus = 'onSourceBus' in overrides ? overrides.onSourceBus : false;
+  const probeError = 'probeError' in overrides ? overrides.probeError : new TypeError('fetch failed');
   const seen = {
     bus: [], legacy: [], ue: 0, lookups: 0,
   };
@@ -54,6 +55,8 @@ const build = async (overrides = {}) => {
     '../../src/storage/source-bus.js': {
       default: async () => {
         seen.lookups += 1;
+        // the probe reports a failure by throwing, so undefined stands for "could not answer"
+        if (onSourceBus === undefined) throw probeError;
         return onSourceBus;
       },
     },
@@ -140,6 +143,43 @@ describe('when /ping cannot say which store holds the site', () => {
     const res = await daSourceHead({ env, daCtx: getDaCtx(req) });
 
     assert.match(res.headers.get('x-error'), /ping/);
+  });
+
+  // a read answers the same 503 and the same body whichever of the two failed, so the header is
+  // the only thing on the wire that separates a timeout from a dropped connection
+  it('carries the probe cause, not a category', async () => {
+    const { daSourceGet, env } = await build({
+      onSourceBus: undefined,
+      probeError: new DOMException('timed out', 'TimeoutError'),
+    });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.headers.get('x-error'), '/ping failed: TimeoutError: timed out');
+  });
+
+  // rendering a thrown non-Error as "undefined: undefined" would leave the 503 saying nothing
+  it('survives a thrown non-Error', async () => {
+    const { daSourceGet, env } = await build({ onSourceBus: undefined, probeError: 'boom' });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 503);
+    assert.strictEqual(res.headers.get('x-error'), '/ping failed: Error: boom');
+  });
+
+  it('tells a probe failure apart from a store failure', async () => {
+    const { daSourceGet, env } = await build({
+      onSourceBus: true,
+      bus: () => { throw new TypeError('fetch failed'); },
+    });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.headers.get('x-error'), 'TypeError: fetch failed');
   });
 });
 

@@ -131,25 +131,24 @@ describe('isSourceBus', () => {
   // an answer without the header is legacy. no answer is not an answer, and the caller refuses
   // rather than picking a store on a coin flip
   describe('when /ping cannot answer', () => {
-    it('answers undefined when the probe throws', async () => {
+    // the cause reaches the caller, which reports it on the 503 as `x-error`. swallowing it here
+    // would leave a timeout and a dropped connection indistinguishable
+    it('lets the failure through', async () => {
       stubFetch(() => {
         throw new TypeError('fetch failed');
       });
 
-      assert.strictEqual(await isSourceBus(env, daCtx()), undefined);
+      await assert.rejects(isSourceBus(env, daCtx()), { message: 'fetch failed' });
     });
 
-    it('answers undefined when HLX_ADMIN is unusable, without asking', async () => {
+    it('lets it through when HLX_ADMIN is unusable, without asking', async () => {
       stubFetch(upgraded);
 
-      assert.strictEqual(
-        await isSourceBus({ AEM_API: 'https://api.aem.live' }, daCtx()),
-        undefined,
-      );
+      await assert.rejects(isSourceBus({ AEM_API: 'https://api.aem.live' }, daCtx()));
       assert.strictEqual(calls.length, 0);
     });
 
-    // the distinction the caller acts on: false is a store, undefined is no store
+    // the distinction the caller acts on: false is a store, a failure is no store
     it('is distinguishable from a legacy answer', async () => {
       stubFetch(() => ping());
       assert.strictEqual(await isSourceBus(env, daCtx()), false);
@@ -157,7 +156,7 @@ describe('isSourceBus', () => {
       stubFetch(() => {
         throw new TypeError('fetch failed');
       });
-      assert.strictEqual(await isSourceBus(env, daCtx()), undefined);
+      await assert.rejects(isSourceBus(env, daCtx()));
     });
   });
 
