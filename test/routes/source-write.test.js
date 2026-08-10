@@ -146,6 +146,12 @@ describe('writing to the store that holds the site', () => {
 
       assert.strictEqual(await res.text(), SOURCE_UNDETERMINED_MESSAGE);
     });
+
+    it('names the failed probe in x-error', async () => {
+      const { res } = await post({ onSourceBus: undefined });
+
+      assert.match(res.headers.get('x-error'), /ping/);
+    });
   });
 
   describe('a legacy site', () => {
@@ -256,6 +262,20 @@ describe('writing to the store that holds the site', () => {
       const res = await daSourcePost({ req, env, daCtx: getDaCtx(req) });
 
       assert.strictEqual(res.status, 503);
+    });
+
+    // a save that failed on a rate limit and one that failed on a dropped connection are the same
+    // 503 to the editor, and only one of them is worth retrying at once
+    it('names the cause in x-error', async () => {
+      const { daSourcePost, env } = await build({});
+      env.daadmin.fetch = async () => {
+        throw new TypeError('Network connection lost');
+      };
+      const req = uePost(AT);
+
+      const res = await daSourcePost({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.headers.get('x-error'), 'TypeError: Network connection lost');
     });
   });
 

@@ -121,6 +121,26 @@ describe('when /ping cannot say which store holds the site', () => {
     assert.strictEqual(await res.text(), '');
     assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
   });
+
+  // both 503s carry the same status and a body nobody parses, so the header is what tells an
+  // unanswerable probe apart from a store that was picked and then failed
+  it('names the failed probe in x-error', async () => {
+    const { daSourceGet, env } = await build({ onSourceBus: undefined });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.match(res.headers.get('x-error'), /ping/);
+  });
+
+  it('names the failed probe on a HEAD too', async () => {
+    const { daSourceHead, env } = await build({ onSourceBus: undefined });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceHead({ env, daCtx: getDaCtx(req) });
+
+    assert.match(res.headers.get('x-error'), /ping/);
+  });
 });
 
 describe('reading from the store that holds the site', () => {
@@ -266,6 +286,69 @@ describe('reading from the store that holds the site', () => {
 
       assert.strictEqual(await res.text(), '');
       assert.ok(Number(res.headers.get('Retry-After')) > 0);
+    });
+
+    // a rate limit, a DNS failure and a timeout all arrive here as the same 503, and the worker
+    // log is not where the caller is looking
+    it('names the cause in x-error on an html read', async () => {
+      const { daSourceGet, env } = await build({
+        onSourceBus: true,
+        bus: () => { throw new TypeError('Network connection lost'); },
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.headers.get('x-error'), 'TypeError: Network connection lost');
+    });
+
+    it('names the cause on a non-html read', async () => {
+      const { daSourceGet, env } = await build({
+        onSourceBus: true,
+        bus: () => { throw new TypeError('Network connection lost'); },
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.headers.get('x-error'), 'TypeError: Network connection lost');
+    });
+
+    it('names the cause on a HEAD', async () => {
+      const { daSourceHead, env } = await build({
+        onSourceBus: true,
+        bus: () => { throw new DOMException('The operation timed out', 'TimeoutError'); },
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceHead({ env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.headers.get('x-error'), 'TimeoutError: The operation timed out');
+    });
+
+    it('names the cause when da-admin is unreachable', async () => {
+      const { daSourceGet, env } = await build({
+        legacy: () => { throw new TypeError('Network connection lost'); },
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.headers.get('x-error'), 'TypeError: Network connection lost');
+    });
+
+    // a header value cannot span lines, so a message carrying a stack would throw where the 503
+    // is built and turn the 503 into a 500
+    it('collapses a multi-line cause onto one line', async () => {
+      const { daSourceGet, env } = await build({
+        onSourceBus: true,
+        bus: () => { throw new TypeError('lost\n    at fetch'); },
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.headers.get('x-error'), 'TypeError: lost at fetch');
     });
   });
 
