@@ -106,6 +106,16 @@ describe('AEM context', () => {
       assert.strictEqual(status, 429);
     });
 
+    // a 2xx that is not 200 is not a head fragment
+    it('reports a 2xx that is not 200 without html', async () => {
+      global.fetch = async () => new Response('<meta name="x">', { status: 203 });
+
+      const { status, html } = await getAEMHtml(mockAemCtx, '/head.html');
+
+      assert.strictEqual(status, 203);
+      assert.strictEqual(html, undefined);
+    });
+
     it('throws an UpstreamError naming the path when the origin does not answer', async () => {
       global.fetch = async () => {
         throw new TypeError('Network connection lost');

@@ -50,10 +50,8 @@ export default async function getHandler({ req, env, daCtx }) {
       response = storeRes;
     } else if (aemProxyRes.status === 'rejected') {
       throw aemProxyRes.reason;
-    } else if (aemRes) {
-      response = aemRes;
     } else {
-      return get404();
+      response = aemRes;
     }
 
     if (/\.svg$/i.test(path)) {

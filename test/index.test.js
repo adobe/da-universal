@@ -115,6 +115,56 @@ describe('worker fetch handler', () => {
     });
   });
 
+  // the tests above stub a handler. here only the network is stubbed
+  describe('end to end, with nothing answering', () => {
+    afterEach(() => {
+      delete globalThis.fetch;
+    });
+
+    const worker = async () => (await esmock('../src/index.js', {}, {
+      '../src/storage/source-bus.js': {
+        default: async () => {
+          throw new TypeError('Network connection lost');
+        },
+      },
+    })).default;
+
+    const env = {
+      DA_ADMIN: 'https://admin.da.live',
+      AEM_API: 'https://api.aem.live',
+      HLX_ADMIN: 'https://admin.hlx.page',
+      UE_HOST: 'ue.da.live',
+      daadmin: { fetch: async () => new Response('', { status: 200 }) },
+    };
+
+    it('answers a read with a 503 that names the probe', async () => {
+      globalThis.fetch = async () => new Response('<head></head>', { status: 200 });
+      const req = new Request('https://main--site--org.ue.da.live/folder/content', {
+        headers: { Authorization: 'Bearer t' },
+      });
+
+      const res = await (await worker()).fetch(req, env);
+
+      assert.strictEqual(res.status, 503);
+      assert.strictEqual(res.headers.get('x-error'), '/ping failed: TypeError: Network connection lost');
+      assert.match(await res.text(), /Content store unreachable/);
+    });
+
+    it('answers a HEAD the same way, without a body', async () => {
+      globalThis.fetch = async () => new Response('<head></head>', { status: 200 });
+      const req = new Request('https://main--site--org.ue.da.live/folder/content', {
+        method: 'HEAD',
+        headers: { Authorization: 'Bearer t' },
+      });
+
+      const res = await (await worker()).fetch(req, env);
+
+      assert.strictEqual(res.status, 503);
+      assert.strictEqual(await res.text(), '');
+      assert.ok(Number(res.headers.get('Retry-After')) > 0);
+    });
+  });
+
   describe('when a handler throws', () => {
     // a throw used to reject worker.fetch, and the runtime answered a bare 500 with no CORS on it,
     // which the editor cannot read at all

@@ -20,8 +20,7 @@ import { CONTENT_STORE, PING } from '../utils/upstream.js';
 
 const RETRY_AFTER_SECONDS = '5';
 
-// a 503 says the store did not answer and the body says it again. Only `x-error` says which of a
-// rate limit, a timeout or a dropped connection it was, without reading the worker log.
+// a 503 says an upstream did not answer. only `x-error` says which one, and how.
 function retryHeaders(error) {
   const headers = [['Retry-After', RETRY_AFTER_SECONDS]];
   if (error) headers.push(['x-error', error]);
@@ -64,7 +63,7 @@ export function get415(message = '') {
   return daResp({ body: message, status: 415, contentType: 'text/html' });
 }
 
-export function get503(message = '', error = '') {
+function get503(message = '', error = '') {
   return daResp({
     body: message,
     status: 503,
@@ -75,7 +74,7 @@ export function get503(message = '', error = '') {
 
 // a refused write is never rendered. The Universal Editor Service embeds the body verbatim in
 // its problem+json error string, so plain text is what an author is shown.
-export function post503(message = '', error = '') {
+function post503(message = '', error = '') {
   return daResp({
     body: message,
     status: 503,
@@ -98,7 +97,7 @@ export function head401() {
   return new Response(null, { status: 401 });
 }
 
-export function head503(error = '') {
+function head503(error = '') {
   return new Response(null, { status: 503, headers: retryHeaders(error) });
 }
 

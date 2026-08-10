@@ -635,6 +635,39 @@ describe('reading from the store that holds the site', () => {
       );
     });
 
+    // an unreadable head.html says nothing about the store's 401, and on a 503 the da:401
+    // shell is not sent
+    it('keeps a store refusal when head.html did not answer', async () => {
+      const { daSourceGet, env } = await build({
+        onSourceBus: true,
+        head: () => {
+          throw new UpstreamError('/head.html', new TypeError('fetch failed'));
+        },
+        bus: () => new Response('', { status: 401 }),
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 401);
+      assert.match(await res.text(), /da:401/);
+    });
+
+    it('keeps a store rate limit when head.html did not answer', async () => {
+      const { daSourceGet, env } = await build({
+        onSourceBus: true,
+        head: () => {
+          throw new UpstreamError('/head.html', new TypeError('fetch failed'));
+        },
+        bus: () => new Response('slow down', { status: 429 }),
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 429);
+    });
+
     it('reports head.html when it is the only one that did not answer', async () => {
       const { daSourceGet, env } = await build({
         onSourceBus: true,
@@ -759,15 +792,18 @@ describe('reading from the store that holds the site', () => {
       assert.strictEqual(res.headers.get('x-error'), '/head.html answered 429');
     });
 
-    // the authorbus extension recovers off the da:401 meta rather than the status
-    it('answers a refusal with the shell the authorbus extension matches', async () => {
-      const head = () => ({ status: 401 });
-      const { daSourceGet, env } = await build({ onSourceBus: true, head });
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+    // the authorbus extension recovers off the da:401 meta, not the status, and a site behind
+    // Helix auth answers 403
+    [401, 403].forEach((status) => {
+      it(`answers a ${status} with the shell the authorbus extension matches`, async () => {
+        const head = () => ({ status });
+        const { daSourceGet, env } = await build({ onSourceBus: true, head });
+        const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+        const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-      assert.match(await res.text(), /da:401/);
+        assert.match(await res.text(), /da:401/);
+      });
     });
 
     // on main any non-ok head.html gave quick-edit its shell. a status that says "retry" is not

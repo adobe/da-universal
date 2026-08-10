@@ -62,7 +62,7 @@ export async function getAEMHtml(aemCtx, path) {
   const { previewUrl } = aemCtx;
   return reach(path, async () => {
     const resp = await fetch(`${previewUrl}${path}`, withAemAuth(aemCtx));
-    if (!resp.ok) return { status: resp.status };
+    if (resp.status !== 200) return { status: resp.status };
     return { status: resp.status, html: await resp.text() };
   });
 }

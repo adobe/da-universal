@@ -40,7 +40,7 @@ import getStore from '../storage/store.js';
 import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 
 const HTML_POST_TYPE = 'text/html';
-const HEAD_PATH = '/head.html';
+const HEAD_HTML_PATH = '/head.html';
 const NO_BODY_STATUSES = new Set([204, 205, 304]);
 
 export function isHtmlPostType(type) {
@@ -81,6 +81,8 @@ async function getPageTemplate(env, daCtx, aemCtx) {
     return DEFAULT_HTML_TEMPLATE;
   }
 
+  // a 404 means no template. a host that did not answer might have one, and the author would
+  // save the default over it
   const templatePath = matchingTemplates[0].template;
   const { html } = await getAEMHtml(aemCtx, templatePath);
   if (html) {
@@ -134,12 +136,10 @@ export async function daSourceGet({ req, env, daCtx }) {
   // the store lookup costs a round trip, so it runs alongside head.html rather than after it
   const aemCtx = getAemCtx(env, daCtx);
   const [headResult, sourceResult] = await Promise.allSettled([
-    getAEMHtml(aemCtx, HEAD_PATH),
+    getAEMHtml(aemCtx, HEAD_HTML_PATH),
     readSource(env, daCtx, { method: 'GET', headers }),
   ]);
   if (sourceResult.status === 'rejected') throw sourceResult.reason;
-  if (headResult.status === 'rejected') throw headResult.reason;
-  const head = headResult.value;
   const sourceResp = sourceResult.value;
   console.log(`<- ${daCtx.sourcePath}. ${sourceResp.status} ${sourceResp.statusText}`, { status: sourceResp.status, statusText: sourceResp.statusText });
 
@@ -155,6 +155,10 @@ export async function daSourceGet({ req, env, daCtx }) {
     return sourceResp;
   }
 
+  // the store has answered by now, so a head.html failure is reported here
+  if (headResult.status === 'rejected') throw headResult.reason;
+  const head = headResult.value;
+
   // head.html carries the project's scripts and styles, not the answer to whether the document
   // is there, so only a 404 is read as "this branch has no head". Anything else is passed on.
   if (head.status === 401 || head.status === 403) {
@@ -167,12 +171,11 @@ export async function daSourceGet({ req, env, daCtx }) {
       body: bodied ? BRANCH_UNAVAILABLE_HTML_MESSAGE : null,
       status: head.status,
       contentType: bodied ? 'text/html' : undefined,
-      headers: [['x-error', `${HEAD_PATH} answered ${head.status}`]],
+      headers: [['x-error', `${HEAD_HTML_PATH} answered ${head.status}`]],
     });
   }
 
-  // with no head.html, head.html is the only thing on this path that knows the site is there at
-  // all, so a store with nothing either is the branch being absent rather than a new document
+  // only head.html knows the site exists, so 404 from both is a missing branch, not a new document
   if (sourceResp.status === 404 && head.status === 404) {
     // quick-edit still needs a working shell (with the import map) so the editor
     // can load into this page, even when the AEM branch doesn't exist yet.
