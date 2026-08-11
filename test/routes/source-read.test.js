@@ -14,8 +14,16 @@
 import assert from 'assert';
 import esmock from 'esmock';
 import { getDaCtx } from '../../src/utils/daCtx.js';
+// a namespace import, so a body pinned to a constant this branch does not export yet fails
+// its own assertion rather than taking the file down at load
+import * as messages from '../../src/utils/constants.js';
 
 const authedReq = (url) => new Request(url, { headers: { Authorization: 'Bearer t' } });
+
+// what the site lookup answers
+const SOURCE_BUS = { exists: true, onSourceBus: true };
+const LEGACY_STORE = { exists: true, onSourceBus: false };
+const NO_SITE = { exists: false, onSourceBus: false };
 
 /**
  * Builds the route module with the network replaced. `bus` answers the source bus, `legacy`
@@ -27,13 +35,19 @@ const build = async (overrides = {}) => {
     bus = () => new Response('<body>from the source bus</body>', { status: 200, headers: { etag: '"busetag"' } }),
     legacy = () => new Response('<body>from da-admin</body>', { status: 200 }),
   } = overrides;
-  // `in overrides` rather than a destructured default on these two, so passing an explicit
-  // undefined really does simulate a missing head.html and a probe that could not answer
+  // `in overrides` rather than a destructured default on these, so an explicit undefined reads
+  // as a missing head.html, a template the preview host does not have, or a failed lookup
   const headHtml = 'headHtml' in overrides ? overrides.headHtml : '<meta name="from" content="aem" />';
-  const onSourceBus = 'onSourceBus' in overrides ? overrides.onSourceBus : false;
-  const probeError = 'probeError' in overrides ? overrides.probeError : new TypeError('fetch failed');
+  const templateHtml = 'templateHtml' in overrides
+    ? overrides.templateHtml
+    : '<body>from the template</body>';
+  const site = 'site' in overrides ? overrides.site : LEGACY_STORE;
+  const lookupError = 'lookupError' in overrides ? overrides.lookupError : new TypeError('fetch failed');
+  const {
+    headError, templateError, configError, composeError, config = null,
+  } = overrides;
   const seen = {
-    bus: [], legacy: [], ue: 0, lookups: 0,
+    bus: [], legacy: [], head: [], aem: [], ue: 0, lookups: 0,
   };
   globalThis.fetch = async (input, init) => {
     const request = input instanceof Request ? input : new Request(input, init);
@@ -52,33 +66,50 @@ const build = async (overrides = {}) => {
     },
   };
   const mod = await esmock('../../src/routes/da-admin.js', {
-    '../../src/storage/source-bus.js': {
+    '../../src/storage/site.js': {
       default: async () => {
         seen.lookups += 1;
-        // the probe reports a failure by throwing, so undefined stands for "could not answer"
-        if (onSourceBus === undefined) throw probeError;
-        return onSourceBus;
+        // throws for undefined, which is how the lookup reports a failure
+        if (site === undefined) throw lookupError;
+        return site;
       },
     },
     '../../src/utils/aemCtx.js': {
-      getAemCtx: () => ({}),
-      getAEMHtml: async () => headHtml,
+      getAemCtx: () => ({ previewUrl: 'https://main--site--org.aem.page' }),
+      // answers both preview host reads, and fails them separately so a test can reach the
+      // template read with head.html answering
+      getAEMHtml: async (aemCtx, path) => {
+        const isHead = path === '/head.html';
+        if (isHead && headError) throw headError;
+        if (!isHead && templateError) throw templateError;
+        seen.aem.push(path);
+        return isHead ? headHtml : templateHtml;
+      },
     },
     '../../src/render/compose.js': {
-      composeHtml: async (daCtx, aemCtx, bodyHtml) => ({ bodyHtml }),
+      // returns a hast root, so quick-edit can walk what was built
+      composeHtml: async (daCtx, aemCtx, bodyHtml, head) => {
+        if (composeError) throw composeError;
+        seen.head.push(head);
+        return { type: 'root', children: [], bodyHtml };
+      },
       serializeHtml: (tree) => `<html>${tree.bodyHtml}</html>`,
     },
     '../../src/ue/ue.js': {
       applyUEInstrumentation: async () => { seen.ue += 1; },
     },
     '../../src/storage/config.js': {
-      getSiteConfig: async () => { throw new Error('no config'); },
+      // da-admin answers a site with no config with a 404, which getSiteConfig reports as null
+      getSiteConfig: async () => {
+        if (configError) throw configError;
+        return config;
+      },
     },
   });
   return { ...mod, env, seen };
 };
 
-describe('when /ping cannot say which store holds the site', () => {
+describe('when the lookup cannot say which store holds the site', () => {
   afterEach(() => {
     delete globalThis.fetch;
   });
@@ -86,7 +117,7 @@ describe('when /ping cannot say which store holds the site', () => {
   // picking a store without an answer is a coin flip, and reading the wrong one hands the author
   // the wrong document at 200
   it('refuses an html read with 503 and touches neither store', async () => {
-    const { daSourceGet, env, seen } = await build({ onSourceBus: undefined });
+    const { daSourceGet, env, seen } = await build({ site: undefined });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
@@ -96,7 +127,7 @@ describe('when /ping cannot say which store holds the site', () => {
   });
 
   it('asks the caller to retry', async () => {
-    const { daSourceGet, env } = await build({ onSourceBus: undefined });
+    const { daSourceGet, env } = await build({ site: undefined });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
@@ -104,8 +135,21 @@ describe('when /ping cannot say which store holds the site', () => {
     assert.ok(Number(res.headers.get('Retry-After')) > 0);
   });
 
+  // the preview iframe renders this body, and the store answered nothing here: it was never
+  // asked, since which store to ask is what could not be determined
+  it('says the store could not be determined, not that it did not answer', async () => {
+    const { daSourceGet, env } = await build({ site: undefined });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    const body = await res.text();
+    assert.notStrictEqual(body, messages.SOURCE_UNREACHABLE_HTML_MESSAGE);
+    assert.strictEqual(body, messages.SOURCE_UNDETERMINED_HTML_MESSAGE);
+  });
+
   it('refuses a non-html read too', async () => {
-    const { daSourceGet, env, seen } = await build({ onSourceBus: undefined });
+    const { daSourceGet, env, seen } = await build({ site: undefined });
     const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
 
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
@@ -115,7 +159,7 @@ describe('when /ping cannot say which store holds the site', () => {
   });
 
   it('refuses a HEAD with 503 and no body', async () => {
-    const { daSourceHead, env, seen } = await build({ onSourceBus: undefined });
+    const { daSourceHead, env, seen } = await build({ site: undefined });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
     const res = await daSourceHead({ env, daCtx: getDaCtx(req) });
@@ -125,61 +169,60 @@ describe('when /ping cannot say which store holds the site', () => {
     assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
   });
 
-  // both 503s carry the same status and a body nobody parses, so the header is what tells an
-  // unanswerable probe apart from a store that was picked and then failed
-  it('names the failed probe in x-error', async () => {
-    const { daSourceGet, env } = await build({ onSourceBus: undefined });
+  // both 503s share a status and an unparsed body, so only the header separates them
+  it('names the failed lookup in x-error', async () => {
+    const { daSourceGet, env } = await build({ site: undefined });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-    assert.match(res.headers.get('x-error'), /ping/);
+    assert.match(res.headers.get('x-error'), /site lookup failed/);
   });
 
-  it('names the failed probe on a HEAD too', async () => {
-    const { daSourceHead, env } = await build({ onSourceBus: undefined });
+  it('names the failed lookup on a HEAD too', async () => {
+    const { daSourceHead, env } = await build({ site: undefined });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
     const res = await daSourceHead({ env, daCtx: getDaCtx(req) });
 
-    assert.match(res.headers.get('x-error'), /ping/);
+    assert.match(res.headers.get('x-error'), /site lookup failed/);
   });
 
   // a read answers the same 503 and the same body whichever of the two failed, so the header is
   // the only thing on the wire that separates a timeout from a dropped connection
-  it('carries the probe cause, not a category', async () => {
+  it('names the lookup cause, not a category', async () => {
     const { daSourceGet, env } = await build({
-      onSourceBus: undefined,
-      probeError: new DOMException('timed out', 'TimeoutError'),
+      site: undefined,
+      lookupError: new DOMException('timed out', 'TimeoutError'),
     });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-    assert.strictEqual(res.headers.get('x-error'), '/ping failed: TimeoutError: timed out');
+    assert.strictEqual(res.headers.get('x-error'), 'site lookup failed: TimeoutError: timed out');
   });
 
   // rendering a thrown non-Error as "undefined: undefined" would leave the 503 saying nothing
   it('survives a thrown non-Error', async () => {
-    const { daSourceGet, env } = await build({ onSourceBus: undefined, probeError: 'boom' });
+    const { daSourceGet, env } = await build({ site: undefined, lookupError: 'boom' });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
     assert.strictEqual(res.status, 503);
-    assert.strictEqual(res.headers.get('x-error'), '/ping failed: Error: boom');
+    assert.strictEqual(res.headers.get('x-error'), 'site lookup failed: Error: boom');
   });
 
-  it('tells a probe failure apart from a store failure', async () => {
+  it('tells a lookup failure apart from a store failure', async () => {
     const { daSourceGet, env } = await build({
-      onSourceBus: true,
+      site: SOURCE_BUS,
       bus: () => { throw new TypeError('fetch failed'); },
     });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-    assert.strictEqual(res.headers.get('x-error'), 'TypeError: fetch failed');
+    assert.strictEqual(res.headers.get('x-error'), 'content store failed: TypeError: fetch failed');
   });
 });
 
@@ -190,7 +233,7 @@ describe('reading from the store that holds the site', () => {
 
   describe('an html read on a source-bus site', () => {
     it('reads from the source bus', async () => {
-      const { daSourceGet, env, seen } = await build({ onSourceBus: true });
+      const { daSourceGet, env, seen } = await build({ site: SOURCE_BUS });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
@@ -201,7 +244,7 @@ describe('reading from the store that holds the site', () => {
     });
 
     it('composes the source-bus document, not da-admin\'s copy of it', async () => {
-      const { daSourceGet, env } = await build({ onSourceBus: true });
+      const { daSourceGet, env } = await build({ site: SOURCE_BUS });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
@@ -210,7 +253,7 @@ describe('reading from the store that holds the site', () => {
     });
 
     it('forwards the author token to the source bus', async () => {
-      const { daSourceGet, env, seen } = await build({ onSourceBus: true });
+      const { daSourceGet, env, seen } = await build({ site: SOURCE_BUS });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
@@ -234,7 +277,7 @@ describe('reading from the store that holds the site', () => {
 
   describe('the store lookup on a read', () => {
     it('happens once, and only the store it named is asked', async () => {
-      const { daSourceGet, env, seen } = await build({ onSourceBus: true });
+      const { daSourceGet, env, seen } = await build({ site: SOURCE_BUS });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
@@ -247,7 +290,7 @@ describe('reading from the store that holds the site', () => {
   describe('when the store cannot be reached at all', () => {
     it('answers 503 rather than throwing on an html read', async () => {
       const { daSourceGet, env } = await build({
-        onSourceBus: true,
+        site: SOURCE_BUS,
         bus: () => { throw new TypeError('fetch failed'); },
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -259,7 +302,7 @@ describe('reading from the store that holds the site', () => {
 
     it('answers 503 rather than throwing on a non-html read', async () => {
       const { daSourceGet, env } = await build({
-        onSourceBus: true,
+        site: SOURCE_BUS,
         bus: () => { throw new TypeError('fetch failed'); },
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
@@ -269,7 +312,7 @@ describe('reading from the store that holds the site', () => {
 
     it('answers 503 rather than throwing on a HEAD', async () => {
       const { daSourceHead, env } = await build({
-        onSourceBus: true,
+        site: SOURCE_BUS,
         bus: () => { throw new TypeError('fetch failed'); },
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -288,7 +331,7 @@ describe('reading from the store that holds the site', () => {
 
     it('asks the caller to retry', async () => {
       const { daSourceGet, env } = await build({
-        onSourceBus: true,
+        site: SOURCE_BUS,
         bus: () => { throw new TypeError('fetch failed'); },
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -302,7 +345,7 @@ describe('reading from the store that holds the site', () => {
     // body that says what happened rather than an empty page
     it('says what happened, on both GET paths', async () => {
       const { daSourceGet, env } = await build({
-        onSourceBus: true,
+        site: SOURCE_BUS,
         bus: () => { throw new TypeError('fetch failed'); },
       });
       const html = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -311,13 +354,13 @@ describe('reading from the store that holds the site', () => {
       const htmlRes = await daSourceGet({ req: html, env, daCtx: getDaCtx(html) });
       const assetRes = await daSourceGet({ req: asset, env, daCtx: getDaCtx(asset) });
 
-      assert.match(await htmlRes.text(), /503/);
-      assert.match(await assetRes.text(), /503/);
+      assert.strictEqual(await htmlRes.text(), messages.SOURCE_UNREACHABLE_HTML_MESSAGE);
+      assert.strictEqual(await assetRes.text(), messages.SOURCE_UNREACHABLE_HTML_MESSAGE);
     });
 
     it('answers 503 with no body on a HEAD', async () => {
       const { daSourceHead, env } = await build({
-        onSourceBus: true,
+        site: SOURCE_BUS,
         bus: () => { throw new TypeError('fetch failed'); },
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -332,38 +375,38 @@ describe('reading from the store that holds the site', () => {
     // log is not where the caller is looking
     it('names the cause in x-error on an html read', async () => {
       const { daSourceGet, env } = await build({
-        onSourceBus: true,
+        site: SOURCE_BUS,
         bus: () => { throw new TypeError('Network connection lost'); },
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-      assert.strictEqual(res.headers.get('x-error'), 'TypeError: Network connection lost');
+      assert.strictEqual(res.headers.get('x-error'), 'content store failed: TypeError: Network connection lost');
     });
 
     it('names the cause on a non-html read', async () => {
       const { daSourceGet, env } = await build({
-        onSourceBus: true,
+        site: SOURCE_BUS,
         bus: () => { throw new TypeError('Network connection lost'); },
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
 
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-      assert.strictEqual(res.headers.get('x-error'), 'TypeError: Network connection lost');
+      assert.strictEqual(res.headers.get('x-error'), 'content store failed: TypeError: Network connection lost');
     });
 
     it('names the cause on a HEAD', async () => {
       const { daSourceHead, env } = await build({
-        onSourceBus: true,
+        site: SOURCE_BUS,
         bus: () => { throw new DOMException('The operation timed out', 'TimeoutError'); },
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       const res = await daSourceHead({ env, daCtx: getDaCtx(req) });
 
-      assert.strictEqual(res.headers.get('x-error'), 'TimeoutError: The operation timed out');
+      assert.strictEqual(res.headers.get('x-error'), 'content store failed: TimeoutError: The operation timed out');
     });
 
     it('names the cause when da-admin is unreachable', async () => {
@@ -374,21 +417,21 @@ describe('reading from the store that holds the site', () => {
 
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-      assert.strictEqual(res.headers.get('x-error'), 'TypeError: Network connection lost');
+      assert.strictEqual(res.headers.get('x-error'), 'content store failed: TypeError: Network connection lost');
     });
 
     // a header value cannot span lines, so a message carrying a stack would throw where the 503
     // is built and turn the 503 into a 500
     it('collapses a multi-line cause onto one line', async () => {
       const { daSourceGet, env } = await build({
-        onSourceBus: true,
+        site: SOURCE_BUS,
         bus: () => { throw new TypeError('lost\n    at fetch'); },
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-      assert.strictEqual(res.headers.get('x-error'), 'TypeError: lost at fetch');
+      assert.strictEqual(res.headers.get('x-error'), 'content store failed: TypeError: lost at fetch');
     });
   });
 
@@ -398,7 +441,7 @@ describe('reading from the store that holds the site', () => {
     [401, 403, 429, 500, 502].forEach((status) => {
       it(`keeps the store's ${status} as the status`, async () => {
         const { daSourceGet, env } = await build({
-          onSourceBus: true,
+          site: SOURCE_BUS,
           bus: () => new Response('upstream said no', { status }),
         });
         const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -413,7 +456,7 @@ describe('reading from the store that holds the site', () => {
     [429, 500, 502].forEach((status) => {
       it(`passes the store's body through on a ${status}`, async () => {
         const { daSourceGet, env } = await build({
-          onSourceBus: true,
+          site: SOURCE_BUS,
           bus: () => new Response('upstream said no', { status }),
         });
         const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -424,12 +467,13 @@ describe('reading from the store that holds the site', () => {
       });
     });
 
-    // /ping reads no token, so the store is the only thing to see one. the authorbus extension
-    // matches this sentinel exactly and recovers by refetching /gimme_cookie and refreshing
+    // the lookup does not send the author token, so the store is the only place a 401 can come
+    // from. the authorbus extension matches this sentinel and recovers by refetching
+    // /gimme_cookie and refreshing
     [401, 403].forEach((status) => {
       it(`serves the da:401 shell when the store answers ${status} on an html read`, async () => {
         const { daSourceGet, env } = await build({
-          onSourceBus: true,
+          site: SOURCE_BUS,
           bus: () => new Response('', { status }),
         });
         const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -443,7 +487,7 @@ describe('reading from the store that holds the site', () => {
 
     it('does not ask the caller to retry a 401, since retrying cannot help', async () => {
       const { daSourceGet, env } = await build({
-        onSourceBus: true,
+        site: SOURCE_BUS,
         bus: () => new Response('', { status: 401 }),
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -455,7 +499,7 @@ describe('reading from the store that holds the site', () => {
 
     it('passes a store 401 through bare on a non-html read, which renders nothing', async () => {
       const { daSourceGet, env } = await build({
-        onSourceBus: true,
+        site: SOURCE_BUS,
         bus: () => new Response('', { status: 401 }),
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
@@ -468,7 +512,7 @@ describe('reading from the store that holds the site', () => {
 
     it('answers a store 401 on a HEAD with no body', async () => {
       const { daSourceHead, env } = await build({
-        onSourceBus: true,
+        site: SOURCE_BUS,
         bus: () => new Response('', { status: 401 }),
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -479,11 +523,11 @@ describe('reading from the store that holds the site', () => {
       assert.strictEqual(await res.text(), '');
     });
 
-    // a wrong yes from /ping produces this, and there is no second store to retry against: the
-    // author is handed the starter template over whatever da-admin still holds
+    // hands the author the starter template over whatever da-admin still has, with no second
+    // store to retry against
     it('composes the starter template on a 404 without asking the other store', async () => {
       const { daSourceGet, env, seen } = await build({
-        onSourceBus: true,
+        site: SOURCE_BUS,
         bus: () => new Response('', { status: 404 }),
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -498,7 +542,7 @@ describe('reading from the store that holds the site', () => {
 
   describe('UE instrumentation', () => {
     it('is applied on a UE host', async () => {
-      const { daSourceGet, env, seen } = await build({ onSourceBus: true });
+      const { daSourceGet, env, seen } = await build({ site: SOURCE_BUS });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
@@ -507,7 +551,7 @@ describe('reading from the store that holds the site', () => {
     });
 
     it('is not applied on a preview host', async () => {
-      const { daSourceGet, env, seen } = await build({ onSourceBus: true });
+      const { daSourceGet, env, seen } = await build({ site: SOURCE_BUS });
       const req = authedReq('https://main--site--org.preview.da.live/folder/content');
 
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
@@ -534,7 +578,7 @@ describe('reading from the store that holds the site', () => {
         daadmin: { fetch: async () => new Response('<body></body>', { status: 200 }) },
       };
       const { daSourceGet } = await esmock('../../src/routes/da-admin.js', {
-        '../../src/storage/source-bus.js': { default: async () => true },
+        '../../src/storage/site.js': { default: async () => ({ exists: true, onSourceBus: true }) },
         '../../src/utils/aemCtx.js': {
           getAemCtx: () => ({ ueHostname: 'ue.da.live', previewUrl: 'https://p.example' }),
           getAEMHtml: async () => '<meta name="from" content="aem" />',
@@ -552,7 +596,7 @@ describe('reading from the store that holds the site', () => {
 
   describe('a non-html read', () => {
     it('goes to the source bus fully normalized', async () => {
-      const { daSourceGet, env, seen } = await build({ onSourceBus: true });
+      const { daSourceGet, env, seen } = await build({ site: SOURCE_BUS });
       const req = authedReq('https://main--site--org.ue.da.live/Media/Holiday.PNG');
 
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
@@ -572,7 +616,7 @@ describe('reading from the store that holds the site', () => {
 
   describe('a HEAD', () => {
     it('goes to the source bus on a source-bus site', async () => {
-      const { daSourceHead, env, seen } = await build({ onSourceBus: true });
+      const { daSourceHead, env, seen } = await build({ site: SOURCE_BUS });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       await daSourceHead({ env, daCtx: getDaCtx(req) });
@@ -594,7 +638,7 @@ describe('reading from the store that holds the site', () => {
 
     it('passes a 404 from the store through, since HEAD composes nothing', async () => {
       const { daSourceHead, env } = await build({
-        onSourceBus: true,
+        site: SOURCE_BUS,
         bus: () => new Response('', { status: 404 }),
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -692,7 +736,7 @@ describe('reading from the store that holds the site', () => {
     // refusal reaches the caller as itself
     it('refuses a video read when the store could not be reached', async () => {
       const { daSourceGet, env } = await build({
-        onSourceBus: true,
+        site: SOURCE_BUS,
         bus: () => { throw new TypeError('fetch failed'); },
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/clip.mp4');
@@ -703,7 +747,7 @@ describe('reading from the store that holds the site', () => {
     });
 
     it('reads a video from the source bus on a source-bus site', async () => {
-      const { daSourceGet, env, seen } = await build({ onSourceBus: true });
+      const { daSourceGet, env, seen } = await build({ site: SOURCE_BUS });
       const req = authedReq('https://main--site--org.ue.da.live/folder/clip.mp4');
 
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
@@ -712,13 +756,13 @@ describe('reading from the store that holds the site', () => {
     });
   });
 
-  describe('the order of the two things that can fail', () => {
-    // a missing AEM branch is answered as it was before, so quick-edit still gets its shell
-    it('reports a missing AEM branch even when the store did not answer', async () => {
+  describe('the order of the three things that can fail', () => {
+    // answers the settled 404 ahead of the retryable 503
+    it('reports no such site even when the store did not answer', async () => {
       const { daSourceGet, env } = await build({
-        onSourceBus: true,
-        headHtml: undefined,
+        site: NO_SITE,
         bus: () => { throw new TypeError('fetch failed'); },
+        legacy: () => { throw new TypeError('fetch failed'); },
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
@@ -726,5 +770,421 @@ describe('reading from the store that holds the site', () => {
 
       assert.strictEqual(res.status, 404);
     });
+
+    // names which failure it was: a site that does not exist has no preview host either
+    it('reports no such site even when the preview host did not answer', async () => {
+      const { daSourceGet, env } = await build({
+        site: NO_SITE,
+        headError: new TypeError('Network connection lost'),
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 404);
+    });
+
+    it('reports an unreachable store on a site with no head.html', async () => {
+      const { daSourceGet, env } = await build({
+        headHtml: undefined,
+        legacy: () => { throw new TypeError('fetch failed'); },
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 503);
+    });
+  });
+
+  // #258: head.html does not say whether a site exists, so a missing head.html is not a 404
+  describe('when the site serves no head.html', () => {
+    it('reads the document anyway', async () => {
+      const { daSourceGet, env, seen } = await build({ headHtml: undefined });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(seen.legacy.length, 1);
+      assert.strictEqual(await res.text(), '<html><body>from da-admin</body></html>');
+    });
+
+    // serves the page without the project's css and js rather than not at all
+    it('composes with no project head entries', async () => {
+      const { daSourceGet, env, seen } = await build({ headHtml: undefined });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(seen.head.length, 1);
+      assert.strictEqual(seen.head[0] ?? '', '');
+    });
+
+    it('composes the starter template when the document is missing too', async () => {
+      const { daSourceGet, env } = await build({
+        headHtml: undefined,
+        legacy: () => new Response('', { status: 404 }),
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 200);
+      assert.match(await res.text(), /<main>/);
+    });
+
+    it('instruments UE without a head', async () => {
+      const { daSourceGet, env, seen } = await build({ headHtml: undefined });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(seen.ue, 1);
+    });
+
+    // sets no cookie: the cookie names the entry script, and no head.html means no entry script
+    it('serves quick-edit the page without an entry-script cookie', async () => {
+      const { daSourceGet, env } = await build({ headHtml: undefined });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content?quick-edit');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.headers.get('Set-Cookie'), null);
+    });
+
+    it('is not answered 404 by a missing head.html alone', async () => {
+      const { daSourceGet, env } = await build({ headHtml: undefined });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.notStrictEqual(res.status, 404);
+    });
+  });
+
+  describe('when there is no such site', () => {
+    it('refuses an html read with 404 and touches neither store', async () => {
+      const { daSourceGet, env, seen } = await build({ site: NO_SITE });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 404);
+      assert.match(await res.text(), /Site not found/);
+      assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
+    });
+
+    // nothing renders an image, so a body would only corrupt it
+    it('refuses a non-html read with 404 and no body', async () => {
+      const { daSourceGet, env, seen } = await build({ site: NO_SITE });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 404);
+      assert.strictEqual(await res.text(), '');
+      assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
+    });
+
+    it('refuses a HEAD with 404 and no body', async () => {
+      const { daSourceHead, env, seen } = await build({ site: NO_SITE });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceHead({ env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 404);
+      assert.strictEqual(await res.text(), '');
+      assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
+    });
+
+    // needs a shell with the import map, since the editor loads into this page
+    it('gives quick-edit its shell', async () => {
+      const { daSourceGet, env } = await build({ site: NO_SITE });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content?quick-edit');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 404);
+      assert.match(await res.text(), /importmap/);
+    });
+  });
+
+  // a throw out of getAEMHtml used to reach the worker's catch as a 500 with no body
+  describe('when the preview host cannot be reached', () => {
+    const dead = () => new TypeError('Network connection lost');
+
+    it('answers 503 rather than throwing', async () => {
+      const { daSourceGet, env } = await build({ headError: dead() });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 503);
+    });
+
+    it('names the cause in x-error', async () => {
+      const { daSourceGet, env } = await build({ headError: dead() });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.headers.get('x-error'), 'preview host failed: TypeError: Network connection lost');
+    });
+
+    it('asks the caller to retry', async () => {
+      const { daSourceGet, env } = await build({
+        headError: new DOMException('The operation timed out', 'TimeoutError'),
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.ok(Number(res.headers.get('Retry-After')) > 0);
+    });
+
+    // says what happened, since the preview iframe renders the refusal
+    it('says the preview host did not answer, not the store', async () => {
+      const { daSourceGet, env } = await build({ headError: dead() });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(await res.text(), messages.PREVIEW_UNREACHABLE_HTML_MESSAGE);
+    });
+
+    // a 404 would say the site is gone, which is #258 again, this time on the preview host
+    it('does not answer 404', async () => {
+      const { daSourceGet, env } = await build({ headError: dead() });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.notStrictEqual(res.status, 404);
+    });
+  });
+});
+
+describe('when the site config cannot be reached', () => {
+  afterEach(() => {
+    delete globalThis.fetch;
+  });
+
+  const missing = () => ({
+    legacy: () => new Response('', { status: 404 }),
+    configError: new TypeError('fetch failed'),
+  });
+
+  // the config names the template built over a document that is not there, so a store that did
+  // not answer would hand the author the wrong blank page to save over
+  it('refuses with 503 rather than composing the starter template', async () => {
+    const { daSourceGet, env } = await build(missing());
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 503);
+  });
+
+  // da-admin serves the config as well as the document, so the store is what did not answer.
+  // x-error is what separates the two reads
+  it('says the store did not answer', async () => {
+    const { daSourceGet, env } = await build(missing());
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(await res.text(), messages.SOURCE_UNREACHABLE_HTML_MESSAGE);
+  });
+
+  it('names the site config in x-error', async () => {
+    const { daSourceGet, env } = await build(missing());
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.headers.get('x-error'), 'site config failed: TypeError: fetch failed');
+  });
+
+  it('asks the caller to retry', async () => {
+    const { daSourceGet, env } = await build(missing());
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.ok(Number(res.headers.get('Retry-After')) > 0);
+  });
+
+  // da-admin answers a site with no config with a 404, not a throw, and that is the ordinary case
+  it('composes the starter template when there is no config at all', async () => {
+    const { daSourceGet, env } = await build({ legacy: () => new Response('', { status: 404 }) });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 200);
+    assert.match(await res.text(), /<main>/);
+  });
+});
+
+// getAEMHtml is not stubbed here: a stub hides a preview host that answers, but with something
+// other than head.html
+describe('when the preview host refuses head.html', () => {
+  afterEach(() => {
+    delete globalThis.fetch;
+  });
+
+  const readWithPreviewStatus = async (status) => {
+    globalThis.fetch = async () => new Response('preview said no', { status });
+    const env = {
+      DA_ADMIN: 'https://admin.da.live',
+      AEM_API: 'https://api.aem.live',
+      daadmin: { fetch: async () => new Response('<body>from da-admin</body>', { status: 200 }) },
+    };
+    const { daSourceGet } = await esmock('../../src/routes/da-admin.js', {
+      '../../src/storage/site.js': { default: async () => LEGACY_STORE },
+    });
+    // a preview host rather than a UE host, so nothing is instrumented onto the composed page
+    const req = authedReq('https://main--site--org.preview.da.live/folder/content');
+    return daSourceGet({ req, env, daCtx: getDaCtx(req) });
+  };
+
+  // a 200 with no head.html is a page with no stylesheet, no scripts and no entry script
+  it('refuses a 500 with 503 rather than composing an empty project head', async () => {
+    const res = await readWithPreviewStatus(500);
+
+    assert.strictEqual(res.status, 503);
+  });
+
+  it('names the preview host in x-error', async () => {
+    const res = await readWithPreviewStatus(500);
+
+    assert.match(res.headers.get('x-error'), /preview host failed/);
+  });
+
+  // a host behind Helix auth refuses without a site token, and a retry answers the same
+  it('composes the page without a head on a 401', async () => {
+    const res = await readWithPreviewStatus(401);
+
+    assert.strictEqual(res.status, 200);
+  });
+
+  // a ref that was never previewed has no head.html, which is not a failure
+  it('composes the page without a head on a 404', async () => {
+    const res = await readWithPreviewStatus(404);
+
+    assert.strictEqual(res.status, 200);
+  });
+});
+
+describe('a read that carries no token', () => {
+  afterEach(() => {
+    delete globalThis.fetch;
+  });
+
+  // the authorbus extension recovers off the da:401 meta rather than off the status
+  it('is refused with the da:401 shell, and nothing is looked up', async () => {
+    const { daSourceGet, env, seen } = await build();
+    const req = new Request('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 401);
+    assert.strictEqual(await res.text(), messages.UNAUTHORIZED_HTML_MESSAGE);
+    assert.strictEqual(seen.lookups, 0);
+  });
+});
+
+describe('a path the site config gives a template', () => {
+  afterEach(() => {
+    delete globalThis.fetch;
+  });
+
+  // the template is composed over a document that is not there, so the store answers 404
+  const missingDoc = (rows) => ({
+    legacy: () => new Response('', { status: 404 }),
+    config: rows.map((value) => ({ key: 'editor.ue.template', value })),
+  });
+
+  it('composes the configured template rather than the starter', async () => {
+    const { daSourceGet, env, seen } = await build(missingDoc(['/folder=/scripts/tpl.html']));
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(await res.text(), '<html><body>from the template</body></html>');
+    assert.ok(seen.aem.includes('/scripts/tpl.html'));
+  });
+
+  // unwrapped, this read escapes as the bodyless 500 that #258 is about
+  it('refuses with 503 when the template read cannot be reached', async () => {
+    const { daSourceGet, env } = await build({
+      ...missingDoc(['/folder=/scripts/tpl.html']),
+      templateError: new TypeError('fetch failed'),
+    });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 503);
+    assert.match(res.headers.get('x-error'), /preview host failed/);
+  });
+
+  it('takes the longest matching prefix', async () => {
+    const { daSourceGet, env, seen } = await build(missingDoc([
+      '/=/scripts/site.html',
+      '/folder=/scripts/folder.html',
+    ]));
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.ok(seen.aem.includes('/scripts/folder.html'));
+    assert.ok(!seen.aem.includes('/scripts/site.html'));
+  });
+
+  it('ignores a template configured for another path', async () => {
+    const { daSourceGet, env, seen } = await build(missingDoc(['/other=/scripts/other.html']));
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.match(await res.text(), /<main>/);
+    assert.strictEqual(seen.aem.length, 1);
+  });
+
+  // the config names a path the preview host answers 404 for, which leaves the starter
+  it('falls back to the starter when the preview host has no such template', async () => {
+    const { daSourceGet, env } = await build({
+      ...missingDoc(['/folder=/scripts/gone.html']),
+      templateHtml: undefined,
+    });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 200);
+    assert.match(await res.text(), /<main>/);
+  });
+});
+
+describe('when the worker itself has a bug', () => {
+  afterEach(() => {
+    delete globalThis.fetch;
+  });
+
+  // only an unreachable upstream is retryable, and a 503 would keep the throw out of the log
+  // the worker boundary writes
+  it('lets the throw through rather than rendering it as a 503', async () => {
+    const { daSourceGet, env } = await build({ composeError: new TypeError('tree is not iterable') });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    await assert.rejects(
+      () => daSourceGet({ req, env, daCtx: getDaCtx(req) }),
+      /tree is not iterable/,
+    );
   });
 });
