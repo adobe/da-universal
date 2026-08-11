@@ -1,0 +1,9 @@
+# the stand-in gets its own config, so wrangler dev does not read wrangler.toml: no daadmin
+# binding to connect, and no HLX_CONFIG_SERVICE_TOKEN to warn about
+name = "da-ue-config-shim"
+main = "config-shim.js"
+compatibility_date = "2023-11-21"
+
+[dev]
+port = 4713
+inspector_port = 9234

@@ -7,6 +7,7 @@
     "deploy": "wrangler deploy",
     "deploy:stage": "wrangler deploy --env stage",
     "dev": "wrangler dev --local-protocol https --env dev",
+    "dev:config": "wrangler dev -c dev/config-shim.toml",
     "start": "wrangler dev --local-protocol https --env dev",
     "test": "c8 mocha --spec=test/**/*.test.js",
     "lint": "eslint ."

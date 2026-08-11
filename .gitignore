@@ -22,7 +22,7 @@ jspm_packages/
 .env.production.local
 .env.local
 
-.dev.vars
+.dev.vars*
 .wrangler/
 .DS_Store
 .cursor
