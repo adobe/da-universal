@@ -189,14 +189,12 @@ export function prepareQuickEditDocument(html, nonce) {
 }
 
 /**
- * Build the quick-edit 404 response for when the AEM branch itself can't be
- * resolved (e.g. head.html is missing): a minimal page shell with the import
- * map injected (no entry script), status 404, so the editor can still load
- * into it. Reuse this anywhere quick-edit needs to degrade the same way.
+ * Build the quick-edit 404 response for when there is no such site: a minimal page shell with
+ * the import map injected and no entry script, so the editor can still load into it.
  * @returns {Response}
  */
 export function buildQuickEditNotFoundResponse() {
-  console.log('[quick-edit] doc compose: head.html not found on origin, serving a minimal scaffold');
+  console.log('[quick-edit] doc compose: no such site, serving a minimal scaffold');
   const tree = fromHtml(`<html><head></head>${DEFAULT_HTML_TEMPLATE}</html>`);
   applyQuickEditToDocument(tree, undefined);
   const body = toHtml(tree, { allowDangerousHtml: true });

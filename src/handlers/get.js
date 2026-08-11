@@ -35,8 +35,14 @@ export default async function getHandler({ req, env, daCtx }) {
       handleAEMProxyRequest({ req, env, daCtx }),
     ]);
 
-    const storeRes = daSourceGetRes.status === 'fulfilled' ? daSourceGetRes.value : undefined;
-    const aemRes = aemProxyRes.status === 'fulfilled' ? aemProxyRes.value : undefined;
+    // logs a rejection rather than rethrowing it, since the other read may still answer
+    const settled = (result, read) => {
+      if (result.status === 'fulfilled') return result.value;
+      console.error(`${read} threw on ${path}`, result.reason);
+      return undefined;
+    };
+    const storeRes = settled(daSourceGetRes, 'the store read');
+    const aemRes = settled(aemProxyRes, 'the aem proxy');
 
     let response;
     if (storeRes?.status === 200) {
