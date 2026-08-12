@@ -189,7 +189,7 @@ describe('worker fetch handler', () => {
   // reaches the caller if that rebuild carries it
   describe('a refused write on a source-bus site', () => {
     const busWorker = async () => (await esmock('../src/index.js', READ_HANDLER_MOCKS, {
-      '../src/storage/site.js': { default: async () => ({ exists: true, onSourceBus: true }) },
+      '../src/storage/source-bus.js': { default: async () => true },
     })).default;
 
     const uePost = (origin) => {

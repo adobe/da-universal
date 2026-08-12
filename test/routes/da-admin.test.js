@@ -34,6 +34,7 @@ const recorder = () => {
     DA_ADMIN: 'https://admin.da.live',
     AEM_API: 'https://api.aem.live',
     HLX_CONFIG_SERVICE: 'https://config.aem.page',
+    HLX_ADMIN: 'https://admin.hlx.page',
     daadmin: {
       fetch: async (input) => {
         fetched.push(input instanceof Request ? input.url : input.href);
@@ -44,18 +45,23 @@ const recorder = () => {
   return { env, fetched };
 };
 
-// stands in for config.aem.page, the only lookup the routes make
-// answers that any site exists; `upgraded` lists the `org/site` keys on the source bus
-const stubConfig = (upgraded = []) => {
+// stands in for the two lookups the routes make: config.aem.page for whether the site exists,
+// admin.hlx.page/ping for which store holds it. Answers that any site exists; `upgraded` lists
+// the `org/site` keys /ping reports as enrolled
+const stubLookups = (upgraded = []) => {
   const asked = [];
   globalThis.fetch = async (input) => {
     const url = input.toString();
     asked.push(url);
-    const [, site, org] = new URL(url).pathname.split('/')[1].split('--');
-    const source = upgraded.includes(`${org}/${site}`)
-      ? `https://api.aem.live/${org}/sites/${site}/`
-      : `https://content.da.live/${org}/${site}/`;
-    const body = JSON.stringify({ content: { source: { url: source, type: 'markup' } } });
+    const { pathname } = new URL(url);
+    if (pathname.startsWith('/ping/')) {
+      const [, , org, site] = pathname.split('/');
+      const headers = upgraded.includes(`${org}/${site}`)
+        ? { 'x-api-upgrade-available': 'true' }
+        : {};
+      return new Response('', { status: 200, headers });
+    }
+    const body = JSON.stringify({ head: { html: '<meta name="from" content="aem" />' } });
     return new Response(body, { status: 200 });
   };
   return asked;
@@ -63,9 +69,9 @@ const stubConfig = (upgraded = []) => {
 
 const mockRoutes = async () => esmock('../../src/routes/da-admin.js', {
   '../../src/storage/site.js': {
-    default: async () => ({ exists: true, onSourceBus: false }),
-    getSiteHead: async () => '<meta name="from" content="aem" />',
+    default: async () => ({ exists: true, head: '<meta name="from" content="aem" />' }),
   },
+  '../../src/storage/source-bus.js': { default: async () => false },
   '../../src/utils/aemCtx.js': {
     getAemCtx: () => ({}),
   },
@@ -114,13 +120,13 @@ describe('daSourceGet', () => {
     // `{ headHtml: undefined }` actually simulates a missing head.html, instead
     // of being masked by the default parameter value.
     const headHtml = 'headHtml' in overrides ? overrides.headHtml : '<meta name="from" content="aem" />';
-    const site = overrides.site ?? { exists: true, onSourceBus: false };
+    const exists = overrides.site?.exists ?? true;
     calls = { compose: [], ue: 0, quickEdit: 0 };
     return (await esmock('../../src/routes/da-admin.js', {
       '../../src/storage/site.js': {
-        default: async () => site,
-        getSiteHead: async () => headHtml,
+        default: async () => ({ exists, head: headHtml }),
       },
+      '../../src/storage/source-bus.js': { default: async () => false },
       '../../src/utils/aemCtx.js': {
         getAemCtx: () => ({}),
       },
@@ -239,7 +245,7 @@ describe('daSourceGet', () => {
   });
 
   it('returns a working 404 shell for quick-edit when there is no such site', async () => {
-    const daSourceGet = await mockDaSourceGet({ site: { exists: false, onSourceBus: false } });
+    const daSourceGet = await mockDaSourceGet({ site: { exists: false } });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content?quick-edit');
     const daCtx = getDaCtx(req);
 
@@ -254,7 +260,7 @@ describe('daSourceGet', () => {
   });
 
   it('returns not-found for non-quick-edit when there is no such site', async () => {
-    const daSourceGet = await mockDaSourceGet({ site: { exists: false, onSourceBus: false } });
+    const daSourceGet = await mockDaSourceGet({ site: { exists: false } });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
     const daCtx = getDaCtx(req);
 
@@ -281,9 +287,9 @@ describe('daSourceGet', () => {
 });
 
 describe('source URLs', () => {
-  // answers the unmocked lookup with a da-admin source, the legacy store these tests describe
+  // answers the unmocked lookups with a legacy site, the store these tests describe
   beforeEach(() => {
-    stubConfig();
+    stubLookups();
   });
 
   afterEach(() => {
@@ -418,9 +424,9 @@ describe('daSourcePost to a non-HTML path', () => {
 });
 
 describe('daSourcePost', () => {
-  // answers the unmocked lookup with a da-admin source, the legacy store these tests describe
+  // answers the unmocked lookups with a legacy site, the store these tests describe
   beforeEach(() => {
-    stubConfig();
+    stubLookups();
   });
 
   afterEach(() => {
@@ -435,7 +441,7 @@ describe('daSourcePost', () => {
     };
 
     it('is refused with 405 and nothing is written', async () => {
-      stubConfig(['org/refused']);
+      stubLookups(['org/refused']);
       const { env, fetched } = recorder();
 
       const res = await write('refused', env);
@@ -448,15 +454,15 @@ describe('daSourcePost', () => {
     // nothing is remembered between requests, so a site enrolled or un-enrolled mid-session takes
     // effect on the next one
     it('looks the site up once per write', async () => {
-      const asked = stubConfig(['org/lookedupeach']);
+      const asked = stubLookups(['org/lookedupeach']);
       const { env } = recorder();
 
       await write('lookedupeach', env);
       await write('lookedupeach', env);
 
       assert.deepStrictEqual(asked, [
-        'https://config.aem.page/main--lookedupeach--org/config.json?scope=admin',
-        'https://config.aem.page/main--lookedupeach--org/config.json?scope=admin',
+        'https://admin.hlx.page/ping/org/lookedupeach',
+        'https://admin.hlx.page/ping/org/lookedupeach',
       ]);
     });
   });

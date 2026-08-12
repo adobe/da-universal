@@ -19,10 +19,9 @@ import { SOURCE_BUS_READ_ONLY_MESSAGE, SOURCE_UNDETERMINED_MESSAGE } from '../..
 const AT = 'https://main--site--org.ue.da.live/folder/content';
 const DOC = '<body><main><div><p>the author typed this</p></div></main></body>';
 
-// what the site lookup answers
-const SOURCE_BUS = { exists: true, onSourceBus: true };
-const LEGACY_STORE = { exists: true, onSourceBus: false };
-const NO_SITE = { exists: false, onSourceBus: false };
+// what /ping answers
+const SOURCE_BUS = true;
+const LEGACY_STORE = false;
 
 /** The shape the Universal Editor Service posts: a `data` blob in a multipart form. */
 const uePost = (url, html = DOC) => {
@@ -32,12 +31,10 @@ const uePost = (url, html = DOC) => {
 };
 
 const build = async (overrides = {}) => {
-  const { status = 201 } = overrides;
-  // `in overrides` rather than a destructured default, so an explicit undefined reaches here
-  const site = 'site' in overrides ? overrides.site : LEGACY_STORE;
-  const lookupError = 'lookupError' in overrides ? overrides.lookupError : new TypeError('fetch failed');
+  const { status = 201, busError } = overrides;
+  const onSourceBus = 'site' in overrides ? overrides.site : LEGACY_STORE;
   const seen = {
-    bus: [], legacy: [], lookups: 0, order: [],
+    bus: [], legacy: [], lookups: 0, probes: 0, order: [],
   };
   const capture = async (request) => {
     const contentType = request.headers.get('Content-Type');
@@ -73,13 +70,20 @@ const build = async (overrides = {}) => {
     },
   };
   const mod = await esmock('../../src/routes/da-admin.js', {
+    // a write asks which store, and nothing else, so a call here is the regression
     '../../src/storage/site.js': {
       default: async () => {
         seen.lookups += 1;
         seen.order.push('lookup');
-        // throws for undefined, which is how the lookup reports a failure
-        if (site === undefined) throw lookupError;
-        return site;
+        return { exists: true, head: undefined };
+      },
+    },
+    '../../src/storage/source-bus.js': {
+      default: async () => {
+        seen.probes += 1;
+        seen.order.push('probe');
+        if (busError) throw busError;
+        return onSourceBus;
       },
     },
   });
@@ -133,9 +137,11 @@ describe('writing to the store that holds the site', () => {
 
   // a write is the one operation a wrong store cannot be walked back from, so no answer means no
   // write rather than a guess
-  describe('when the lookup cannot say which store holds the site', () => {
+  describe('when the probe cannot say which store holds the site', () => {
+    const dead = () => new TypeError('fetch failed');
+
     it('is refused with 503 and touches neither store', async () => {
-      const { res, seen } = await post({ site: undefined });
+      const { res, seen } = await post({ busError: dead() });
 
       assert.strictEqual(res.status, 503);
       assert.strictEqual(seen.bus.length, 0);
@@ -143,41 +149,40 @@ describe('writing to the store that holds the site', () => {
     });
 
     it('asks the caller to retry, unlike the source-bus refusal', async () => {
-      const { res } = await post({ site: undefined });
+      const { res } = await post({ busError: dead() });
 
       assert.ok(Number(res.headers.get('Retry-After')) > 0);
     });
 
     it('says which of the two refusals it is', async () => {
-      const { res } = await post({ site: undefined });
+      const { res } = await post({ busError: dead() });
 
       assert.strictEqual(await res.text(), SOURCE_UNDETERMINED_MESSAGE);
     });
 
-    it('names the failed lookup in x-error', async () => {
-      const { res } = await post({ site: undefined });
+    it('names the failed probe in x-error', async () => {
+      const { res } = await post({ busError: dead() });
 
-      assert.match(res.headers.get('x-error'), /site lookup failed/);
+      assert.match(res.headers.get('x-error'), /store lookup failed/);
     });
 
-    it('names the lookup cause, not a category', async () => {
+    it('names the cause, not a category', async () => {
       const { res } = await post({
-        site: undefined,
-        lookupError: new DOMException('timed out', 'TimeoutError'),
+        busError: new DOMException('timed out', 'TimeoutError'),
       });
 
-      assert.strictEqual(res.headers.get('x-error'), 'site lookup failed: TimeoutError: timed out');
+      assert.strictEqual(res.headers.get('x-error'), 'store lookup failed: TimeoutError: timed out');
     });
   });
 
-  // a 404 from the config service says there is no AEM site config, not that the DA org and site
-  // are bogus. a read of the same path answers 404, so the editor cannot reach this state
-  describe('a site the lookup says does not exist', () => {
-    it('is written to da-admin all the same', async () => {
-      const { res, seen } = await post({ site: NO_SITE });
+  // whether the site exists changes nothing about where a write goes, and a read of the same path
+  // answers 404 first, so the editor cannot reach this state with a site that is not there
+  describe('what a write asks about the site', () => {
+    it('asks which store, and not whether the site exists', async () => {
+      const { res, seen } = await post({});
 
-      assert.strictEqual(seen.bus.length, 0);
-      assert.strictEqual(seen.legacy.length, 1);
+      assert.strictEqual(seen.probes, 1);
+      assert.strictEqual(seen.lookups, 0);
       assert.strictEqual(res.status, 201);
     });
   });
@@ -269,13 +274,13 @@ describe('writing to the store that holds the site', () => {
     it('happens before anything is sent to a store', async () => {
       const { seen } = await post({});
 
-      assert.deepStrictEqual(seen.order, ['lookup', 'store']);
+      assert.deepStrictEqual(seen.order, ['probe', 'store']);
     });
 
     it('happens on a source-bus site too, which is what the refusal rests on', async () => {
       const { seen } = await post({ site: SOURCE_BUS });
 
-      assert.strictEqual(seen.lookups, 1);
+      assert.strictEqual(seen.probes, 1);
     });
   });
 

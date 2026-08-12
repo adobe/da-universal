@@ -20,7 +20,8 @@ import * as messages from '../../src/utils/constants.js';
 
 const authedReq = (url) => new Request(url, { headers: { Authorization: 'Bearer t' } });
 
-// what the site lookup answers
+// what the two lookups answer together: `exists` comes from the config service, `onSourceBus`
+// from /ping
 const SOURCE_BUS = { exists: true, onSourceBus: true };
 const LEGACY_STORE = { exists: true, onSourceBus: false };
 const NO_SITE = { exists: false, onSourceBus: false };
@@ -44,10 +45,10 @@ const build = async (overrides = {}) => {
   const site = 'site' in overrides ? overrides.site : LEGACY_STORE;
   const lookupError = 'lookupError' in overrides ? overrides.lookupError : new TypeError('fetch failed');
   const {
-    headError, templateError, configError, composeError, config = null,
+    busError, templateError, configError, composeError, config = null,
   } = overrides;
   const seen = {
-    bus: [], legacy: [], head: [], aem: [], ue: 0, lookups: 0, heads: 0,
+    bus: [], legacy: [], head: [], aem: [], ue: 0, lookups: 0, pings: 0,
   };
   globalThis.fetch = async (input, init) => {
     const request = input instanceof Request ? input : new Request(input, init);
@@ -71,12 +72,14 @@ const build = async (overrides = {}) => {
         seen.lookups += 1;
         // throws for undefined, which is how the lookup reports a failure
         if (site === undefined) throw lookupError;
-        return site;
+        return { exists: site.exists, head: headHtml };
       },
-      getSiteHead: async () => {
-        if (headError) throw headError;
-        seen.heads += 1;
-        return headHtml;
+    },
+    '../../src/storage/source-bus.js': {
+      default: async () => {
+        seen.pings += 1;
+        if (busError) throw busError;
+        return site !== undefined && site.onSourceBus;
       },
     },
     '../../src/utils/aemCtx.js': {
@@ -111,13 +114,130 @@ const build = async (overrides = {}) => {
   return { ...mod, env, seen };
 };
 
-describe('when the lookup cannot say which store holds the site', () => {
+describe('when /ping cannot say which store holds the site', () => {
   afterEach(() => {
     delete globalThis.fetch;
   });
 
+  const dead = () => new TypeError('fetch failed');
+
   // picking a store without an answer is a coin flip, and reading the wrong one hands the author
   // the wrong document at 200
+  it('refuses an html read with 503 and touches neither store', async () => {
+    const { daSourceGet, env, seen } = await build({ busError: dead() });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 503);
+    assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
+  });
+
+  it('asks the caller to retry', async () => {
+    const { daSourceGet, env } = await build({ busError: dead() });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.ok(Number(res.headers.get('Retry-After')) > 0);
+  });
+
+  // the preview iframe renders this body, and the store answered nothing here: it was never
+  // asked, since which store to ask is what could not be determined
+  it('says the store could not be determined, not that it did not answer', async () => {
+    const { daSourceGet, env } = await build({ busError: dead() });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    const body = await res.text();
+    assert.notStrictEqual(body, messages.SOURCE_UNREACHABLE_HTML_MESSAGE);
+    assert.strictEqual(body, messages.SOURCE_UNDETERMINED_HTML_MESSAGE);
+  });
+
+  it('refuses a non-html read too', async () => {
+    const { daSourceGet, env, seen } = await build({ busError: dead() });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 503);
+    assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
+  });
+
+  it('refuses a HEAD with 503 and no body', async () => {
+    const { daSourceHead, env, seen } = await build({ busError: dead() });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceHead({ env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 503);
+    assert.strictEqual(await res.text(), '');
+    assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
+  });
+
+  // the two lookups are two upstreams now, and both 503s share a status and an unparsed body
+  it('names the probe in x-error', async () => {
+    const { daSourceGet, env } = await build({ busError: dead() });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.match(res.headers.get('x-error'), /store lookup failed/);
+  });
+
+  it('names the probe on a HEAD too', async () => {
+    const { daSourceHead, env } = await build({ busError: dead() });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceHead({ env, daCtx: getDaCtx(req) });
+
+    assert.match(res.headers.get('x-error'), /store lookup failed/);
+  });
+
+  // the header is the only thing on the wire that separates a timeout from a dropped connection
+  it('names the cause, not a category', async () => {
+    const { daSourceGet, env } = await build({
+      busError: new DOMException('timed out', 'TimeoutError'),
+    });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.headers.get('x-error'), 'store lookup failed: TimeoutError: timed out');
+  });
+
+  // rendering a thrown non-Error as "undefined: undefined" would leave the 503 saying nothing
+  it('survives a thrown non-Error', async () => {
+    const { daSourceGet, env } = await build({ busError: 'boom' });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 503);
+    assert.strictEqual(res.headers.get('x-error'), 'store lookup failed: Error: boom');
+  });
+
+  it('tells a probe failure apart from a store failure', async () => {
+    const { daSourceGet, env } = await build({
+      site: SOURCE_BUS,
+      bus: () => { throw new TypeError('fetch failed'); },
+    });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.headers.get('x-error'), 'content store failed: TypeError: fetch failed');
+  });
+});
+
+// the config service answers whether the site exists and what its head.html is, so an outage
+// leaves both unknown
+describe('when the config service cannot say whether the site exists', () => {
+  afterEach(() => {
+    delete globalThis.fetch;
+  });
+
   it('refuses an html read with 503 and touches neither store', async () => {
     const { daSourceGet, env, seen } = await build({ site: undefined });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -137,9 +257,18 @@ describe('when the lookup cannot say which store holds the site', () => {
     assert.ok(Number(res.headers.get('Retry-After')) > 0);
   });
 
-  // the preview iframe renders this body, and the store answered nothing here: it was never
-  // asked, since which store to ask is what could not be determined
-  it('says the store could not be determined, not that it did not answer', async () => {
+  // a 404 would say the site is gone, which is #258 again, this time on the lookup
+  it('does not answer 404', async () => {
+    const { daSourceGet, env } = await build({ site: undefined });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.notStrictEqual(res.status, 404);
+  });
+
+  // says what happened, since the preview iframe renders the refusal
+  it('says the site could not be looked up, not that a store did not answer', async () => {
     const { daSourceGet, env } = await build({ site: undefined });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
@@ -147,17 +276,7 @@ describe('when the lookup cannot say which store holds the site', () => {
 
     const body = await res.text();
     assert.notStrictEqual(body, messages.SOURCE_UNREACHABLE_HTML_MESSAGE);
-    assert.strictEqual(body, messages.SOURCE_UNDETERMINED_HTML_MESSAGE);
-  });
-
-  it('refuses a non-html read too', async () => {
-    const { daSourceGet, env, seen } = await build({ site: undefined });
-    const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
-
-    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-    assert.strictEqual(res.status, 503);
-    assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
+    assert.strictEqual(body, messages.SITE_UNREACHABLE_HTML_MESSAGE);
   });
 
   it('refuses a HEAD with 503 and no body', async () => {
@@ -171,7 +290,6 @@ describe('when the lookup cannot say which store holds the site', () => {
     assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
   });
 
-  // both 503s share a status and an unparsed body, so only the header separates them
   it('names the failed lookup in x-error', async () => {
     const { daSourceGet, env } = await build({ site: undefined });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -181,17 +299,6 @@ describe('when the lookup cannot say which store holds the site', () => {
     assert.match(res.headers.get('x-error'), /site lookup failed/);
   });
 
-  it('names the failed lookup on a HEAD too', async () => {
-    const { daSourceHead, env } = await build({ site: undefined });
-    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-    const res = await daSourceHead({ env, daCtx: getDaCtx(req) });
-
-    assert.match(res.headers.get('x-error'), /site lookup failed/);
-  });
-
-  // a read answers the same 503 and the same body whichever of the two failed, so the header is
-  // the only thing on the wire that separates a timeout from a dropped connection
   it('names the lookup cause, not a category', async () => {
     const { daSourceGet, env } = await build({
       site: undefined,
@@ -204,7 +311,6 @@ describe('when the lookup cannot say which store holds the site', () => {
     assert.strictEqual(res.headers.get('x-error'), 'site lookup failed: TimeoutError: timed out');
   });
 
-  // rendering a thrown non-Error as "undefined: undefined" would leave the 503 saying nothing
   it('survives a thrown non-Error', async () => {
     const { daSourceGet, env } = await build({ site: undefined, lookupError: 'boom' });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -213,18 +319,6 @@ describe('when the lookup cannot say which store holds the site', () => {
 
     assert.strictEqual(res.status, 503);
     assert.strictEqual(res.headers.get('x-error'), 'site lookup failed: Error: boom');
-  });
-
-  it('tells a lookup failure apart from a store failure', async () => {
-    const { daSourceGet, env } = await build({
-      site: SOURCE_BUS,
-      bus: () => { throw new TypeError('fetch failed'); },
-    });
-    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-    assert.strictEqual(res.headers.get('x-error'), 'content store failed: TypeError: fetch failed');
   });
 });
 
@@ -581,9 +675,9 @@ describe('reading from the store that holds the site', () => {
       };
       const { daSourceGet } = await esmock('../../src/routes/da-admin.js', {
         '../../src/storage/site.js': {
-          default: async () => ({ exists: true, onSourceBus: true }),
-          getSiteHead: async () => '<meta name="from" content="aem" />',
+          default: async () => ({ exists: true, head: '<meta name="from" content="aem" />' }),
         },
+        '../../src/storage/source-bus.js': { default: async () => true },
         '../../src/utils/aemCtx.js': {
           getAemCtx: () => ({ ueHostname: 'ue.da.live', previewUrl: 'https://p.example' }),
         },
@@ -775,11 +869,11 @@ describe('reading from the store that holds the site', () => {
       assert.strictEqual(res.status, 404);
     });
 
-    // names which failure it was: a site that does not exist has no head.html either
-    it('reports no such site even when the head read did not answer', async () => {
+    // the two lookups go out together, and a site that does not exist needs no store
+    it('reports no such site even when the probe did not answer', async () => {
       const { daSourceGet, env } = await build({
         site: NO_SITE,
-        headError: new TypeError('Network connection lost'),
+        busError: new TypeError('Network connection lost'),
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
@@ -788,12 +882,11 @@ describe('reading from the store that holds the site', () => {
       assert.strictEqual(res.status, 404);
     });
 
-    // one service answers both reads, so an outage fails them together, and the store it could
-    // not name is the more useful of the two failures
-    it('reports the undetermined store when the head read failed with it', async () => {
+    // whether there is a site to read at all is the question the other two rest on
+    it('reports the failed site lookup when the probe failed with it', async () => {
       const { daSourceGet, env } = await build({
         site: undefined,
-        headError: new TypeError('Network connection lost'),
+        busError: new TypeError('Network connection lost'),
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
@@ -825,7 +918,7 @@ describe('reading from the store that holds the site', () => {
 
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-      assert.strictEqual(seen.heads, 1);
+      assert.strictEqual(seen.lookups, 1);
       assert.deepStrictEqual(seen.aem, []);
     });
 
@@ -838,24 +931,39 @@ describe('reading from the store that holds the site', () => {
       assert.strictEqual(seen.head[0], '<meta name="from" content="aem" />');
     });
 
-    // nothing composes an image, and a config service that is down would answer the 503 the
-    // handler prefers over the AEM proxy's answer
-    it('reads nothing for an asset', async () => {
+    // one read of the config service carries both the existence answer and head.html, so a page
+    // that needs the head pays for no second read
+    it('reads the config service once for a page', async () => {
+      const { daSourceGet, env, seen } = await build();
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(seen.lookups, 1);
+      assert.strictEqual(seen.pings, 1);
+    });
+
+    // nothing composes an image, and the head that arrives with the existence answer is dropped
+    it('reads the same two lookups for an asset, and no more', async () => {
       const { daSourceGet, env, seen } = await build();
       const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
 
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-      assert.strictEqual(seen.heads, 0);
+      assert.strictEqual(seen.lookups, 1);
+      assert.strictEqual(seen.pings, 1);
+      assert.deepStrictEqual(seen.head, []);
     });
 
-    it('reads nothing on a HEAD', async () => {
+    it('reads the same two lookups on a HEAD, and no more', async () => {
       const { daSourceHead, env, seen } = await build();
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       await daSourceHead({ env, daCtx: getDaCtx(req) });
 
-      assert.strictEqual(seen.heads, 0);
+      assert.strictEqual(seen.lookups, 1);
+      assert.strictEqual(seen.pings, 1);
+      assert.deepStrictEqual(seen.head, []);
     });
   });
 
@@ -973,60 +1081,6 @@ describe('reading from the store that holds the site', () => {
       assert.match(await res.text(), /importmap/);
     });
   });
-
-  // a throw out of the head read used to reach the worker's catch as a 500 with no body
-  describe('when the head read cannot be reached', () => {
-    const dead = () => new TypeError('Network connection lost');
-
-    it('answers 503 rather than throwing', async () => {
-      const { daSourceGet, env } = await build({ headError: dead() });
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.strictEqual(res.status, 503);
-    });
-
-    it('names the cause in x-error', async () => {
-      const { daSourceGet, env } = await build({ headError: dead() });
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.strictEqual(res.headers.get('x-error'), 'page head failed: TypeError: Network connection lost');
-    });
-
-    it('asks the caller to retry', async () => {
-      const { daSourceGet, env } = await build({
-        headError: new DOMException('The operation timed out', 'TimeoutError'),
-      });
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.ok(Number(res.headers.get('Retry-After')) > 0);
-    });
-
-    // says what happened, since the preview iframe renders the refusal
-    it('says the page head did not arrive, not that the store is undetermined', async () => {
-      const { daSourceGet, env } = await build({ headError: dead() });
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.strictEqual(await res.text(), messages.HEAD_UNREACHABLE_HTML_MESSAGE);
-    });
-
-    // a 404 would say the site is gone, which is #258 again, this time on the head read
-    it('does not answer 404', async () => {
-      const { daSourceGet, env } = await build({ headError: dead() });
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.notStrictEqual(res.status, 404);
-    });
-  });
 });
 
 describe('when the site config cannot be reached', () => {
@@ -1091,9 +1145,9 @@ describe('when the site config cannot be reached', () => {
   });
 });
 
-// getSiteHead is not stubbed here: a stub hides a config service that answers, but with
-// something other than a head
-describe('when the config service refuses the head read', () => {
+// site.js is not stubbed here: a stub hides a config service that answers, but with something
+// other than a config
+describe('when the config service refuses the lookup', () => {
   afterEach(() => {
     delete globalThis.fetch;
   });
@@ -1108,39 +1162,38 @@ describe('when the config service refuses the head read', () => {
       daadmin: { fetch: async () => new Response('<body>from da-admin</body>', { status: 200 }) },
     };
     const { daSourceGet } = await esmock('../../src/routes/da-admin.js', {
-      '../../src/storage/site.js': { default: async () => LEGACY_STORE },
+      '../../src/storage/source-bus.js': { default: async () => false },
     });
     // a preview host rather than a UE host, so nothing is instrumented onto the composed page
     const req = authedReq('https://main--site--org.preview.da.live/folder/content');
     return daSourceGet({ req, env, daCtx: getDaCtx(req) });
   };
 
-  // a 200 with no head is a page with no stylesheet, no scripts and no entry script
-  it('refuses a 500 with 503 rather than composing an empty project head', async () => {
+  // reading a refusal as a missing site would 404 a page that exists, which is #258 again
+  it('refuses a 500 with 503 rather than calling the site missing', async () => {
     const res = await readWithConfigStatus(500);
 
     assert.strictEqual(res.status, 503);
   });
 
-  it('names the page head in x-error', async () => {
+  it('names the site lookup in x-error', async () => {
     const res = await readWithConfigStatus(500);
 
-    assert.match(res.headers.get('x-error'), /page head failed/);
+    assert.match(res.headers.get('x-error'), /site lookup failed/);
   });
 
-  // the shared secret is the worker's own, so a 401 is a deploy without it rather than a site
-  // that has no head.html
+  // the shared secret is the worker's own, so a 401 is a deploy without it rather than an answer
   it('refuses a 401 with 503', async () => {
     const res = await readWithConfigStatus(401);
 
     assert.strictEqual(res.status, 503);
   });
 
-  // a ref that was never built has no head.html, which is not a failure
-  it('composes the page without a head on a 404', async () => {
+  // the one status that is an answer: the config service knows of no such site
+  it('answers 404 on a 404', async () => {
     const res = await readWithConfigStatus(404);
 
-    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.status, 404);
   });
 });
 
