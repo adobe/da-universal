@@ -186,8 +186,10 @@ async function sourceGet({ req, env, daCtx }) {
     }
     return get404(SITE_NOT_FOUND_HTML_MESSAGE);
   }
-  if (head.status === 'rejected') throw head.reason;
+  // the lookup first: one service answers both reads, and the store it could not name is the
+  // more useful of the two failures
   if (source.status === 'rejected') throw source.reason;
+  if (head.status === 'rejected') throw head.reason;
 
   const headHtml = head.value;
   const { response: sourceResp } = source.value;
