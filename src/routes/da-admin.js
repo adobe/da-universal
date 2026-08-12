@@ -26,6 +26,7 @@ import {
 } from '../responses/index.js';
 import {
   DEFAULT_HTML_TEMPLATE,
+  HEAD_UNREACHABLE_HTML_MESSAGE,
   PREVIEW_UNREACHABLE_HTML_MESSAGE,
   SITE_NOT_FOUND_HTML_MESSAGE,
   SOURCE_BUS_READ_ONLY_MESSAGE,
@@ -36,11 +37,12 @@ import {
   UNAUTHORIZED_HTML_MESSAGE,
 } from '../utils/constants.js';
 import { getSiteConfig } from '../storage/config.js';
-import getSite from '../storage/site.js';
+import getSite, { getSiteHead } from '../storage/site.js';
 import getStore from '../storage/store.js';
 import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 import {
   CONTENT_STORE,
+  PAGE_HEAD,
   PREVIEW_HOST,
   SITE_CONFIG,
   SITE_LOOKUP,
@@ -49,7 +51,6 @@ import {
 } from '../utils/upstream.js';
 
 const HTML_POST_TYPE = 'text/html';
-const HEAD_HTML_PATH = '/head.html';
 
 /**
  * Overrides the store's body for the upstreams that need their own. SITE_CONFIG is read off
@@ -58,6 +59,7 @@ const HEAD_HTML_PATH = '/head.html';
 const UNREACHABLE_HTML = {
   [PREVIEW_HOST]: PREVIEW_UNREACHABLE_HTML_MESSAGE,
   [SITE_LOOKUP]: SOURCE_UNDETERMINED_HTML_MESSAGE,
+  [PAGE_HEAD]: HEAD_UNREACHABLE_HTML_MESSAGE,
 };
 const UNREACHABLE_TEXT = { [SITE_LOOKUP]: SOURCE_UNDETERMINED_MESSAGE };
 
@@ -166,16 +168,16 @@ async function sourceGet({ req, env, daCtx }) {
     return response;
   }
 
-  // runs the lookup alongside head.html, since it costs a round trip
-  // settles both rather than racing, so a dead preview host cannot preempt the no-such-site 404
+  // runs the lookup alongside the head read, since it costs a round trip
+  // settles both rather than racing, so a failed head read cannot preempt the no-such-site 404
   const aemCtx = getAemCtx(env, daCtx);
-  const [preview, source] = await Promise.allSettled([
-    reach(PREVIEW_HOST, () => getAEMHtml(aemCtx, HEAD_HTML_PATH)),
+  const [head, source] = await Promise.allSettled([
+    reach(PAGE_HEAD, () => getSiteHead(env, daCtx)),
     readSource(env, daCtx, { method: 'GET', headers }),
   ]);
 
   // answers no-such-site ahead of either 503, which would ask for a retry that cannot help.
-  // drops the preview failure on purpose: a site that does not exist has no preview host either
+  // drops the head failure on purpose: a site that does not exist has no head.html either
   if (source.status === 'fulfilled' && source.value.noSuchSite) {
     // quick-edit still needs a working shell (with the import map) so the editor
     // can load into this page, even when the site does not exist.
@@ -184,10 +186,10 @@ async function sourceGet({ req, env, daCtx }) {
     }
     return get404(SITE_NOT_FOUND_HTML_MESSAGE);
   }
-  if (preview.status === 'rejected') throw preview.reason;
+  if (head.status === 'rejected') throw head.reason;
   if (source.status === 'rejected') throw source.reason;
 
-  const headHtml = preview.value;
+  const headHtml = head.value;
   const { response: sourceResp } = source.value;
   console.log(`<- ${daCtx.sourcePath}. ${sourceResp.status} ${sourceResp.statusText}`, { status: sourceResp.status, statusText: sourceResp.statusText });
 
@@ -206,9 +208,9 @@ async function sourceGet({ req, env, daCtx }) {
   // use the stored content when available, otherwise fall back to a template
   const bodyHtml = sourceResp.status === 200
     ? await sourceResp.text()
-    : await getPageTemplate(env, daCtx, aemCtx, headHtml);
+    : await getPageTemplate(env, daCtx, aemCtx);
 
-  // builds the page without head.html, which a ref that was never previewed does not have
+  // builds the page without head.html, which a ref that was never built does not have
   const documentTree = await composeHtml(daCtx, aemCtx, bodyHtml, headHtml ?? '');
 
   // layer the request-specific instrumentation on top of the composed page

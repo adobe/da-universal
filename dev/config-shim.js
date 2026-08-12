@@ -16,6 +16,9 @@ const SITES = {
   'org/site': 'https://content.da.live/org/site/',
 };
 
+// what the code bus holds at {owner}/{repo}/{ref}/head.html, which the pipeline scope carries
+const HEAD_HTML = '<link rel="stylesheet" href="/styles/styles.css"/>\n<script src="/scripts/scripts.js" type="module"></script>\n';
+
 export default {
   async fetch(req) {
     const url = new URL(req.url);
@@ -29,9 +32,13 @@ export default {
       return new Response('', { status: 404, headers: { 'x-error': 'config not found.' } });
     }
 
-    const body = JSON.stringify({
-      ref, site, org, content: { source: { type: 'markup', url: source } },
-    });
+    const body = url.searchParams.get('scope') === 'pipeline'
+      ? JSON.stringify({
+        ref, site, org, head: { html: HEAD_HTML },
+      })
+      : JSON.stringify({
+        ref, site, org, content: { source: { type: 'markup', url: source } },
+      });
     return new Response(body, { status: 200, headers: { 'content-type': 'application/json' } });
   },
 };

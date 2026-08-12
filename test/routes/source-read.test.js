@@ -580,10 +580,13 @@ describe('reading from the store that holds the site', () => {
         daadmin: { fetch: async () => new Response('<body></body>', { status: 200 }) },
       };
       const { daSourceGet } = await esmock('../../src/routes/da-admin.js', {
-        '../../src/storage/site.js': { default: async () => ({ exists: true, onSourceBus: true }) },
+        '../../src/storage/site.js': {
+          default: async () => ({ exists: true, onSourceBus: true }),
+          getSiteHead: async () => '<meta name="from" content="aem" />',
+        },
         '../../src/utils/aemCtx.js': {
           getAemCtx: () => ({ ueHostname: 'ue.da.live', previewUrl: 'https://p.example' }),
-          getAEMHtml: async () => '<meta name="from" content="aem" />',
+          getAEMHtml: async () => '<body>from the template</body>',
         },
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -1192,7 +1195,7 @@ describe('a path the site config gives a template', () => {
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
     assert.match(await res.text(), /<main>/);
-    assert.strictEqual(seen.aem.length, 1);
+    assert.deepStrictEqual(seen.aem, []);
   });
 
   // the config names a path the preview host answers 404 for, which leaves the starter
