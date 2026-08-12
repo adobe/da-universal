@@ -312,16 +312,26 @@ async function sourcePost({ req, env, daCtx }) {
 
     const bodyContent = toHtml(bodyNode);
 
-    // the payload is settled, so the only question left is where it goes
-    const onSourceBus = await reach(STORE_LOOKUP, () => isSourceBus(env, daCtx));
+    // the payload is settled, so the only question left is where it goes. /ping answers that, and
+    // the config service is read alongside it because helix-admin sets the /ping header off the
+    // same config and swallows a failure reading it: while the config service is down, a
+    // source-bus site answers 200 with no header and reads as legacy. so a config service that
+    // cannot answer refuses the save rather than misplacing it in da-admin, where nothing serves
+    // it back. a 404 is an answer, and it means no AEM site config rather than no DA site
+    const [site, onSourceBus] = await Promise.allSettled([
+      reach(SITE_LOOKUP, () => getSite(env, daCtx)),
+      reach(STORE_LOOKUP, () => isSourceBus(env, daCtx)),
+    ]);
+    if (site.status === 'rejected') throw site.reason;
+    if (onSourceBus.status === 'rejected') throw onSourceBus.reason;
 
-    if (onSourceBus) {
+    if (onSourceBus.value) {
       console.log(`405 POST ${sourcePath}, writes to the source bus are refused through the preview proxy. write directly to the source bus instead.`);
       return post405(SOURCE_BUS_READ_ONLY_MESSAGE);
     }
 
     // da-admin takes the document as a `data` form part
-    const store = getStore(env, daCtx, onSourceBus);
+    const store = getStore(env, daCtx, onSourceBus.value);
     const body = new FormData();
     body.set('data', new Blob([bodyContent], { type: 'text/html' }));
     console.log(`-> ${store.url.toString()}`);

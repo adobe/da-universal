@@ -190,6 +190,8 @@ describe('worker fetch handler', () => {
   describe('a refused write on a source-bus site', () => {
     const busWorker = async () => (await esmock('../src/index.js', READ_HANDLER_MOCKS, {
       '../src/storage/source-bus.js': { default: async () => true },
+      // a write reads both lookups, and this env carries no config service to reach
+      '../src/storage/site.js': { default: async () => ({ exists: true, head: undefined }) },
     })).default;
 
     const uePost = (origin) => {

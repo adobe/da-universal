@@ -460,9 +460,11 @@ describe('daSourcePost', () => {
       await write('lookedupeach', env);
       await write('lookedupeach', env);
 
-      assert.deepStrictEqual(asked, [
+      assert.deepStrictEqual(asked.sort(), [
         'https://admin.hlx.page/ping/org/lookedupeach',
         'https://admin.hlx.page/ping/org/lookedupeach',
+        'https://config.aem.page/main--lookedupeach--org/config.json?scope=pipeline',
+        'https://config.aem.page/main--lookedupeach--org/config.json?scope=pipeline',
       ]);
     });
   });

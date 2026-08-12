@@ -202,6 +202,14 @@ describe('writing to the store that holds the site', () => {
       assert.match(res.headers.get('x-error'), /site lookup failed/);
     });
 
+    // UES embeds this verbatim, and no store was asked: where the document goes is what could not
+    // be worked out
+    it('says the store could not be determined, not that it did not answer', async () => {
+      const { res } = await post({ lookupError: dead() });
+
+      assert.strictEqual(await res.text(), SOURCE_UNDETERMINED_MESSAGE);
+    });
+
     // the probe answered, and it is the answer a save cannot be made without
     it('is refused even when /ping said legacy', async () => {
       const { res, seen } = await post({ lookupError: dead(), site: LEGACY_STORE });
