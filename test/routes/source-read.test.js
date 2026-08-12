@@ -776,8 +776,8 @@ describe('reading from the store that holds the site', () => {
       assert.strictEqual(res.status, 404);
     });
 
-    // names which failure it was: a site that does not exist has no preview host either
-    it('reports no such site even when the preview host did not answer', async () => {
+    // names which failure it was: a site that does not exist has no head.html either
+    it('reports no such site even when the head read did not answer', async () => {
       const { daSourceGet, env } = await build({
         site: NO_SITE,
         headError: new TypeError('Network connection lost'),
@@ -787,6 +787,21 @@ describe('reading from the store that holds the site', () => {
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
       assert.strictEqual(res.status, 404);
+    });
+
+    // one service answers both reads, so an outage fails them together, and the store it could
+    // not name is the more useful of the two failures
+    it('reports the undetermined store when the head read failed with it', async () => {
+      const { daSourceGet, env } = await build({
+        site: undefined,
+        headError: new TypeError('Network connection lost'),
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 503);
+      assert.match(res.headers.get('x-error'), /site lookup failed/);
     });
 
     it('reports an unreachable store on a site with no head.html', async () => {
