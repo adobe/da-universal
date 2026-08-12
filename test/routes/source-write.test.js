@@ -31,8 +31,9 @@ const uePost = (url, html = DOC) => {
 };
 
 const build = async (overrides = {}) => {
-  const { status = 201, busError } = overrides;
+  const { status = 201, busError, lookupError } = overrides;
   const onSourceBus = 'site' in overrides ? overrides.site : LEGACY_STORE;
+  const exists = 'exists' in overrides ? overrides.exists : true;
   const seen = {
     bus: [], legacy: [], lookups: 0, probes: 0, order: [],
   };
@@ -70,12 +71,12 @@ const build = async (overrides = {}) => {
     },
   };
   const mod = await esmock('../../src/routes/da-admin.js', {
-    // a write asks which store and nothing else, so anything reaching this mock is the bug
     '../../src/storage/site.js': {
       default: async () => {
         seen.lookups += 1;
         seen.order.push('lookup');
-        return { exists: true, head: undefined };
+        if (lookupError) throw lookupError;
+        return { exists, head: undefined };
       },
     },
     '../../src/storage/source-bus.js': {
@@ -175,14 +176,60 @@ describe('writing to the store that holds the site', () => {
     });
   });
 
-  // whether the site exists changes nothing about where a write goes, and a read of the same path
-  // answers 404 first, so the editor cannot reach this state with a site that is not there
+  // a config service that cannot answer is the window where /ping answers 200 with no header for
+  // a source-bus site: helix-admin sets the header off the same config and swallows the failure.
+  // so a read that cannot be made is a write that cannot be placed
+  describe('when the config service cannot answer', () => {
+    const dead = () => new TypeError('fetch failed');
+
+    it('is refused with 503 and touches neither store', async () => {
+      const { res, seen } = await post({ lookupError: dead() });
+
+      assert.strictEqual(res.status, 503);
+      assert.strictEqual(seen.bus.length, 0);
+      assert.strictEqual(seen.legacy.length, 0);
+    });
+
+    it('asks the caller to retry', async () => {
+      const { res } = await post({ lookupError: dead() });
+
+      assert.ok(Number(res.headers.get('Retry-After')) > 0);
+    });
+
+    it('names the failed lookup in x-error', async () => {
+      const { res } = await post({ lookupError: dead() });
+
+      assert.match(res.headers.get('x-error'), /site lookup failed/);
+    });
+
+    // the probe answered, and it is the answer a save cannot be made without
+    it('is refused even when /ping said legacy', async () => {
+      const { res, seen } = await post({ lookupError: dead(), site: LEGACY_STORE });
+
+      assert.strictEqual(res.status, 503);
+      assert.strictEqual(seen.legacy.length, 0);
+    });
+  });
+
+  // a 404 says there is no AEM site config, not that the DA org and site are bogus. the service
+  // answered, so the store is known, and refusing here would stop saving on a DA-only site
+  describe('a site the config service does not know', () => {
+    it('is written to da-admin all the same', async () => {
+      const { res, seen } = await post({ exists: false });
+
+      assert.strictEqual(res.status, 201);
+      assert.strictEqual(seen.legacy.length, 1);
+      assert.strictEqual(seen.bus.length, 0);
+    });
+  });
+
   describe('what a write asks about the site', () => {
-    it('asks which store, and not whether the site exists', async () => {
+    it('asks both lookups, and reaches the store after them', async () => {
       const { res, seen } = await post({});
 
       assert.strictEqual(seen.probes, 1);
-      assert.strictEqual(seen.lookups, 0);
+      assert.strictEqual(seen.lookups, 1);
+      assert.strictEqual(seen.order[seen.order.length - 1], 'store');
       assert.strictEqual(res.status, 201);
     });
   });
@@ -274,7 +321,8 @@ describe('writing to the store that holds the site', () => {
     it('happens before anything is sent to a store', async () => {
       const { seen } = await post({});
 
-      assert.deepStrictEqual(seen.order, ['probe', 'store']);
+      assert.deepStrictEqual(seen.order.slice(-1), ['store']);
+      assert.ok(seen.order.includes('probe'));
     });
 
     it('happens on a source-bus site too, which is what the refusal rests on', async () => {
