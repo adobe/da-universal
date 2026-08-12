@@ -16,10 +16,10 @@ const NO_SITE = { exists: false, head: undefined };
 /**
  * Asks the config service whether a site exists, and reads its head.html from the same answer.
  *
- * The pipeline scope carries the code bus object the delivery pipeline renders into every page of
- * the site. Reading it here rather than from `{ref}--{site}--{org}.aem.page/head.html` answers for
- * a site behind Helix authentication, which refuses that path without a site token. The admin
- * scope would answer existence too, and carries the site's CDN token and API key metadata with it.
+ * The pipeline scope has the code bus object the delivery pipeline renders into every page of the
+ * site. A site behind Helix authentication refuses `{ref}--{site}--{org}.aem.page/head.html` to a
+ * request with no site token, and the config service does not. The admin scope answers existence
+ * too, and its answer has the site's CDN token and API key metadata.
  *
  * Throws on any refusal but a 404, which is the only status that means there is no such site. A
  * ref that was never built exists and has no head.html, which is a 200 with an empty head.

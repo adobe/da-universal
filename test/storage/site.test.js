@@ -36,7 +36,7 @@ const stubFetch = (respond) => {
 };
 
 const STYLESHEET = '<link rel="stylesheet" href="/styles/styles.css"/>';
-// the pipeline scope carries the code bus object, under a lastModified the delivery pipeline reads
+// the pipeline scope has the code bus object, with a lastModified the delivery pipeline reads
 const withHead = (html) => () => new Response(
   JSON.stringify({ head: { lastModified: 'Mon, 30 Mar 2026 06:42:40 GMT', html } }),
   { status: 200 },
@@ -67,7 +67,7 @@ describe('getSite', () => {
       assert.strictEqual(calls[0].url, 'http://localhost:4713/main--site--org/config.json?scope=pipeline');
     });
 
-    // the code bus holds one head.html per ref, so a branch gets its own
+    // the code bus has one head.html per ref, so a branch gets its own
     it('names the ref the request came in on', async () => {
       stubFetch(found);
 
@@ -111,7 +111,7 @@ describe('getSite', () => {
     });
 
     // the admin scope answers with the site's CDN token and its API key metadata, and one read
-    // covers both questions this asks
+    // is enough for both questions this asks
     it('reads one scope, and not the admin one', async () => {
       stubFetch(found);
 

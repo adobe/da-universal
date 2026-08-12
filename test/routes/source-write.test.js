@@ -70,7 +70,7 @@ const build = async (overrides = {}) => {
     },
   };
   const mod = await esmock('../../src/routes/da-admin.js', {
-    // a write asks which store, and nothing else, so a call here is the regression
+    // a write asks which store and nothing else, so anything reaching this mock is the bug
     '../../src/storage/site.js': {
       default: async () => {
         seen.lookups += 1;

@@ -11,19 +11,20 @@
  */
 
 // stands in for the two lookups a read makes: config.aem.page, which needs a shared secret, and
-// admin.hlx.page/ping. A site in SITES exists, and the source url is what makes it source-bus
+// admin.hlx.page/ping. A site in SITES exists, and one with a source url on api.aem.live is
+// source-bus
 const SITES = {
   'org/site': 'https://content.da.live/org/site/',
 };
 
 const SOURCE_BUS = 'https://api.aem.live/';
 
-// what the code bus holds at {owner}/{repo}/{ref}/head.html, which the pipeline scope carries
+// what the code bus has at {owner}/{repo}/{ref}/head.html, which the pipeline scope answers with
 const HEAD_HTML = '<link rel="stylesheet" href="/styles/styles.css"/>\n<script src="/scripts/scripts.js" type="module"></script>\n';
 
 /**
  * Answers /ping the way helix-admin does: the header is set when the site's content source is the
- * source bus, and a site it cannot resolve gets a 200 with no header rather than a 404.
+ * source bus, and a site it cannot resolve is answered 200 with no header rather than 404.
  */
 function ping(org, site) {
   const headers = SITES[`${org}/${site}`]?.startsWith(SOURCE_BUS)

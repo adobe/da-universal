@@ -20,8 +20,8 @@ import * as messages from '../../src/utils/constants.js';
 
 const authedReq = (url) => new Request(url, { headers: { Authorization: 'Bearer t' } });
 
-// what the two lookups answer together: `exists` comes from the config service, `onSourceBus`
-// from /ping
+// what the two lookups answer between them: `exists` comes from the config service,
+// `onSourceBus` from /ping
 const SOURCE_BUS = { exists: true, onSourceBus: true };
 const LEGACY_STORE = { exists: true, onSourceBus: false };
 const NO_SITE = { exists: false, onSourceBus: false };
@@ -882,7 +882,7 @@ describe('reading from the store that holds the site', () => {
       assert.strictEqual(res.status, 404);
     });
 
-    // whether there is a site to read at all is the question the other two rest on
+    // both failed, and the store answer is no use on its own
     it('reports the failed site lookup when the probe failed with it', async () => {
       const { daSourceGet, env } = await build({
         site: undefined,
@@ -931,8 +931,8 @@ describe('reading from the store that holds the site', () => {
       assert.strictEqual(seen.head[0], '<meta name="from" content="aem" />');
     });
 
-    // one read of the config service carries both the existence answer and head.html, so a page
-    // that needs the head pays for no second read
+    // one read of the config service has both the existence answer and head.html, so a page that
+    // needs the head pays for no second read
     it('reads the config service once for a page', async () => {
       const { daSourceGet, env, seen } = await build();
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');

@@ -129,7 +129,7 @@ async function getPageTemplate(env, daCtx, aemCtx) {
  * @throws {UpstreamError} when the lookup or the store could not be reached
  */
 async function readSource(env, daCtx, init) {
-  // two services, one round trip: config.aem.page says whether the site exists and what its
+  // both lookups go out together: config.aem.page says whether the site exists and what its
   // head.html is, /ping says which store holds it
   const [site, onSourceBus] = await Promise.allSettled([
     reach(SITE_LOOKUP, () => getSite(env, daCtx)),
@@ -137,12 +137,12 @@ async function readSource(env, daCtx, init) {
   ]);
 
   // answers no-such-site ahead of either 503, which would ask for a retry that cannot help.
-  // drops a failed probe on purpose: a site that does not exist is held by no store
+  // drops a failed probe on purpose: a site that does not exist needs no store
   if (site.status === 'fulfilled' && !site.value.exists) {
     console.log(`404 ${init.method} ${daCtx.sourcePath}, there is no site ${daCtx.org}/${daCtx.site}`);
     return { noSuchSite: true };
   }
-  // the site lookup first: whether there is anything to read at all is what the other two rest on
+  // the site lookup first, since the store answer is no use on its own
   if (site.status === 'rejected') throw site.reason;
   if (onSourceBus.status === 'rejected') throw onSourceBus.reason;
 

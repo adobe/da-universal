@@ -16,10 +16,14 @@ const UPGRADE_HEADER = 'x-api-upgrade-available';
 /**
  * Asks `/ping` whether a site is on the source bus.
  *
- * An answer without the header is legacy: helix-admin sets it when config resolution succeeded and
- * named the API, and a Fastly edge dictionary sets it for a site being moved onto the new API
- * ahead of its content. A probe that cannot answer throws, so the caller refuses with the cause
- * rather than picking a store.
+ * The header is the answer, and da-nx checks the same header for presence in `isHlx6`. It is read
+ * ahead of the status, since a Fastly edge dictionary sets it in front of an origin that may be
+ * rate limited or erroring. A refusal without it is no answer at all. Reading a refusal as legacy
+ * would send a source-bus write to da-admin, where nothing serves it back, so the read fails.
+ *
+ * One answer is ambiguous, and this worker cannot resolve it. helix-admin sets the header from the
+ * site's content source and swallows a config service failure, so a 200 with no header is either a
+ * legacy site or an origin that could not resolve one.
  *
  * @param {Object} env worker env, `HLX_ADMIN` is where the probe goes
  * @param {Object} daCtx
@@ -32,5 +36,8 @@ export default async function isSourceBus(env, daCtx) {
 
   const url = new URL(`/ping/${org}/${site}`, env.HLX_ADMIN);
   const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-  return response.headers.get(UPGRADE_HEADER) !== null;
+
+  if (response.headers.get(UPGRADE_HEADER) !== null) return true;
+  if (!response.ok) throw new Error(`/ping answered ${response.status}`);
+  return false;
 }
