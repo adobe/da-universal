@@ -586,7 +586,6 @@ describe('reading from the store that holds the site', () => {
         },
         '../../src/utils/aemCtx.js': {
           getAemCtx: () => ({ ueHostname: 'ue.da.live', previewUrl: 'https://p.example' }),
-          getAEMHtml: async () => '<body>from the template</body>',
         },
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -817,8 +816,8 @@ describe('reading from the store that holds the site', () => {
     });
   });
 
-  // the config service reads head.html off the code bus, so a site behind Helix authentication
-  // and a ref the preview host will not serve both still get the project's css and js
+  // the config service reads head.html off the code bus, which a site behind Helix authentication
+  // serves to the worker's own token while its preview host refuses it
   describe('where the page head comes from', () => {
     it('reads it off the config service, and asks the preview host for nothing', async () => {
       const { daSourceGet, env, seen } = await build();
@@ -839,15 +838,24 @@ describe('reading from the store that holds the site', () => {
       assert.strictEqual(seen.head[0], '<meta name="from" content="aem" />');
     });
 
-    // one read each, rather than a second lookup to carry the head
-    it('reads it alongside the lookup', async () => {
+    // nothing composes an image, and a config service that is down would answer the 503 the
+    // handler prefers over the AEM proxy's answer
+    it('reads nothing for an asset', async () => {
       const { daSourceGet, env, seen } = await build();
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+      const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
 
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-      assert.strictEqual(seen.lookups, 1);
-      assert.strictEqual(seen.heads, 1);
+      assert.strictEqual(seen.heads, 0);
+    });
+
+    it('reads nothing on a HEAD', async () => {
+      const { daSourceHead, env, seen } = await build();
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      await daSourceHead({ env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(seen.heads, 0);
     });
   });
 
@@ -1188,6 +1196,7 @@ describe('a path the site config gives a template', () => {
 
     assert.strictEqual(res.status, 503);
     assert.match(res.headers.get('x-error'), /preview host failed/);
+    assert.strictEqual(await res.text(), messages.PREVIEW_UNREACHABLE_HTML_MESSAGE);
   });
 
   it('takes the longest matching prefix', async () => {

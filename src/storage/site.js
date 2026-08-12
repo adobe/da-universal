@@ -63,8 +63,8 @@ export default async function getSite(env, daCtx) {
  *
  * The pipeline scope carries the code bus object the delivery pipeline renders into every page of
  * the site, and the admin scope does not carry it at all. Reading it here rather than from
- * `{ref}--{site}--{org}.aem.page/head.html` answers for a ref the preview host never built and
- * for a site behind Helix authentication, which refuses that path without a site token.
+ * `{ref}--{site}--{org}.aem.page/head.html` answers for a site behind Helix authentication, which
+ * refuses that path without a site token.
  *
  * Throws on any refusal but a 404. The token is the worker's own, so a refusal is a deploy
  * without it rather than a site that has no head.html.

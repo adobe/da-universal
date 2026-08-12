@@ -68,7 +68,6 @@ const mockRoutes = async () => esmock('../../src/routes/da-admin.js', {
   },
   '../../src/utils/aemCtx.js': {
     getAemCtx: () => ({}),
-    getAEMHtml: async () => '<body>from the template</body>',
   },
   '../../src/render/compose.js': {
     composeHtml: async () => ({ tree: true }),
@@ -124,7 +123,6 @@ describe('daSourceGet', () => {
       },
       '../../src/utils/aemCtx.js': {
         getAemCtx: () => ({}),
-        getAEMHtml: async () => '<body>from the template</body>',
       },
       '../../src/render/compose.js': {
         composeHtml: async (daCtx, aemCtx, bodyHtml) => {

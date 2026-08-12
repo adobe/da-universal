@@ -28,7 +28,7 @@ Anyone who has the shared secret can point `npm run dev` at config.aem.page inst
 
 ### Run on stage
 
-You can deploy da-universal on Cloudflare stage via `npm deploy:stage` to test it in a real worker environment.
+You can deploy da-universal on Cloudflare stage via `npm run deploy:stage` to test it in a real worker environment.
 
 ## Customer documentation
 https://docs.da.live/developers/reference/universal-editor

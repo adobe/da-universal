@@ -34,7 +34,7 @@ export function causeOf(e) {
  * Not a refusal: an upstream that answered 401 or 404 has answered, and the route decides what
  * that means. An UpstreamError means there is no answer to read, and it is retryable.
  *
- * @property {string} upstream PREVIEW_HOST, CONTENT_STORE, SITE_CONFIG or SITE_LOOKUP
+ * @property {string} upstream one of the names at the top of this file
  */
 export class UpstreamError extends Error {
   constructor(upstream, cause) {
@@ -47,7 +47,7 @@ export class UpstreamError extends Error {
 /**
  * Runs `read` and rethrows anything it throws as an UpstreamError naming `upstream`.
  *
- * @param {string} upstream PREVIEW_HOST, CONTENT_STORE, SITE_CONFIG or SITE_LOOKUP
+ * @param {string} upstream one of the names at the top of this file
  * @param {() => Promise<T>} read
  * @returns {Promise<T>}
  * @template T

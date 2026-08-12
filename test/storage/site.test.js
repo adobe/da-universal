@@ -318,6 +318,14 @@ describe('getSiteHead', () => {
       await assert.rejects(() => getSiteHead(env, daCtx()), /fetch failed/);
     });
 
+    // a worker deployed without the secret and a rate limit share the status and the body, so
+    // `x-error` is what tells them apart
+    it('names the status it got', async () => {
+      stubFetch(() => new Response('', { status: 401 }));
+
+      await assert.rejects(() => getSiteHead(env, daCtx()), /401/);
+    });
+
     it('throws when the body is not JSON', async () => {
       stubFetch(() => new Response('<html>the edge said no</html>', { status: 200 }));
 
