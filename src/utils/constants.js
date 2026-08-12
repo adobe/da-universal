@@ -53,7 +53,7 @@ export const SITE_NOT_FOUND_HTML_MESSAGE = '<html><body><h1>404: Site not found<
 
 export const PREVIEW_UNREACHABLE_HTML_MESSAGE = '<html><body><h1>503: Preview host unreachable</h1><p>The site\'s preview host did not answer. Please retry.</p></body></html>';
 
-export const HEAD_UNREACHABLE_HTML_MESSAGE = '<html><body><h1>503: Page head unreachable</h1><p>The site\'s head.html could not be read. Please retry.</p></body></html>';
+export const SITE_UNREACHABLE_HTML_MESSAGE = '<html><body><h1>503: Site lookup unreachable</h1><p>Whether this site exists could not be determined. Please retry.</p></body></html>';
 
 export const SOURCE_UNREACHABLE_HTML_MESSAGE = '<html><body><h1>503: Content store unreachable</h1><p>The store that holds this document did not answer. Please retry.</p></body></html>';
 

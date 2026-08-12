@@ -26,7 +26,7 @@ import {
 } from '../responses/index.js';
 import {
   DEFAULT_HTML_TEMPLATE,
-  HEAD_UNREACHABLE_HTML_MESSAGE,
+  SITE_UNREACHABLE_HTML_MESSAGE,
   PREVIEW_UNREACHABLE_HTML_MESSAGE,
   SITE_NOT_FOUND_HTML_MESSAGE,
   SOURCE_BUS_READ_ONLY_MESSAGE,
@@ -37,15 +37,16 @@ import {
   UNAUTHORIZED_HTML_MESSAGE,
 } from '../utils/constants.js';
 import { getSiteConfig } from '../storage/config.js';
-import getSite, { getSiteHead } from '../storage/site.js';
+import getSite from '../storage/site.js';
+import isSourceBus from '../storage/source-bus.js';
 import getStore from '../storage/store.js';
 import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 import {
   CONTENT_STORE,
-  PAGE_HEAD,
   PREVIEW_HOST,
   SITE_CONFIG,
   SITE_LOOKUP,
+  STORE_LOOKUP,
   UpstreamError,
   reach,
 } from '../utils/upstream.js';
@@ -58,10 +59,10 @@ const HTML_POST_TYPE = 'text/html';
  */
 const UNREACHABLE_HTML = {
   [PREVIEW_HOST]: PREVIEW_UNREACHABLE_HTML_MESSAGE,
-  [SITE_LOOKUP]: SOURCE_UNDETERMINED_HTML_MESSAGE,
-  [PAGE_HEAD]: HEAD_UNREACHABLE_HTML_MESSAGE,
+  [SITE_LOOKUP]: SITE_UNREACHABLE_HTML_MESSAGE,
+  [STORE_LOOKUP]: SOURCE_UNDETERMINED_HTML_MESSAGE,
 };
-const UNREACHABLE_TEXT = { [SITE_LOOKUP]: SOURCE_UNDETERMINED_MESSAGE };
+const UNREACHABLE_TEXT = { [STORE_LOOKUP]: SOURCE_UNDETERMINED_MESSAGE };
 
 /**
  * Only an upstream that could not be reached is retryable. Anything else reaches the worker
@@ -128,16 +129,29 @@ async function getPageTemplate(env, daCtx, aemCtx) {
  * @throws {UpstreamError} when the lookup or the store could not be reached
  */
 async function readSource(env, daCtx, init) {
-  const site = await reach(SITE_LOOKUP, () => getSite(env, daCtx));
+  // two services, one round trip: config.aem.page says whether the site exists and what its
+  // head.html is, /ping says which store holds it
+  const [site, onSourceBus] = await Promise.allSettled([
+    reach(SITE_LOOKUP, () => getSite(env, daCtx)),
+    reach(STORE_LOOKUP, () => isSourceBus(env, daCtx)),
+  ]);
 
-  if (!site.exists) {
+  // answers no-such-site ahead of either 503, which would ask for a retry that cannot help.
+  // drops a failed probe on purpose: a site that does not exist is held by no store
+  if (site.status === 'fulfilled' && !site.value.exists) {
     console.log(`404 ${init.method} ${daCtx.sourcePath}, there is no site ${daCtx.org}/${daCtx.site}`);
     return { noSuchSite: true };
   }
+  // the site lookup first: whether there is anything to read at all is what the other two rest on
+  if (site.status === 'rejected') throw site.reason;
+  if (onSourceBus.status === 'rejected') throw onSourceBus.reason;
 
-  const store = getStore(env, daCtx, site.onSourceBus);
+  const store = getStore(env, daCtx, onSourceBus.value);
   console.log(`-> ${init.method} ${store.url.toString()}`);
-  return { response: await reach(CONTENT_STORE, () => store.fetch(store.url, init)) };
+  return {
+    response: await reach(CONTENT_STORE, () => store.fetch(store.url, init)),
+    head: site.value.head,
+  };
 }
 
 async function sourceGet({ req, env, daCtx }) {
@@ -168,17 +182,14 @@ async function sourceGet({ req, env, daCtx }) {
     return response;
   }
 
-  // runs the lookup alongside the head read, since it costs a round trip
-  // settles both rather than racing, so a failed head read cannot preempt the no-such-site 404
   const aemCtx = getAemCtx(env, daCtx);
-  const [head, source] = await Promise.allSettled([
-    reach(PAGE_HEAD, () => getSiteHead(env, daCtx)),
-    readSource(env, daCtx, { method: 'GET', headers }),
-  ]);
+  const { response: sourceResp, noSuchSite, head: headHtml } = await readSource(
+    env,
+    daCtx,
+    { method: 'GET', headers },
+  );
 
-  // answers no-such-site ahead of either 503, which would ask for a retry that cannot help.
-  // drops the head failure on purpose: a site that does not exist has no head.html either
-  if (source.status === 'fulfilled' && source.value.noSuchSite) {
+  if (noSuchSite) {
     // quick-edit still needs a working shell (with the import map) so the editor
     // can load into this page, even when the site does not exist.
     if (isQuickEdit) {
@@ -186,13 +197,7 @@ async function sourceGet({ req, env, daCtx }) {
     }
     return get404(SITE_NOT_FOUND_HTML_MESSAGE);
   }
-  // the lookup first: one service answers both reads, and the store it could not name is the
-  // more useful of the two failures
-  if (source.status === 'rejected') throw source.reason;
-  if (head.status === 'rejected') throw head.reason;
 
-  const headHtml = head.value;
-  const { response: sourceResp } = source.value;
   console.log(`<- ${daCtx.sourcePath}. ${sourceResp.status} ${sourceResp.statusText}`, { status: sourceResp.status, statusText: sourceResp.statusText });
 
   // the store is the only thing to see the token, and the authorbus extension recovers off the
@@ -308,7 +313,7 @@ async function sourcePost({ req, env, daCtx }) {
     const bodyContent = toHtml(bodyNode);
 
     // the payload is settled, so the only question left is where it goes
-    const { onSourceBus } = await reach(SITE_LOOKUP, () => getSite(env, daCtx));
+    const onSourceBus = await reach(STORE_LOOKUP, () => isSourceBus(env, daCtx));
 
     if (onSourceBus) {
       console.log(`405 POST ${sourcePath}, writes to the source bus are refused through the preview proxy. write directly to the source bus instead.`);
