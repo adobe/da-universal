@@ -62,7 +62,12 @@ const UNREACHABLE_HTML = {
   [SITE_LOOKUP]: SITE_UNREACHABLE_HTML_MESSAGE,
   [STORE_LOOKUP]: SOURCE_UNDETERMINED_HTML_MESSAGE,
 };
-const UNREACHABLE_TEXT = { [STORE_LOOKUP]: SOURCE_UNDETERMINED_MESSAGE };
+// a write asks both lookups and reaches no store without them, so either one failing leaves the
+// destination undetermined rather than unreachable
+const UNREACHABLE_TEXT = {
+  [SITE_LOOKUP]: SOURCE_UNDETERMINED_MESSAGE,
+  [STORE_LOOKUP]: SOURCE_UNDETERMINED_MESSAGE,
+};
 
 /**
  * Only an upstream that could not be reached is retryable. Anything else reaches the worker
@@ -312,12 +317,10 @@ async function sourcePost({ req, env, daCtx }) {
 
     const bodyContent = toHtml(bodyNode);
 
-    // the payload is settled, so the only question left is where it goes. /ping answers that, and
-    // the config service is read alongside it because helix-admin sets the /ping header off the
-    // same config and swallows a failure reading it: while the config service is down, a
-    // source-bus site answers 200 with no header and reads as legacy. so a config service that
-    // cannot answer refuses the save rather than misplacing it in da-admin, where nothing serves
-    // it back. a 404 is an answer, and it means no AEM site config rather than no DA site
+    // the payload is settled, so the only question left is where it goes. both lookups have to
+    // answer: the store answer comes from the config the site lookup reads, and a wrong store
+    // cannot be walked back from. a 404 is an answer, and it means no AEM site config rather
+    // than no DA site
     const [site, onSourceBus] = await Promise.allSettled([
       reach(SITE_LOOKUP, () => getSite(env, daCtx)),
       reach(STORE_LOOKUP, () => isSourceBus(env, daCtx)),

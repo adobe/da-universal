@@ -176,9 +176,8 @@ describe('writing to the store that holds the site', () => {
     });
   });
 
-  // a config service that cannot answer is the window where /ping answers 200 with no header for
-  // a source-bus site: helix-admin sets the header off the same config and swallows the failure.
-  // so a read that cannot be made is a write that cannot be placed
+  // the store answer comes from the config this read asks for, so a config service that cannot
+  // answer puts it in doubt as well
   describe('when the config service cannot answer', () => {
     const dead = () => new TypeError('fetch failed');
 
@@ -202,15 +201,15 @@ describe('writing to the store that holds the site', () => {
       assert.match(res.headers.get('x-error'), /site lookup failed/);
     });
 
-    // UES embeds this verbatim, and no store was asked: where the document goes is what could not
-    // be worked out
+    // UES embeds this verbatim, and no store was asked, so "did not answer" would name the wrong
+    // failure
     it('says the store could not be determined, not that it did not answer', async () => {
       const { res } = await post({ lookupError: dead() });
 
       assert.strictEqual(await res.text(), SOURCE_UNDETERMINED_MESSAGE);
     });
 
-    // the probe answered, and it is the answer a save cannot be made without
+    // the probe answered legacy, and that answer is the one in doubt while the config is down
     it('is refused even when /ping said legacy', async () => {
       const { res, seen } = await post({ lookupError: dead(), site: LEGACY_STORE });
 
@@ -220,7 +219,7 @@ describe('writing to the store that holds the site', () => {
   });
 
   // a 404 says there is no AEM site config, not that the DA org and site are bogus. the service
-  // answered, so the store is known, and refusing here would stop saving on a DA-only site
+  // answered, so nothing is in doubt, and refusing here would stop saving on a DA-only site
   describe('a site the config service does not know', () => {
     it('is written to da-admin all the same', async () => {
       const { res, seen } = await post({ exists: false });

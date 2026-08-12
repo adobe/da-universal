@@ -21,10 +21,6 @@ const UPGRADE_HEADER = 'x-api-upgrade-available';
  * rate limited or erroring. A refusal without it is no answer at all. Reading a refusal as legacy
  * would send a source-bus write to da-admin, where nothing serves it back, so the read fails.
  *
- * One answer is ambiguous, and this worker cannot resolve it. helix-admin sets the header from the
- * site's content source and swallows a config service failure, so a 200 with no header is either a
- * legacy site or an origin that could not resolve one.
- *
  * @param {Object} env worker env, `HLX_ADMIN` is where the probe goes
  * @param {Object} daCtx
  * @returns {Promise<boolean>}
