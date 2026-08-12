@@ -22,6 +22,8 @@ To run da-universal locally:
 1. In a second terminal, run `npm run dev` in this repo's folder.
 1. The da-ue service API is available via https://localhost:4712
 
+Running against the stand-in warns that `HLX_CONFIG_SERVICE_TOKEN` is missing, which it is, and nothing asks for it.
+
 Anyone who has the shared secret can point `npm run dev` at config.aem.page instead of the stand-in. Put `HLX_CONFIG_SERVICE_TOKEN="<token>"` in `.dev.vars.dev`, which is gitignored, and run `npm run dev -- --var HLX_CONFIG_SERVICE:https://config.aem.page`.
 
 ### Run on stage
