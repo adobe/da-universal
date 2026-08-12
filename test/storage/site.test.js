@@ -13,7 +13,7 @@
 /* eslint-env mocha */
 import assert from 'assert';
 
-const { default: getSite } = await import('../../src/storage/site.js');
+const { default: getSite, getSiteHead } = await import('../../src/storage/site.js');
 
 const env = {
   AEM_API: 'https://api.aem.live',
@@ -43,6 +43,13 @@ const config = (sourceUrl) => () => new Response(
 const legacy = config('https://content.da.live/org/site/');
 const sourceBus = config('https://api.aem.live/org/sites/site/');
 const absent = () => new Response('', { status: 404, headers: { 'x-error': 'config not found.' } });
+
+const STYLESHEET = '<link rel="stylesheet" href="/styles/styles.css"/>';
+// the pipeline scope carries the code bus object, under a lastModified the delivery pipeline reads
+const withHead = (html) => () => new Response(
+  JSON.stringify({ head: { lastModified: 'Mon, 30 Mar 2026 06:42:40 GMT', html } }),
+  { status: 200 },
+);
 
 describe('getSite', () => {
   afterEach(() => {
@@ -204,6 +211,117 @@ describe('getSite', () => {
 
       await assert.rejects(() => getSite({ ...env, HLX_CONFIG_SERVICE: undefined }, daCtx()));
       assert.strictEqual(calls.length, 0);
+    });
+  });
+});
+
+describe('getSiteHead', () => {
+  afterEach(() => {
+    delete globalThis.fetch;
+  });
+
+  describe('the request it makes', () => {
+    it('asks the config service for the pipeline-scoped config', async () => {
+      stubFetch(withHead(STYLESHEET));
+
+      await getSiteHead(env, daCtx());
+
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls[0].url, 'https://config.aem.page/main--site--org/config.json?scope=pipeline');
+    });
+
+    // the code bus holds one head.html per ref, so a branch gets its own
+    it('names the ref the request came in on', async () => {
+      stubFetch(withHead(STYLESHEET));
+
+      await getSiteHead(env, daCtx({ ref: 'feature' }));
+
+      assert.match(calls[0].url, /\/feature--site--org\//);
+    });
+
+    it('sends the shared token', async () => {
+      stubFetch(withHead(STYLESHEET));
+
+      await getSiteHead(env, daCtx());
+
+      assert.strictEqual(calls[0].init.headers['x-access-token'], 'shared-token');
+    });
+
+    it('sends the backend type', async () => {
+      stubFetch(withHead(STYLESHEET));
+
+      await getSiteHead(env, daCtx());
+
+      assert.strictEqual(calls[0].init.headers['x-backend-type'], 'aws');
+    });
+
+    it('gives up rather than hanging', async () => {
+      stubFetch(withHead(STYLESHEET));
+
+      await getSiteHead(env, daCtx());
+
+      assert.ok(calls[0].init.signal);
+    });
+  });
+
+  describe('the head it answers', () => {
+    it('reads head.html out of the config', async () => {
+      stubFetch(withHead(STYLESHEET));
+
+      assert.strictEqual(await getSiteHead(env, daCtx()), STYLESHEET);
+    });
+
+    // a ref with no head.html on the code bus answers 200 with an empty head, not a 404
+    it('answers nothing when the ref has no head.html', async () => {
+      stubFetch(() => new Response(JSON.stringify({ head: {} }), { status: 200 }));
+
+      assert.strictEqual(await getSiteHead(env, daCtx()), undefined);
+    });
+
+    it('answers nothing when the config carries no head at all', async () => {
+      stubFetch(() => new Response(JSON.stringify({}), { status: 200 }));
+
+      assert.strictEqual(await getSiteHead(env, daCtx()), undefined);
+    });
+
+    // the lookup answers 404 with the site, and one 404 page is enough
+    it('answers nothing on a 404', async () => {
+      stubFetch(absent);
+
+      assert.strictEqual(await getSiteHead(env, daCtx()), undefined);
+    });
+
+    it('asks nothing when there is no org or site', async () => {
+      stubFetch(absent);
+
+      assert.strictEqual(await getSiteHead(env, daCtx({ site: undefined })), undefined);
+      assert.strictEqual(calls.length, 0);
+    });
+  });
+
+  // the token is the worker's own, so a refusal is a broken worker rather than a site with no
+  // head.html, and composing an empty project head would serve that as a page
+  describe('when the read cannot answer', () => {
+    [401, 403, 429, 500, 502].forEach((status) => {
+      it(`throws on a ${status}`, async () => {
+        stubFetch(() => new Response('', { status }));
+
+        await assert.rejects(() => getSiteHead(env, daCtx()), /502|500|429|403|401/);
+      });
+    });
+
+    it('throws when the config service cannot be reached', async () => {
+      stubFetch(() => {
+        throw new TypeError('fetch failed');
+      });
+
+      await assert.rejects(() => getSiteHead(env, daCtx()), /fetch failed/);
+    });
+
+    it('throws when the body is not JSON', async () => {
+      stubFetch(() => new Response('<html>the edge said no</html>', { status: 200 }));
+
+      await assert.rejects(() => getSiteHead(env, daCtx()));
     });
   });
 });

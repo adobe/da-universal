@@ -64,10 +64,11 @@ const stubConfig = (upgraded = []) => {
 const mockRoutes = async () => esmock('../../src/routes/da-admin.js', {
   '../../src/storage/site.js': {
     default: async () => ({ exists: true, onSourceBus: false }),
+    getSiteHead: async () => '<meta name="from" content="aem" />',
   },
   '../../src/utils/aemCtx.js': {
     getAemCtx: () => ({}),
-    getAEMHtml: async () => '<meta name="from" content="aem" />',
+    getAEMHtml: async () => '<body>from the template</body>',
   },
   '../../src/render/compose.js': {
     composeHtml: async () => ({ tree: true }),
@@ -119,10 +120,11 @@ describe('daSourceGet', () => {
     return (await esmock('../../src/routes/da-admin.js', {
       '../../src/storage/site.js': {
         default: async () => site,
+        getSiteHead: async () => headHtml,
       },
       '../../src/utils/aemCtx.js': {
         getAemCtx: () => ({}),
-        getAEMHtml: async () => headHtml,
+        getAEMHtml: async () => '<body>from the template</body>',
       },
       '../../src/render/compose.js': {
         composeHtml: async (daCtx, aemCtx, bodyHtml) => {

@@ -36,7 +36,7 @@ const build = async (overrides = {}) => {
     legacy = () => new Response('<body>from da-admin</body>', { status: 200 }),
   } = overrides;
   // `in overrides` rather than a destructured default on these, so an explicit undefined reads
-  // as a missing head.html, a template the preview host does not have, or a failed lookup
+  // as a ref with no head.html, a template the preview host does not have, or a failed lookup
   const headHtml = 'headHtml' in overrides ? overrides.headHtml : '<meta name="from" content="aem" />';
   const templateHtml = 'templateHtml' in overrides
     ? overrides.templateHtml
@@ -47,7 +47,7 @@ const build = async (overrides = {}) => {
     headError, templateError, configError, composeError, config = null,
   } = overrides;
   const seen = {
-    bus: [], legacy: [], head: [], aem: [], ue: 0, lookups: 0,
+    bus: [], legacy: [], head: [], aem: [], ue: 0, lookups: 0, heads: 0,
   };
   globalThis.fetch = async (input, init) => {
     const request = input instanceof Request ? input : new Request(input, init);
@@ -73,17 +73,19 @@ const build = async (overrides = {}) => {
         if (site === undefined) throw lookupError;
         return site;
       },
+      getSiteHead: async () => {
+        if (headError) throw headError;
+        seen.heads += 1;
+        return headHtml;
+      },
     },
     '../../src/utils/aemCtx.js': {
       getAemCtx: () => ({ previewUrl: 'https://main--site--org.aem.page' }),
-      // answers both preview host reads, and fails them separately so a test can reach the
-      // template read with head.html answering
+      // the template is the only preview host read left on this path
       getAEMHtml: async (aemCtx, path) => {
-        const isHead = path === '/head.html';
-        if (isHead && headError) throw headError;
-        if (!isHead && templateError) throw templateError;
+        if (templateError) throw templateError;
         seen.aem.push(path);
-        return isHead ? headHtml : templateHtml;
+        return templateHtml;
       },
     },
     '../../src/render/compose.js': {
@@ -797,6 +799,40 @@ describe('reading from the store that holds the site', () => {
     });
   });
 
+  // the config service reads head.html off the code bus, so a site behind Helix authentication
+  // and a ref the preview host will not serve both still get the project's css and js
+  describe('where the page head comes from', () => {
+    it('reads it off the config service, and asks the preview host for nothing', async () => {
+      const { daSourceGet, env, seen } = await build();
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(seen.heads, 1);
+      assert.deepStrictEqual(seen.aem, []);
+    });
+
+    it('composes the page with it', async () => {
+      const { daSourceGet, env, seen } = await build();
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(seen.head[0], '<meta name="from" content="aem" />');
+    });
+
+    // one read each, rather than a second lookup to carry the head
+    it('reads it alongside the lookup', async () => {
+      const { daSourceGet, env, seen } = await build();
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(seen.lookups, 1);
+      assert.strictEqual(seen.heads, 1);
+    });
+  });
+
   // #258: head.html does not say whether a site exists, so a missing head.html is not a 404
   describe('when the site serves no head.html', () => {
     it('reads the document anyway', async () => {
@@ -912,8 +948,8 @@ describe('reading from the store that holds the site', () => {
     });
   });
 
-  // a throw out of getAEMHtml used to reach the worker's catch as a 500 with no body
-  describe('when the preview host cannot be reached', () => {
+  // a throw out of the head read used to reach the worker's catch as a 500 with no body
+  describe('when the head read cannot be reached', () => {
     const dead = () => new TypeError('Network connection lost');
 
     it('answers 503 rather than throwing', async () => {
@@ -931,7 +967,7 @@ describe('reading from the store that holds the site', () => {
 
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-      assert.strictEqual(res.headers.get('x-error'), 'preview host failed: TypeError: Network connection lost');
+      assert.strictEqual(res.headers.get('x-error'), 'page head failed: TypeError: Network connection lost');
     });
 
     it('asks the caller to retry', async () => {
@@ -946,16 +982,16 @@ describe('reading from the store that holds the site', () => {
     });
 
     // says what happened, since the preview iframe renders the refusal
-    it('says the preview host did not answer, not the store', async () => {
+    it('says the page head did not arrive, not that the store is undetermined', async () => {
       const { daSourceGet, env } = await build({ headError: dead() });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-      assert.strictEqual(await res.text(), messages.PREVIEW_UNREACHABLE_HTML_MESSAGE);
+      assert.strictEqual(await res.text(), messages.HEAD_UNREACHABLE_HTML_MESSAGE);
     });
 
-    // a 404 would say the site is gone, which is #258 again, this time on the preview host
+    // a 404 would say the site is gone, which is #258 again, this time on the head read
     it('does not answer 404', async () => {
       const { daSourceGet, env } = await build({ headError: dead() });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -1029,18 +1065,20 @@ describe('when the site config cannot be reached', () => {
   });
 });
 
-// getAEMHtml is not stubbed here: a stub hides a preview host that answers, but with something
-// other than head.html
-describe('when the preview host refuses head.html', () => {
+// getSiteHead is not stubbed here: a stub hides a config service that answers, but with
+// something other than a head
+describe('when the config service refuses the head read', () => {
   afterEach(() => {
     delete globalThis.fetch;
   });
 
-  const readWithPreviewStatus = async (status) => {
-    globalThis.fetch = async () => new Response('preview said no', { status });
+  const readWithConfigStatus = async (status) => {
+    globalThis.fetch = async () => new Response('the config service said no', { status });
     const env = {
       DA_ADMIN: 'https://admin.da.live',
       AEM_API: 'https://api.aem.live',
+      HLX_CONFIG_SERVICE: 'https://config.aem.page',
+      HLX_CONFIG_SERVICE_TOKEN: 'shared-token',
       daadmin: { fetch: async () => new Response('<body>from da-admin</body>', { status: 200 }) },
     };
     const { daSourceGet } = await esmock('../../src/routes/da-admin.js', {
@@ -1051,29 +1089,30 @@ describe('when the preview host refuses head.html', () => {
     return daSourceGet({ req, env, daCtx: getDaCtx(req) });
   };
 
-  // a 200 with no head.html is a page with no stylesheet, no scripts and no entry script
+  // a 200 with no head is a page with no stylesheet, no scripts and no entry script
   it('refuses a 500 with 503 rather than composing an empty project head', async () => {
-    const res = await readWithPreviewStatus(500);
+    const res = await readWithConfigStatus(500);
 
     assert.strictEqual(res.status, 503);
   });
 
-  it('names the preview host in x-error', async () => {
-    const res = await readWithPreviewStatus(500);
+  it('names the page head in x-error', async () => {
+    const res = await readWithConfigStatus(500);
 
-    assert.match(res.headers.get('x-error'), /preview host failed/);
+    assert.match(res.headers.get('x-error'), /page head failed/);
   });
 
-  // a host behind Helix auth refuses without a site token, and a retry answers the same
-  it('composes the page without a head on a 401', async () => {
-    const res = await readWithPreviewStatus(401);
+  // the shared secret is the worker's own, so a 401 is a deploy without it rather than a site
+  // that has no head.html
+  it('refuses a 401 with 503', async () => {
+    const res = await readWithConfigStatus(401);
 
-    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.status, 503);
   });
 
-  // a ref that was never previewed has no head.html, which is not a failure
+  // a ref that was never built has no head.html, which is not a failure
   it('composes the page without a head on a 404', async () => {
-    const res = await readWithPreviewStatus(404);
+    const res = await readWithConfigStatus(404);
 
     assert.strictEqual(res.status, 200);
   });
