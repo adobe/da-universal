@@ -102,8 +102,8 @@ describe('isSourceBus', () => {
       });
     });
 
-    // no status test, for the same reason. the edge sets the header from its dictionary, so a
-    // rate-limited or erroring origin behind it does not make an enrolled site legacy
+    // the edge sets the header from its dictionary, so a rate-limited or erroring origin behind
+    // it does not make an enrolled site legacy
     [429, 500, 503].forEach((status) => {
       it(`counts it on a ${status}, since the header is what carries the answer`, async () => {
         stubFetch(() => ping({ 'x-api-upgrade-available': 'true' }, status));
@@ -113,18 +113,38 @@ describe('isSourceBus', () => {
     });
   });
 
-  describe('when /ping does not say so', () => {
-    [
-      ['the header is absent', {}, 200],
-      ['the header is absent on a 404', {}, 404],
-      ['the header is absent on a 405', {}, 405],
-      ['the header is absent on a 500', {}, 500],
-    ].forEach(([what, headers, status]) => {
-      it(`answers false: ${what}`, async () => {
-        stubFetch(() => ping(headers, status));
+  // an answered 200 without the header is the legacy answer. helix-admin sets the header from
+  // the site's content source, and /ping is 200 for a site it routes at all
+  describe('when /ping says the site is legacy', () => {
+    it('answers false on a 200 with no header', async () => {
+      stubFetch(() => ping());
 
-        assert.strictEqual(await isSourceBus(env, daCtx()), false);
+      assert.strictEqual(await isSourceBus(env, daCtx()), false);
+    });
+  });
+
+  // a refusal carries no decision, and reading it as legacy sends a source-bus write to da-admin,
+  // where nothing serves it back
+  describe('when /ping refuses without the header', () => {
+    [404, 405, 429, 500, 503].forEach((status) => {
+      it(`throws on a ${status}`, async () => {
+        stubFetch(() => ping({}, status));
+
+        await assert.rejects(() => isSourceBus(env, daCtx()), /404|405|429|500|503/);
       });
+    });
+
+    // the header is read first, so an enrolled site survives an origin the edge is shielding
+    it('answers true on a 429 that still carries the header', async () => {
+      stubFetch(() => ping({ 'x-api-upgrade-available': 'true' }, 429));
+
+      assert.strictEqual(await isSourceBus(env, daCtx()), true);
+    });
+
+    it('names the status it got', async () => {
+      stubFetch(() => ping({}, 503));
+
+      await assert.rejects(() => isSourceBus(env, daCtx()), /503/);
     });
   });
 
