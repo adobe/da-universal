@@ -20,8 +20,8 @@ import * as messages from '../../src/utils/constants.js';
 
 const authedReq = (url) => new Request(url, { headers: { Authorization: 'Bearer t' } });
 
-// what the two lookups answer between them: `exists` comes from the config service,
-// `onSourceBus` from /ping
+// what the two lookups answer between them: `exists` comes from the pipeline scope,
+// `onSourceBus` from the admin scope
 const SOURCE_BUS = { exists: true, onSourceBus: true };
 const LEGACY_STORE = { exists: true, onSourceBus: false };
 const NO_SITE = { exists: false, onSourceBus: false };
@@ -48,7 +48,7 @@ const build = async (overrides = {}) => {
     busError, templateError, configError, composeError, config = null,
   } = overrides;
   const seen = {
-    bus: [], legacy: [], head: [], aem: [], ue: 0, lookups: 0, pings: 0,
+    bus: [], legacy: [], head: [], aem: [], ue: 0, lookups: 0, storeLookups: 0,
   };
   globalThis.fetch = async (input, init) => {
     const request = input instanceof Request ? input : new Request(input, init);
@@ -77,7 +77,7 @@ const build = async (overrides = {}) => {
     },
     '../../src/storage/source-bus.js': {
       default: async () => {
-        seen.pings += 1;
+        seen.storeLookups += 1;
         if (busError) throw busError;
         return site !== undefined && site.onSourceBus;
       },
@@ -114,7 +114,7 @@ const build = async (overrides = {}) => {
   return { ...mod, env, seen };
 };
 
-describe('when /ping cannot say which store holds the site', () => {
+describe('when the store lookup cannot say which store holds the site', () => {
   afterEach(() => {
     delete globalThis.fetch;
   });
@@ -931,16 +931,16 @@ describe('reading from the store that holds the site', () => {
       assert.strictEqual(seen.head[0], '<meta name="from" content="aem" />');
     });
 
-    // one read of the config service has both the existence answer and head.html, so a page that
-    // needs the head pays for no second read
-    it('reads the config service once for a page', async () => {
+    // the pipeline scope answers existence and head.html together, so a page that needs the head
+    // pays for no third read
+    it('reads each lookup once for a page', async () => {
       const { daSourceGet, env, seen } = await build();
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
       assert.strictEqual(seen.lookups, 1);
-      assert.strictEqual(seen.pings, 1);
+      assert.strictEqual(seen.storeLookups, 1);
     });
 
     // nothing composes an image, and the head that arrives with the existence answer is dropped
@@ -951,7 +951,7 @@ describe('reading from the store that holds the site', () => {
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
       assert.strictEqual(seen.lookups, 1);
-      assert.strictEqual(seen.pings, 1);
+      assert.strictEqual(seen.storeLookups, 1);
       assert.deepStrictEqual(seen.head, []);
     });
 
@@ -962,7 +962,7 @@ describe('reading from the store that holds the site', () => {
       await daSourceHead({ env, daCtx: getDaCtx(req) });
 
       assert.strictEqual(seen.lookups, 1);
-      assert.strictEqual(seen.pings, 1);
+      assert.strictEqual(seen.storeLookups, 1);
       assert.deepStrictEqual(seen.head, []);
     });
   });

@@ -19,7 +19,7 @@ import { SOURCE_BUS_READ_ONLY_MESSAGE, SOURCE_UNDETERMINED_MESSAGE } from '../..
 const AT = 'https://main--site--org.ue.da.live/folder/content';
 const DOC = '<body><main><div><p>the author typed this</p></div></main></body>';
 
-// what /ping answers
+// what the store lookup answers
 const SOURCE_BUS = true;
 const LEGACY_STORE = false;
 
@@ -209,8 +209,9 @@ describe('writing to the store that holds the site', () => {
       assert.strictEqual(await res.text(), SOURCE_UNDETERMINED_MESSAGE);
     });
 
-    // the probe answered legacy, and that answer is the one in doubt while the config is down
-    it('is refused even when /ping said legacy', async () => {
+    // the store lookup answered legacy, and that answer is the one in doubt while the site
+    // lookup is down
+    it('is refused even when the store lookup said legacy', async () => {
       const { res, seen } = await post({ lookupError: dead(), site: LEGACY_STORE });
 
       assert.strictEqual(res.status, 503);

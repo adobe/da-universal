@@ -134,8 +134,8 @@ async function getPageTemplate(env, daCtx, aemCtx) {
  * @throws {UpstreamError} when the lookup or the store could not be reached
  */
 async function readSource(env, daCtx, init) {
-  // both lookups go out together: config.aem.page says whether the site exists and what its
-  // head.html is, /ping says which store holds it
+  // both lookups go out together: the pipeline scope says whether the site exists and what its
+  // head.html is, the admin scope says which store holds it
   const [site, onSourceBus] = await Promise.allSettled([
     reach(SITE_LOOKUP, () => getSite(env, daCtx)),
     reach(STORE_LOOKUP, () => isSourceBus(env, daCtx)),
