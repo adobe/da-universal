@@ -15,7 +15,11 @@ import assert from 'assert';
 
 const { default: isSourceBus } = await import('../../src/storage/source-bus.js');
 
-const env = { AEM_API: 'https://api.aem.live', HLX_ADMIN: 'https://admin.hlx.page' };
+const env = {
+  AEM_API: 'https://api.aem.live',
+  HLX_CONFIG_SERVICE: 'https://config.aem.page',
+  HLX_CONFIG_SERVICE_TOKEN: 'shared-secret',
+};
 
 const daCtx = (over = {}) => ({
   org: 'org', site: 'site', ref: 'main', authToken: 'Bearer t', ...over,
@@ -31,8 +35,13 @@ const stubFetch = (respond) => {
   };
 };
 
-const ping = (headers = {}, status = 200) => new Response('', { status, headers });
-const upgraded = () => ping({ 'x-api-upgrade-available': 'true' });
+const config = (source, status = 200) => new Response(
+  JSON.stringify({ content: { source, contentBusId: 'abc' } }),
+  { status, headers: { 'content-type': 'application/json' } },
+);
+
+const onBus = () => config({ type: 'markup', url: 'https://api.aem.live/org/sites/site/source' });
+const onDa = () => config({ type: 'markup', url: 'https://content.da.live/org/site/' });
 
 describe('isSourceBus', () => {
   afterEach(() => {
@@ -40,36 +49,37 @@ describe('isSourceBus', () => {
   });
 
   describe('the request it makes', () => {
-    it('asks /ping on the admin host', async () => {
-      stubFetch(upgraded);
+    it('asks the config service for the admin scope', async () => {
+      stubFetch(onBus);
 
       await isSourceBus(env, daCtx());
 
       assert.strictEqual(calls.length, 1);
-      assert.strictEqual(calls[0].url, 'https://admin.hlx.page/ping/org/site');
+      assert.strictEqual(calls[0].url, 'https://config.aem.page/main--site--org/config.json?scope=admin');
     });
 
-    it('takes the admin host from env, so stage can point elsewhere', async () => {
-      stubFetch(upgraded);
+    it('takes the config service from env, so dev can point at the shim', async () => {
+      stubFetch(onBus);
 
-      await isSourceBus({ ...env, HLX_ADMIN: 'https://admin.stage.example' }, daCtx());
+      await isSourceBus({ ...env, HLX_CONFIG_SERVICE: 'http://localhost:4713' }, daCtx());
 
-      assert.strictEqual(calls[0].url, 'https://admin.stage.example/ping/org/site');
+      assert.strictEqual(calls[0].url, 'http://localhost:4713/main--site--org/config.json?scope=admin');
     });
 
-    // both stores read one config service and the source is per site, so the branch cannot change
-    // the answer
-    it('does not vary by ref', async () => {
-      stubFetch(upgraded);
+    it('sends the shared secret, which the config service requires', async () => {
+      stubFetch(onBus);
 
-      await isSourceBus(env, daCtx({ ref: 'branch' }));
+      await isSourceBus(env, daCtx());
 
-      assert.strictEqual(calls[0].url, 'https://admin.hlx.page/ping/org/site');
+      const headers = new Headers(calls[0].init.headers);
+      assert.strictEqual(headers.get('x-access-token'), 'shared-secret');
+      assert.strictEqual(headers.get('x-backend-type'), 'aws');
     });
 
-    // /ping is exempt from authorize() in helix-admin and answers the same with or without a token
-    it('sends no token, since /ping does not read one', async () => {
-      stubFetch(upgraded);
+    // an author's IMS token is refused by the config service, and sending it as well would only
+    // hand a user credential to a service that has no use for it
+    it('sends no author token', async () => {
+      stubFetch(onBus);
 
       await isSourceBus(env, daCtx());
 
@@ -77,47 +87,62 @@ describe('isSourceBus', () => {
     });
 
     it('gives up rather than hanging', async () => {
-      stubFetch(upgraded);
+      stubFetch(onBus);
 
       await isSourceBus(env, daCtx());
 
-      assert.ok(calls[0].init.signal, 'the probe carries an abort signal');
+      assert.ok(calls[0].init.signal, 'the lookup carries an abort signal');
     });
   });
 
-  describe('when /ping says the site is upgraded', () => {
+  // the source is per site, so the ref in the url is only there to address the site
+  describe('when the content source is on the source bus', () => {
     it('answers true', async () => {
-      stubFetch(upgraded);
+      stubFetch(onBus);
 
       assert.strictEqual(await isSourceBus(env, daCtx()), true);
     });
 
-    // presence, not value: da-nx tests the same header with `!== null` (nx2/utils/api.js,
-    // isHlx6), and two clients reading it differently would split one site across two stores
-    ['false', '', 'TRUE'].forEach((value) => {
-      it(`counts any value, including ${JSON.stringify(value)}`, async () => {
-        stubFetch(() => ping({ 'x-api-upgrade-available': value }));
+    it('answers the same for any ref', async () => {
+      stubFetch(onBus);
 
-        assert.strictEqual(await isSourceBus(env, daCtx()), true);
-      });
+      assert.strictEqual(await isSourceBus(env, daCtx({ ref: 'branch' })), true);
     });
 
-    // the edge sets the header from its dictionary, so a rate-limited or erroring origin behind
-    // it does not make an enrolled site legacy
-    [429, 500, 503].forEach((status) => {
-      it(`counts it on a ${status}, since the header is what carries the answer`, async () => {
-        stubFetch(() => ping({ 'x-api-upgrade-available': 'true' }, status));
+    // helix-admin tests the same prefix, so two clients cannot split one site across two stores
+    it('reads the url, not the type, since both stores are markup', async () => {
+      stubFetch(() => config({ type: 'markup', url: 'https://api.aem.live/o/sites/s/source' }));
 
-        assert.strictEqual(await isSourceBus(env, daCtx()), true);
+      assert.strictEqual(await isSourceBus(env, daCtx()), true);
+    });
+
+    it('takes the source bus origin from env', async () => {
+      stubFetch(() => config({ type: 'markup', url: 'https://api.stage.example/o/sites/s/source' }));
+
+      assert.strictEqual(await isSourceBus({ ...env, AEM_API: 'https://api.stage.example' }, daCtx()), true);
+    });
+  });
+
+  describe('when the content source is da-admin', () => {
+    it('answers false', async () => {
+      stubFetch(onDa);
+
+      assert.strictEqual(await isSourceBus(env, daCtx()), false);
+    });
+
+    ['https://content.da.live/org/site/', 'https://drive.google.com/x', 'https://example.sharepoint.com/y'].forEach((url) => {
+      it(`answers false for ${new URL(url).host}`, async () => {
+        stubFetch(() => config({ type: 'markup', url }));
+
+        assert.strictEqual(await isSourceBus(env, daCtx()), false);
       });
     });
   });
 
-  // an answered 200 without the header is the legacy answer. helix-admin sets the header from
-  // the site's content source, and /ping is 200 for a site it routes at all
-  describe('when /ping says the site is legacy', () => {
-    it('answers false on a 200 with no header', async () => {
-      stubFetch(() => ping());
+  // 404 is the one status that means there is no such site, and the site lookup answers that
+  describe('when there is no such site', () => {
+    it('answers false', async () => {
+      stubFetch(() => new Response('', { status: 404 }));
 
       assert.strictEqual(await isSourceBus(env, daCtx()), false);
     });
@@ -125,32 +150,29 @@ describe('isSourceBus', () => {
 
   // a refusal carries no decision, and reading it as legacy sends a source-bus write to da-admin,
   // where nothing serves it back
-  describe('when /ping refuses without the header', () => {
-    [404, 405, 429, 500, 503].forEach((status) => {
+  describe('when the config service refuses', () => {
+    [401, 403, 429, 500, 503].forEach((status) => {
       it(`throws on a ${status}`, async () => {
-        stubFetch(() => ping({}, status));
+        stubFetch(() => new Response('', { status }));
 
-        await assert.rejects(() => isSourceBus(env, daCtx()), /404|405|429|500|503/);
+        await assert.rejects(() => isSourceBus(env, daCtx()), new RegExp(`${status}`));
       });
     });
 
-    // the header is read first, so an enrolled site survives an origin the edge is shielding
-    it('answers true on a 429 that still carries the header', async () => {
-      stubFetch(() => ping({ 'x-api-upgrade-available': 'true' }, 429));
+    it('throws when the answer has no content source', async () => {
+      stubFetch(() => new Response(JSON.stringify({ ref: 'main' }), { status: 200 }));
 
-      assert.strictEqual(await isSourceBus(env, daCtx()), true);
+      await assert.rejects(() => isSourceBus(env, daCtx()), /content source/);
     });
 
-    it('names the status it got', async () => {
-      stubFetch(() => ping({}, 503));
+    it('throws when the answer is not json', async () => {
+      stubFetch(() => new Response('<html></html>', { status: 200 }));
 
-      await assert.rejects(() => isSourceBus(env, daCtx()), /503/);
+      await assert.rejects(() => isSourceBus(env, daCtx()));
     });
   });
 
-  // an answer without the header is legacy. no answer is not an answer, and the caller refuses
-  // rather than picking a store on a coin flip
-  describe('when /ping cannot answer', () => {
+  describe('when the config service cannot answer', () => {
     // the cause reaches the caller, which reports it on the 503 as `x-error`. swallowing it here
     // would leave a timeout and a dropped connection indistinguishable
     it('lets the failure through', async () => {
@@ -161,8 +183,8 @@ describe('isSourceBus', () => {
       await assert.rejects(isSourceBus(env, daCtx()), { message: 'fetch failed' });
     });
 
-    it('lets it through when HLX_ADMIN is unusable, without asking', async () => {
-      stubFetch(upgraded);
+    it('lets it through when the config service is unusable, without asking', async () => {
+      stubFetch(onBus);
 
       await assert.rejects(isSourceBus({ AEM_API: 'https://api.aem.live' }, daCtx()));
       assert.strictEqual(calls.length, 0);
@@ -170,7 +192,7 @@ describe('isSourceBus', () => {
 
     // the distinction the caller acts on: false is a store, a failure is no store
     it('is distinguishable from a legacy answer', async () => {
-      stubFetch(() => ping());
+      stubFetch(onDa);
       assert.strictEqual(await isSourceBus(env, daCtx()), false);
 
       stubFetch(() => {
@@ -181,7 +203,7 @@ describe('isSourceBus', () => {
   });
 
   describe('when there is no site to ask about', () => {
-    // either one missing is enough: a half-parsed request would otherwise build a ping url with
+    // either one missing is enough: a half-parsed request would otherwise build a config url with
     // "undefined" in it
     [
       ['neither', { org: undefined, site: undefined }],
@@ -191,24 +213,11 @@ describe('isSourceBus', () => {
       ['an empty site', { site: '' }],
     ].forEach(([what, over]) => {
       it(`answers false without making a request: ${what}`, async () => {
-        stubFetch(upgraded);
+        stubFetch(onBus);
 
         assert.strictEqual(await isSourceBus(env, daCtx(over)), false);
         assert.strictEqual(calls.length, 0);
       });
     });
-  });
-
-  // nothing is remembered between calls, so an enrolment takes effect on the next read and a
-  // config blip cannot pin a stale answer
-  it('probes every time it is asked', async () => {
-    let enrolled = false;
-    stubFetch(() => (enrolled ? upgraded() : ping()));
-
-    assert.strictEqual(await isSourceBus(env, daCtx()), false);
-    enrolled = true;
-
-    assert.strictEqual(await isSourceBus(env, daCtx()), true);
-    assert.strictEqual(calls.length, 2);
   });
 });
