@@ -2,7 +2,7 @@ name = "da-ue"
 main = "src/index.js"
 compatibility_date = "2023-11-21"
 
-vars = { UE_HOST = "ue.da.live", DA_ADMIN = "https://admin.da.live", AEM_API = "https://api.aem.live", HLX_ADMIN = "https://admin.hlx.page", HLX_CONFIG_SERVICE = "https://config.aem.page" }
+vars = { UE_HOST = "ue.da.live", DA_ADMIN = "https://admin.da.live", AEM_API = "https://api.aem.live", HLX_CONFIG_SERVICE = "https://config.aem.page" }
 services = [{ binding = "daadmin", service = "da-admin" }]
 secrets = { required = ["HLX_CONFIG_SERVICE_TOKEN"] }
 
@@ -10,14 +10,14 @@ secrets = { required = ["HLX_CONFIG_SERVICE_TOKEN"] }
 port = 4712
 
 [env.dev]
-vars = { ENVIRONMENT = "dev", UE_HOST = "localhost:4712", UE_SERVICE = "https://localhost:8000", DA_ADMIN = "https://admin.da.live", AEM_API = "https://api.aem.live", HLX_ADMIN = "http://localhost:4713", HLX_CONFIG_SERVICE = "http://localhost:4713" }
+vars = { ENVIRONMENT = "dev", UE_HOST = "localhost:4712", UE_SERVICE = "https://localhost:8000", DA_ADMIN = "https://admin.da.live", AEM_API = "https://api.aem.live", HLX_CONFIG_SERVICE = "http://localhost:4713" }
 services = [{ binding = "daadmin", service = "da-admin-local" }]
 # the list is also what wrangler binds from .dev.vars.dev, so an empty one leaves the worker
 # with no token and every lookup 401s. running against the stand-in warns that it is missing
 secrets = { required = ["HLX_CONFIG_SERVICE_TOKEN"] }
 
 [env.stage]
-vars = { ENVIRONMENT = "stage", UE_HOST = "stage-ue.da.live", UE_SERVICE = "https://universal-editor-service-dev.adobe.io", DA_ADMIN = "https://admin.da.live", AEM_API = "https://api.aem.live", HLX_ADMIN = "https://admin.hlx.page", HLX_CONFIG_SERVICE = "https://config.aem.page" }
+vars = { ENVIRONMENT = "stage", UE_HOST = "stage-ue.da.live", UE_SERVICE = "https://universal-editor-service-dev.adobe.io", DA_ADMIN = "https://admin.da.live", AEM_API = "https://api.aem.live", HLX_CONFIG_SERVICE = "https://config.aem.page" }
 services = [{ binding = "daadmin", service = "da-admin-stage" }]
 secrets = { required = ["HLX_CONFIG_SERVICE_TOKEN"] }
 

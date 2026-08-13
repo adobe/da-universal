@@ -11,7 +11,7 @@ Prerequisites:
 
 This worker performs all content operations via [da-admin](https://github.com/adobe/da-admin). For local development, you will also need to check out and run da-admin locally.
 
-A read looks the site up twice: config.aem.page says whether it exists and carries its head.html, and admin.hlx.page/ping says which store holds it. The config service needs a shared secret, so local development points both at `dev/lookup-shim.js` instead. Add the org and site to the `SITES` table in that file; a site missing from it is answered 404, and one whose source url is on api.aem.live reads as a source-bus site.
+A read asks config.aem.page twice: the pipeline scope says whether the site exists and has its head.html, and the admin scope carries the content source, whose url says which store holds it. The config service needs a shared secret, so local development points at `dev/lookup-shim.js` instead. Add the org and site to the `SITES` table in that file; a site missing from it is answered 404, and one whose source url is on api.aem.live reads as a source-bus site.
 
 To run da-universal locally:
 
@@ -24,7 +24,7 @@ To run da-universal locally:
 
 Running against the stand-in warns that `HLX_CONFIG_SERVICE_TOKEN` is missing, which it is, and nothing asks for it.
 
-Anyone who has the shared secret can point `npm run dev` at the real services instead of the stand-in. Put `HLX_CONFIG_SERVICE_TOKEN="<token>"` in `.dev.vars.dev`, which is gitignored, and run `npm run dev -- --var HLX_CONFIG_SERVICE:https://config.aem.page --var HLX_ADMIN:https://admin.hlx.page`.
+with the shared secret, use `npm run dev` at the real services instead of the stand-in. Put `HLX_CONFIG_SERVICE_TOKEN="<token>"` in `.dev.vars.dev`, which is gitignored, and run `npm run dev -- --var HLX_CONFIG_SERVICE:https://config.aem.page`.
 
 ### Run on stage
 

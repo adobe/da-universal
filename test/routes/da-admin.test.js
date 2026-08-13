@@ -34,7 +34,6 @@ const recorder = () => {
     DA_ADMIN: 'https://admin.da.live',
     AEM_API: 'https://api.aem.live',
     HLX_CONFIG_SERVICE: 'https://config.aem.page',
-    HLX_ADMIN: 'https://admin.hlx.page',
     daadmin: {
       fetch: async (input) => {
         fetched.push(input instanceof Request ? input.url : input.href);
@@ -45,21 +44,22 @@ const recorder = () => {
   return { env, fetched };
 };
 
-// stands in for the two lookups the routes make: config.aem.page for whether the site exists,
-// admin.hlx.page/ping for which store holds it. Answers that any site exists; `upgraded` lists
-// the `org/site` keys /ping reports as enrolled
+// stands in for the two config service reads the routes make: the pipeline scope for whether the
+// site exists and its head.html, the admin scope for which store holds it. Answers that any site
+// exists; `upgraded` lists the `org/site` keys whose content source is the source bus
 const stubLookups = (upgraded = []) => {
   const asked = [];
   globalThis.fetch = async (input) => {
     const url = input.toString();
     asked.push(url);
-    const { pathname } = new URL(url);
-    if (pathname.startsWith('/ping/')) {
-      const [, , org, site] = pathname.split('/');
-      const headers = upgraded.includes(`${org}/${site}`)
-        ? { 'x-api-upgrade-available': 'true' }
-        : {};
-      return new Response('', { status: 200, headers });
+    const { pathname, searchParams } = new URL(url);
+    const [, site, org] = (pathname.split('/')[1] ?? '').split('--');
+    if (searchParams.get('scope') === 'admin') {
+      const source = upgraded.includes(`${org}/${site}`)
+        ? `https://api.aem.live/${org}/sites/${site}/source`
+        : `https://content.da.live/${org}/${site}/`;
+      const body = JSON.stringify({ content: { source: { type: 'markup', url: source } } });
+      return new Response(body, { status: 200 });
     }
     const body = JSON.stringify({ head: { html: '<meta name="from" content="aem" />' } });
     return new Response(body, { status: 200 });
@@ -461,8 +461,8 @@ describe('daSourcePost', () => {
       await write('lookedupeach', env);
 
       assert.deepStrictEqual(asked.sort(), [
-        'https://admin.hlx.page/ping/org/lookedupeach',
-        'https://admin.hlx.page/ping/org/lookedupeach',
+        'https://config.aem.page/main--lookedupeach--org/config.json?scope=admin',
+        'https://config.aem.page/main--lookedupeach--org/config.json?scope=admin',
         'https://config.aem.page/main--lookedupeach--org/config.json?scope=pipeline',
         'https://config.aem.page/main--lookedupeach--org/config.json?scope=pipeline',
       ]);

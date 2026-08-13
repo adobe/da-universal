@@ -11,29 +11,35 @@
  */
 
 const TIMEOUT_MS = 5 * 1000;
-const UPGRADE_HEADER = 'x-api-upgrade-available';
 
 /**
- * Asks `/ping` whether a site is on the source bus.
+ * Asks the config service which store holds a site's content based on `content.source`
+ * A 404 means there is no such site, which the site lookup reports. Any other refusal is no
+ * answer at all: reading it as legacy would send a source-bus write to da-admin
  *
- * The header is the answer, and da-nx checks the same header for presence in `isHlx6`. It is read
- * ahead of the status, since a Fastly edge dictionary sets it in front of an origin that may be
- * rate limited or erroring. A refusal without it is no answer at all. Reading a refusal as legacy
- * would send a source-bus write to da-admin, where nothing serves it back, so the read fails.
- *
- * @param {Object} env worker env, `HLX_ADMIN` is where the probe goes
+ * @param {Object} env worker env. `HLX_CONFIG_SERVICE` is where the lookup goes,
+ * `HLX_CONFIG_SERVICE_TOKEN` authorizes it and `AEM_API` is the source bus
  * @param {Object} daCtx
  * @returns {Promise<boolean>}
  */
 export default async function isSourceBus(env, daCtx) {
-  const { org, site } = daCtx;
-  // an unparseable hostname leaves org and site undefined, and there is no site to ask about
+  const { org, site, ref } = daCtx;
   if (!org || !site) return false;
 
-  const url = new URL(`/ping/${org}/${site}`, env.HLX_ADMIN);
-  const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+  const url = new URL(`/${ref}--${site}--${org}/config.json?scope=admin`, env.HLX_CONFIG_SERVICE);
+  const response = await fetch(url, {
+    headers: {
+      'x-access-token': env.HLX_CONFIG_SERVICE_TOKEN,
+      'x-backend-type': 'aws',
+    },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
 
-  if (response.headers.get(UPGRADE_HEADER) !== null) return true;
-  if (!response.ok) throw new Error(`/ping answered ${response.status}`);
-  return false;
+  if (response.status === 404) return false;
+  if (!response.ok) throw new Error(`the config service answered ${response.status}`);
+
+  const { content } = await response.json();
+  const source = content?.source?.url;
+  if (!source) throw new Error('the config service named no content source');
+  return source.startsWith(`${env.AEM_API}/`);
 }
