@@ -113,7 +113,9 @@ describe('getCookie', () => {
     });
 
     it('keeps the auth cookie when the exchange cannot be reached', async () => {
-      stubFetch(() => { throw new TypeError('fetch failed'); });
+      stubFetch(() => {
+        throw new TypeError('fetch failed');
+      });
 
       const res = await getCookie({ req: req(), env, daCtx: daCtx() });
 

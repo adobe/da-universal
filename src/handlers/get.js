@@ -21,7 +21,7 @@ export default async function getHandler({ req, env, daCtx }) {
   if (path.startsWith('/favicon.ico')) return get404();
   if (path.startsWith('/robots.txt')) return getRobots();
 
-  if (path.startsWith('/gimme_cookie')) return getCookie({ req, daCtx });
+  if (path.startsWith('/gimme_cookie')) return getCookie({ req, env, daCtx });
 
   const resourceRegex = /\.(css|js|js\.map|json|xml|woff|woff2|otf|ttf|plain\.html|html)$/i;
   if (resourceRegex.test(path)) {
