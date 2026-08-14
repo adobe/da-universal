@@ -22,13 +22,14 @@ import {
   applyQuickEditToDocument, buildQuickEditCookie, buildQuickEditNotFoundResponse,
 } from '../utils/quick-edit.js';
 import {
-  daResp, get401, get404, get415, get503, head401, head404, head503, post405, post503,
+  daResp, get401, get404, get415, get503, head401, head404, head503, post404, post405, post503,
 } from '../responses/index.js';
 import {
   DEFAULT_HTML_TEMPLATE,
   SITE_LOOKUP_FAILED_HTML_MESSAGE,
   PREVIEW_FAILED_HTML_MESSAGE,
   SITE_NOT_FOUND_HTML_MESSAGE,
+  SITE_NOT_FOUND_MESSAGE,
   SOURCE_BUS_READ_ONLY_MESSAGE,
   SOURCE_UNDETERMINED_MESSAGE,
   SOURCE_FAILED_HTML_MESSAGE,
@@ -302,7 +303,12 @@ async function sourcePost({ req, env, daCtx }) {
 
     const bodyContent = toHtml(bodyNode);
 
-    const { onSourceBus } = await reach(SITE_LOOKUP, () => getSite(env, daCtx));
+    const { exists, onSourceBus } = await reach(SITE_LOOKUP, () => getSite(env, daCtx));
+
+    if (!exists) {
+      console.log(`404 POST ${sourcePath}, there is no site ${daCtx.org}/${daCtx.site}`);
+      return post404(SITE_NOT_FOUND_MESSAGE);
+    }
 
     if (onSourceBus) {
       console.log(`405 POST ${sourcePath}, writes to the source bus are refused through the preview proxy. write directly to the source bus instead.`);

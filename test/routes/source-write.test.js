@@ -14,7 +14,11 @@
 import assert from 'assert';
 import esmock from 'esmock';
 import { getDaCtx } from '../../src/utils/daCtx.js';
-import { SOURCE_BUS_READ_ONLY_MESSAGE, SOURCE_UNDETERMINED_MESSAGE } from '../../src/utils/constants.js';
+import {
+  SITE_NOT_FOUND_MESSAGE,
+  SOURCE_BUS_READ_ONLY_MESSAGE,
+  SOURCE_UNDETERMINED_MESSAGE,
+} from '../../src/utils/constants.js';
 
 const AT = 'https://main--site--org.ue.da.live/folder/content';
 const DOC = '<body><main><div><p>the author typed this</p></div></main></body>';
@@ -182,10 +186,7 @@ describe('writing to the store that holds the site', () => {
       const { res } = await post({ exists: false });
 
       assert.match(res.headers.get('Content-Type'), /^text\/plain/);
-      assert.strictEqual(
-        await res.text(),
-        'There is no site at this address, so nothing was written.',
-      );
+      assert.strictEqual(await res.text(), SITE_NOT_FOUND_MESSAGE);
     });
 
     it('does not ask the caller to retry, since the site will not appear', async () => {

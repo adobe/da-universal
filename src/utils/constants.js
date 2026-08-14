@@ -51,6 +51,8 @@ export const DEFAULT_HTML_TEMPLATE = '<body><header></header><main><div></div></
 
 export const SITE_NOT_FOUND_HTML_MESSAGE = '<html><body><h1>404: Site not found</h1><p>There is no site at this address.</p></body></html>';
 
+export const SITE_NOT_FOUND_MESSAGE = 'There is no site at this address, so nothing was written.';
+
 export const PREVIEW_FAILED_HTML_MESSAGE = '<html><body><h1>503: Preview host failed</h1><p>The site\'s preview host could not be read. Please retry, or contact your project admin if it persists.</p></body></html>';
 
 export const SITE_LOOKUP_FAILED_HTML_MESSAGE = '<html><body><h1>503: Site lookup failed</h1><p>Whether this site exists could not be determined. Please retry, or contact your project admin if it persists.</p></body></html>';
