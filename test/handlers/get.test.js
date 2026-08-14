@@ -63,13 +63,18 @@ describe('GET handler', () => {
 
   describe('gimme_cookie', () => {
     let getHandler;
+    let getCookieArgs;
 
     beforeEach(async () => {
+      getCookieArgs = undefined;
       getHandler = (await esmock('../../src/handlers/get.js', {
         '../../src/routes/da-admin.js': { daSourceGet: async () => new Response() },
         '../../src/routes/aem-proxy.js': { handleAEMProxyRequest: async () => new Response() },
         '../../src/routes/cookie.js': {
-          getCookie: async () => new Response('cookie-set', { status: 200 }),
+          getCookie: async (args) => {
+            getCookieArgs = args;
+            return new Response('cookie-set', { status: 200 });
+          },
         },
       })).default;
     });
@@ -83,6 +88,9 @@ describe('GET handler', () => {
 
       assert.strictEqual(res.status, 200);
       assert.strictEqual(await res.text(), 'cookie-set');
+      assert.strictEqual(getCookieArgs.req, req);
+      assert.strictEqual(getCookieArgs.env, env);
+      assert.strictEqual(getCookieArgs.daCtx, daCtx);
     });
   });
 
