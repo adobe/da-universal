@@ -28,6 +28,7 @@ import {
   DEFAULT_HTML_TEMPLATE,
   SITE_LOOKUP_FAILED_HTML_MESSAGE,
   PREVIEW_FAILED_HTML_MESSAGE,
+  SITE_CONFIG_FAILED_HTML_MESSAGE,
   SITE_NOT_FOUND_HTML_MESSAGE,
   SITE_NOT_FOUND_MESSAGE,
   SOURCE_BUS_READ_ONLY_MESSAGE,
@@ -51,12 +52,10 @@ import {
 
 const HTML_POST_TYPE = 'text/html';
 
-/**
- * Overrides the store's body for the upstreams that need their own. SITE_CONFIG is read off
- * da-admin, so it takes the default body and `x-error` is what tells the two reads apart.
- */
+/** Names the upstream that failed, since the default body names the store. */
 const UPSTREAM_FAILURE_HTML = {
   [PREVIEW_HOST]: PREVIEW_FAILED_HTML_MESSAGE,
+  [SITE_CONFIG]: SITE_CONFIG_FAILED_HTML_MESSAGE,
   [SITE_LOOKUP]: SITE_LOOKUP_FAILED_HTML_MESSAGE,
 };
 // a write reaches no store until the lookup answers, so a failed lookup says the destination is

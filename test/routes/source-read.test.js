@@ -1089,10 +1089,7 @@ describe('when the site config cannot be reached', () => {
 
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-    assert.strictEqual(
-      await res.text(),
-      '<html><body><h1>503: Site config failed</h1><p>The site\'s configuration could not be read. Please retry, or contact your project admin if it persists.</p></body></html>',
-    );
+    assert.strictEqual(await res.text(), messages.SITE_CONFIG_FAILED_HTML_MESSAGE);
   });
 
   it('names the site config in x-error', async () => {
