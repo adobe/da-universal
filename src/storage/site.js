@@ -45,9 +45,7 @@ export default async function getSite(env, daCtx) {
   if (!response.ok) throw new Error(`the config service answered ${response.status}`);
 
   const { head, contentSource } = await response.json();
-  // a config that names no store is read as legacy, which is where a site without one has always
-  // been. the warning is there because a source-bus site read that way is written to the store the
-  // site does not serve
+  // a config that names no store is read as legacy
   if (!contentSource?.url) {
     console.warn(`${url} named no content source, reading ${org}/${site} as legacy`);
   }

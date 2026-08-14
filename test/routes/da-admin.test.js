@@ -44,7 +44,7 @@ const recorder = () => {
   return { env, fetched };
 };
 
-// stands in for the one config service read the routes make: the pipeline scope answers whether
+// substitute for the config service read the routes make: the pipeline scope answers whether
 // the site exists, its head.html and which store holds it. Answers that any site exists;
 // `upgraded` lists the `org/site` keys whose content source is the source bus
 const stubLookups = (upgraded = []) => {

@@ -11,7 +11,9 @@ Prerequisites:
 
 This worker performs all content operations via [da-admin](https://github.com/adobe/da-admin). For local development, you will also need to check out and run da-admin locally.
 
-A read asks config.aem.page once, at the pipeline scope, which says whether the site exists, has its head.html and names the content source, whose url says which store holds it. The config service needs a shared secret, so local development points at `dev/lookup-shim.js` instead. Add the org and site to the `SITES` table in that file; a site missing from it is answered 404, and one whose source url is on api.aem.live reads as a source-bus site.
+One read of config.aem.page, pipeline scope, answers existence, head.html and `contentSource`. Its url names the store.
+
+The config service needs a shared secret, so local development points at `dev/lookup-shim.js` instead. Add the org and site to its `SITES` table. A site missing from the table is answered 404. A source url on api.aem.live reads as source-bus.
 
 To run da-universal locally:
 

@@ -129,8 +129,6 @@ async function getPageTemplate(env, daCtx, aemCtx) {
  * @throws {UpstreamError} when the lookup or the store could not be reached
  */
 async function readSource(env, daCtx, init) {
-  // one read of the pipeline scope answers whether the site exists, what its head.html is and
-  // which store holds it
   const site = await reach(SITE_LOOKUP, () => getSite(env, daCtx));
 
   if (!site.exists) {
@@ -304,9 +302,6 @@ async function sourcePost({ req, env, daCtx }) {
 
     const bodyContent = toHtml(bodyNode);
 
-    // the payload is settled, so the only question left is where it goes
-    // a 404 is an answer, and it means no AEM site config rather than no DA
-    // site, so the write goes to da-admin
     const { onSourceBus } = await reach(SITE_LOOKUP, () => getSite(env, daCtx));
 
     if (onSourceBus) {
