@@ -28,7 +28,7 @@ const NO_SITE = { exists: false, head: undefined, onSourceBus: false };
  * @param {Object} daCtx
  * @returns {Promise<{exists: boolean, head: string|undefined, onSourceBus: boolean}>}
  */
-export default async function getSite(env, daCtx) {
+export default async function getSiteConfig(env, daCtx) {
   const { org, site, ref } = daCtx;
   if (!org || !site) return NO_SITE;
 

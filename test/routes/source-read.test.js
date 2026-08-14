@@ -97,8 +97,8 @@ const build = async (overrides = {}) => {
       applyUEInstrumentation: async () => { seen.ue += 1; },
     },
     '../../src/storage/config.js': {
-      // da-admin answers a site with no config with a 404, which getSiteConfig reports as null
-      getSiteConfig: async () => {
+      // da-admin answers a site with no config with a 404, which getEditorConfig reports as null
+      getEditorConfig: async () => {
         if (configError) throw configError;
         return config;
       },
@@ -1044,7 +1044,7 @@ describe('reading from the store that holds the site', () => {
   });
 });
 
-describe('when the site config cannot be reached', () => {
+describe('when the editor config cannot be reached', () => {
   afterEach(() => {
     delete globalThis.fetch;
   });
@@ -1067,22 +1067,22 @@ describe('when the site config cannot be reached', () => {
 
   // the config is read off da-admin while the document can be on the source bus, so naming the
   // store would name a system that answered
-  it('says the site config failed, not the store', async () => {
+  it('says the editor config failed, not the store', async () => {
     const { daSourceGet, env } = await build(missing());
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-    assert.strictEqual(await res.text(), messages.SITE_CONFIG_FAILED_HTML_MESSAGE);
+    assert.strictEqual(await res.text(), '<html><body><h1>503: Editor config failed</h1><p>The editor configuration for this site could not be read. Please retry, or contact your project admin if it persists.</p></body></html>');
   });
 
-  it('names the site config in x-error', async () => {
+  it('names the editor config in x-error', async () => {
     const { daSourceGet, env } = await build(missing());
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-    assert.strictEqual(res.headers.get('x-error'), 'site config failed: TypeError: fetch failed');
+    assert.strictEqual(res.headers.get('x-error'), 'editor config failed: TypeError: fetch failed');
   });
 
   it('asks the caller to retry', async () => {
@@ -1174,7 +1174,7 @@ describe('a read that carries no token', () => {
   });
 });
 
-describe('a path the site config gives a template', () => {
+describe('a path the editor config gives a template', () => {
   afterEach(() => {
     delete globalThis.fetch;
   });

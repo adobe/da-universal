@@ -34,6 +34,6 @@ async function fetchConfig(env, daCtx, path) {
   return data;
 }
 
-export async function getSiteConfig(env, daCtx) {
+export async function getEditorConfig(env, daCtx) {
   return fetchConfig(env, daCtx, `/config/${daCtx.org}/${daCtx.site}`);
 }

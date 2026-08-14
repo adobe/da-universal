@@ -144,8 +144,8 @@ describe('daSourceGet', () => {
         buildQuickEditCookie: (p) => `da-quick-edit=${encodeURIComponent(p)}; Path=/`,
       },
       '../../src/storage/config.js': {
-        // da-admin answers a site with no config with a 404, which getSiteConfig reports as null
-        getSiteConfig: async () => null,
+        // da-admin answers a site with no config with a 404, which getEditorConfig reports as null
+        getEditorConfig: async () => null,
       },
     })).daSourceGet;
   };

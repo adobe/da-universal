@@ -67,7 +67,7 @@ describe('Config Module', () => {
     }
   };
 
-  describe('getSiteConfig', () => {
+  describe('getEditorConfig', () => {
     it('should fetch site config successfully (single-sheet)', async () => {
       const mockData = [
         { key: 'editor.ue.template', value: '/content=/templates' },
@@ -75,7 +75,7 @@ describe('Config Module', () => {
       ];
       setMockResponse({ data: mockData });
 
-      const result = await configModule.getSiteConfig(mockEnv, mockDaCtx);
+      const result = await configModule.getEditorConfig(mockEnv, mockDaCtx);
 
       const expectedCall = {
         url: 'https://admin.da.live/config/test-org/test-site',
@@ -122,7 +122,7 @@ describe('Config Module', () => {
         ':type': 'multi-sheet',
       };
       setMockResponse(multiSheet);
-      const result = await configModule.getSiteConfig(mockEnv, mockDaCtx);
+      const result = await configModule.getEditorConfig(mockEnv, mockDaCtx);
       // Should return only the first sheet's data array
       assert.deepStrictEqual(result, multiSheet.data.data);
     });
@@ -130,7 +130,7 @@ describe('Config Module', () => {
     it('should return null when there is no config', async () => {
       mockFetch.nextResponse = { ok: false, status: 404 };
 
-      const result = await configModule.getSiteConfig(mockEnv, mockDaCtx);
+      const result = await configModule.getEditorConfig(mockEnv, mockDaCtx);
 
       assert.strictEqual(result, null);
     });
@@ -141,7 +141,7 @@ describe('Config Module', () => {
       it(`should return null when the store answers ${status}`, async () => {
         mockFetch.nextResponse = { ok: false, status };
 
-        assert.strictEqual(await configModule.getSiteConfig(mockEnv, mockDaCtx), null);
+        assert.strictEqual(await configModule.getEditorConfig(mockEnv, mockDaCtx), null);
       });
     });
 
@@ -152,7 +152,7 @@ describe('Config Module', () => {
         mockFetch.nextResponse = { ok: false, status };
 
         await assert.rejects(
-          () => configModule.getSiteConfig(mockEnv, mockDaCtx),
+          () => configModule.getEditorConfig(mockEnv, mockDaCtx),
           new RegExp(String(status)),
         );
       });
@@ -166,7 +166,7 @@ describe('Config Module', () => {
         { key: 'editor.ue.template', value: '/content=/templates' },
       ]);
 
-      await configModule.getSiteConfig(mockEnv, ctxWithoutToken);
+      await configModule.getEditorConfig(mockEnv, ctxWithoutToken);
 
       const expectedCall = {
         url: 'https://admin.da.live/config/test-org/test-site',

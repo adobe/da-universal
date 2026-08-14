@@ -13,7 +13,7 @@
 /* eslint-env mocha */
 import assert from 'assert';
 
-const { default: getSite } = await import('../../src/storage/site.js');
+const { default: getSiteConfig } = await import('../../src/storage/site.js');
 
 const env = {
   AEM_API: 'https://api.aem.live',
@@ -45,7 +45,7 @@ const config = (over = {}) => new Response(JSON.stringify({
 
 const onBus = () => config({ contentSource: { type: 'markup', url: 'https://api.aem.live/org/sites/site/source' } });
 
-describe('getSite', () => {
+describe('getSiteConfig', () => {
   afterEach(() => {
     delete globalThis.fetch;
   });
@@ -54,7 +54,7 @@ describe('getSite', () => {
     it('asks the config service once, for the pipeline scope', async () => {
       stubFetch(config);
 
-      await getSite(env, daCtx());
+      await getSiteConfig(env, daCtx());
 
       assert.strictEqual(calls.length, 1);
       assert.strictEqual(calls[0].url, 'https://config.aem.page/main--site--org/config.json?scope=pipeline');
@@ -63,7 +63,7 @@ describe('getSite', () => {
     it('sends the shared secret', async () => {
       stubFetch(config);
 
-      await getSite(env, daCtx());
+      await getSiteConfig(env, daCtx());
 
       const headers = new Headers(calls[0].init.headers);
       assert.strictEqual(headers.get('x-access-token'), 'shared-secret');
@@ -73,7 +73,7 @@ describe('getSite', () => {
     it('gives up rather than hanging', async () => {
       stubFetch(config);
 
-      await getSite(env, daCtx());
+      await getSiteConfig(env, daCtx());
 
       assert.ok(calls[0].init.signal, 'the lookup carries an abort signal');
     });
@@ -83,7 +83,7 @@ describe('getSite', () => {
     it('answers existence, head.html and the store together', async () => {
       stubFetch(onBus);
 
-      assert.deepStrictEqual(await getSite(env, daCtx()), {
+      assert.deepStrictEqual(await getSiteConfig(env, daCtx()), {
         exists: true, head: HEAD, onSourceBus: true,
       });
     });
@@ -91,14 +91,14 @@ describe('getSite', () => {
     it('reads the url, not the type, since both stores are markup', async () => {
       stubFetch(config);
 
-      const { onSourceBus } = await getSite(env, daCtx());
+      const { onSourceBus } = await getSiteConfig(env, daCtx());
       assert.strictEqual(onSourceBus, false);
     });
 
     it('takes the source bus origin from env', async () => {
       stubFetch(() => config({ contentSource: { type: 'markup', url: 'https://api.stage.example/o/sites/s/source' } }));
 
-      const { onSourceBus } = await getSite({ ...env, AEM_API: 'https://api.stage.example' }, daCtx());
+      const { onSourceBus } = await getSiteConfig({ ...env, AEM_API: 'https://api.stage.example' }, daCtx());
       assert.strictEqual(onSourceBus, true);
     });
 
@@ -106,7 +106,7 @@ describe('getSite', () => {
       it(`answers legacy for ${new URL(url).host}`, async () => {
         stubFetch(() => config({ contentSource: { type: 'markup', url } }));
 
-        const { onSourceBus } = await getSite(env, daCtx());
+        const { onSourceBus } = await getSiteConfig(env, daCtx());
         assert.strictEqual(onSourceBus, false);
       });
     });
@@ -115,7 +115,7 @@ describe('getSite', () => {
     it('answers a missing head as undefined, and still names the store', async () => {
       stubFetch(() => config({ head: undefined }));
 
-      const { exists, head, onSourceBus } = await getSite(env, daCtx());
+      const { exists, head, onSourceBus } = await getSiteConfig(env, daCtx());
       assert.strictEqual(exists, true);
       assert.strictEqual(head, undefined);
       assert.strictEqual(onSourceBus, false);
@@ -126,7 +126,7 @@ describe('getSite', () => {
     it('answers no-site on a 404', async () => {
       stubFetch(() => new Response('', { status: 404 }));
 
-      assert.deepStrictEqual(await getSite(env, daCtx()), {
+      assert.deepStrictEqual(await getSiteConfig(env, daCtx()), {
         exists: false, head: undefined, onSourceBus: false,
       });
     });
@@ -141,7 +141,7 @@ describe('getSite', () => {
       it(`answers no-site without asking: ${what}`, async () => {
         stubFetch(config);
 
-        assert.deepStrictEqual(await getSite(env, daCtx(over)), {
+        assert.deepStrictEqual(await getSiteConfig(env, daCtx(over)), {
           exists: false, head: undefined, onSourceBus: false,
         });
         assert.strictEqual(calls.length, 0);
@@ -153,7 +153,7 @@ describe('getSite', () => {
     it('reads as legacy, since that is where a site without one has always been', async () => {
       stubFetch(() => config({ contentSource: undefined }));
 
-      assert.deepStrictEqual(await getSite(env, daCtx()), {
+      assert.deepStrictEqual(await getSiteConfig(env, daCtx()), {
         exists: true, head: HEAD, onSourceBus: false,
       });
     });
@@ -167,7 +167,7 @@ describe('getSite', () => {
       console.warn = (m) => warnings.push(m);
 
       try {
-        await getSite(env, daCtx());
+        await getSiteConfig(env, daCtx());
       } finally {
         console.warn = saved;
       }
@@ -180,7 +180,7 @@ describe('getSite', () => {
     it('answers the same when the source carries no url', async () => {
       stubFetch(() => config({ contentSource: { type: 'markup' } }));
 
-      const { onSourceBus } = await getSite(env, daCtx());
+      const { onSourceBus } = await getSiteConfig(env, daCtx());
       assert.strictEqual(onSourceBus, false);
     });
   });
@@ -190,14 +190,14 @@ describe('getSite', () => {
       it(`throws on a ${status}`, async () => {
         stubFetch(() => new Response('', { status }));
 
-        await assert.rejects(() => getSite(env, daCtx()), new RegExp(`${status}`));
+        await assert.rejects(() => getSiteConfig(env, daCtx()), new RegExp(`${status}`));
       });
     });
 
     it('throws when the answer is not json', async () => {
       stubFetch(() => new Response('<html></html>', { status: 200 }));
 
-      await assert.rejects(() => getSite(env, daCtx()));
+      await assert.rejects(() => getSiteConfig(env, daCtx()));
     });
 
     // the cause reaches the caller, which reports it on the 503 as `x-error`
@@ -206,7 +206,7 @@ describe('getSite', () => {
         throw new TypeError('fetch failed');
       });
 
-      await assert.rejects(getSite(env, daCtx()), { message: 'fetch failed' });
+      await assert.rejects(getSiteConfig(env, daCtx()), { message: 'fetch failed' });
     });
   });
 });

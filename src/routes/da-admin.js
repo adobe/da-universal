@@ -37,8 +37,8 @@ import {
   SOURCE_FAILED_MESSAGE,
   UNAUTHORIZED_HTML_MESSAGE,
 } from '../utils/constants.js';
-import { getSiteConfig } from '../storage/config.js';
-import getSite from '../storage/site.js';
+import { getEditorConfig } from '../storage/config.js';
+import getSiteConfig from '../storage/site.js';
 import getStore from '../storage/store.js';
 import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 import {
@@ -95,7 +95,7 @@ function getTextBody(data) {
 
 async function getPageTemplate(env, daCtx, aemCtx) {
   // answers null for a site with no config, so any other failure throws
-  const config = await reach(SITE_CONFIG, () => getSiteConfig(env, daCtx));
+  const config = await reach(SITE_CONFIG, () => getEditorConfig(env, daCtx));
 
   // Search whether a template is configured for this path
   const matchingTemplates = config
@@ -129,7 +129,7 @@ async function getPageTemplate(env, daCtx, aemCtx) {
  * @throws {UpstreamError} when the lookup or the store fails
  */
 async function readSource(env, daCtx, init) {
-  const site = await reach(SITE_LOOKUP, () => getSite(env, daCtx));
+  const site = await reach(SITE_LOOKUP, () => getSiteConfig(env, daCtx));
 
   if (!site.exists) {
     console.log(`404 ${init.method} ${daCtx.sourcePath}, there is no site ${daCtx.org}/${daCtx.site}`);
@@ -302,7 +302,7 @@ async function sourcePost({ req, env, daCtx }) {
 
     const bodyContent = toHtml(bodyNode);
 
-    const { exists, onSourceBus } = await reach(SITE_LOOKUP, () => getSite(env, daCtx));
+    const { exists, onSourceBus } = await reach(SITE_LOOKUP, () => getSiteConfig(env, daCtx));
 
     if (!exists) {
       console.log(`404 POST ${sourcePath}, there is no site ${daCtx.org}/${daCtx.site}`);
