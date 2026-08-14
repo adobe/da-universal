@@ -62,10 +62,9 @@ const UNREACHABLE_HTML = {
   [SITE_LOOKUP]: SITE_UNREACHABLE_HTML_MESSAGE,
   [STORE_LOOKUP]: SOURCE_UNDETERMINED_HTML_MESSAGE,
 };
-// a write asks both lookups and reaches no store without them, so either one failing leaves the
-// destination undetermined rather than unreachable
+// a write reaches no store until the lookup answers, so a failed lookup leaves the destination
+// undetermined rather than unreachable
 const UNREACHABLE_TEXT = {
-  [SITE_LOOKUP]: SOURCE_UNDETERMINED_MESSAGE,
   [STORE_LOOKUP]: SOURCE_UNDETERMINED_MESSAGE,
 };
 
@@ -317,24 +316,18 @@ async function sourcePost({ req, env, daCtx }) {
 
     const bodyContent = toHtml(bodyNode);
 
-    // the payload is settled, so the only question left is where it goes. both lookups have to
-    // answer: the store answer comes from the config the site lookup reads, and a wrong store
-    // cannot be walked back from. a 404 is an answer, and it means no AEM site config rather
-    // than no DA site
-    const [site, onSourceBus] = await Promise.allSettled([
-      reach(SITE_LOOKUP, () => getSite(env, daCtx)),
-      reach(STORE_LOOKUP, () => isSourceBus(env, daCtx)),
-    ]);
-    if (site.status === 'rejected') throw site.reason;
-    if (onSourceBus.status === 'rejected') throw onSourceBus.reason;
+    // the payload is settled, so the only question left is where it goes
+    // a 404 is an answer, and it means no AEM site config rather than no DA
+    // site, so the write goes to da-admin
+    const onSourceBus = await reach(STORE_LOOKUP, () => isSourceBus(env, daCtx));
 
-    if (onSourceBus.value) {
+    if (onSourceBus) {
       console.log(`405 POST ${sourcePath}, writes to the source bus are refused through the preview proxy. write directly to the source bus instead.`);
       return post405(SOURCE_BUS_READ_ONLY_MESSAGE);
     }
 
     // da-admin takes the document as a `data` form part
-    const store = getStore(env, daCtx, onSourceBus.value);
+    const store = getStore(env, daCtx, onSourceBus);
     const body = new FormData();
     body.set('data', new Blob([bodyContent], { type: 'text/html' }));
     console.log(`-> ${store.url.toString()}`);
