@@ -31,9 +31,8 @@ const uePost = (url, html = DOC) => {
 };
 
 const build = async (overrides = {}) => {
-  const { status = 201, busError, lookupError } = overrides;
+  const { status = 201, busError } = overrides;
   const onSourceBus = 'site' in overrides ? overrides.site : LEGACY_STORE;
-  const exists = 'exists' in overrides ? overrides.exists : true;
   const seen = {
     bus: [], legacy: [], lookups: 0, probes: 0, order: [],
   };
@@ -71,12 +70,12 @@ const build = async (overrides = {}) => {
     },
   };
   const mod = await esmock('../../src/routes/da-admin.js', {
+    // still mocked, so a write that reached for it would be counted rather than hitting the network
     '../../src/storage/site.js': {
       default: async () => {
         seen.lookups += 1;
         seen.order.push('lookup');
-        if (lookupError) throw lookupError;
-        return { exists, head: undefined };
+        return { exists: true, head: undefined };
       },
     },
     '../../src/storage/source-bus.js': {
@@ -176,11 +175,11 @@ describe('writing to the store that holds the site', () => {
     });
   });
 
-  // the store lookup answers 404 for a site the config service does not know, and 404 is an
-  // answer: it means no AEM site config rather than no DA site, so the write goes to da-admin
+  // the store lookup answers false for a site the config service does not know, since a 404 means
+  // no AEM site config rather than no DA site
   describe('a site the config service does not know', () => {
     it('is written to da-admin all the same', async () => {
-      const { res, seen } = await post({ exists: false });
+      const { res, seen } = await post({ site: LEGACY_STORE });
 
       assert.strictEqual(res.status, 201);
       assert.strictEqual(seen.legacy.length, 1);

@@ -453,7 +453,7 @@ describe('daSourcePost', () => {
 
     // nothing is remembered between requests, so a site enrolled or un-enrolled mid-session takes
     // effect on the next one
-    it('looks the site up once per write', async () => {
+    it('looks the store up once per write, and asks nothing else', async () => {
       const asked = stubLookups(['org/lookedupeach']);
       const { env } = recorder();
 
