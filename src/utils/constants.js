@@ -51,11 +51,11 @@ export const DEFAULT_HTML_TEMPLATE = '<body><header></header><main><div></div></
 
 export const SITE_NOT_FOUND_HTML_MESSAGE = '<html><body><h1>404: Site not found</h1><p>There is no site at this address.</p></body></html>';
 
-export const PREVIEW_UNREACHABLE_HTML_MESSAGE = '<html><body><h1>503: Preview host unreachable</h1><p>The site\'s preview host did not answer. Please retry, or contact your project admin if it persists.</p></body></html>';
+export const PREVIEW_UNREACHABLE_HTML_MESSAGE = '<html><body><h1>503: Preview host failed</h1><p>The site\'s preview host could not be read. Please retry, or contact your project admin if it persists.</p></body></html>';
 
-export const SITE_UNREACHABLE_HTML_MESSAGE = '<html><body><h1>503: Site lookup unreachable</h1><p>Whether this site exists could not be determined. Please retry, or contact your project admin if it persists.</p></body></html>';
+export const SITE_UNREACHABLE_HTML_MESSAGE = '<html><body><h1>503: Site lookup failed</h1><p>Whether this site exists could not be determined. Please retry, or contact your project admin if it persists.</p></body></html>';
 
-export const SOURCE_UNREACHABLE_HTML_MESSAGE = '<html><body><h1>503: Content store unreachable</h1><p>The store that holds this document did not answer. Please retry, or contact your project admin if it persists.</p></body></html>';
+export const SOURCE_UNREACHABLE_HTML_MESSAGE = '<html><body><h1>503: Content store failed</h1><p>The store that holds this document could not be read. Please retry, or contact your project admin if it persists.</p></body></html>';
 
 export const SOURCE_UNREACHABLE_MESSAGE = 'The store that holds this document did not answer, so nothing was written. Please retry, or contact your project admin if it persists.';
 
