@@ -28,10 +28,8 @@ export function causeOf(e) {
 }
 
 /**
- * Thrown when an upstream could not be reached at all.
- *
- * Not a refusal: an upstream that answered 401 or 404 has answered, and the route decides what
- * that means. An UpstreamError means there is no answer to read, and it is retryable.
+ * Thrown when a read has no answer to use: the upstream was not reached, or answered a status the
+ * reader threw on. A store response is handed back whatever its status, and the route decides.
  *
  * @property {string} upstream one of the names at the top of this file
  */

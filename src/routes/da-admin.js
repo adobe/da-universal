@@ -65,8 +65,8 @@ const UNREACHABLE_TEXT = {
 };
 
 /**
- * Only an upstream that could not be reached is retryable. Anything else reaches the worker
- * boundary in src/index.js, which logs it and answers 500.
+ * An UpstreamError is retryable, so it is answered 503. Anything else reaches the worker boundary
+ * in src/index.js, which logs it and answers 500.
  */
 function refuseUnreachable(e, method, sourcePath) {
   if (!(e instanceof UpstreamError)) throw e;
