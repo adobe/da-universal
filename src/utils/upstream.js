@@ -15,7 +15,6 @@ export const PREVIEW_HOST = 'preview host';
 export const CONTENT_STORE = 'content store';
 export const SITE_CONFIG = 'site config';
 export const SITE_LOOKUP = 'site lookup';
-export const STORE_LOOKUP = 'store lookup';
 
 /**
  * Renders a failure for the `x-error` header.

@@ -44,24 +44,22 @@ const recorder = () => {
   return { env, fetched };
 };
 
-// stands in for the two config service reads the routes make: the pipeline scope for whether the
-// site exists and its head.html, the admin scope for which store holds it. Answers that any site
-// exists; `upgraded` lists the `org/site` keys whose content source is the source bus
+// stands in for the one config service read the routes make: the pipeline scope answers whether
+// the site exists, its head.html and which store holds it. Answers that any site exists;
+// `upgraded` lists the `org/site` keys whose content source is the source bus
 const stubLookups = (upgraded = []) => {
   const asked = [];
   globalThis.fetch = async (input) => {
     const url = input.toString();
     asked.push(url);
-    const { pathname, searchParams } = new URL(url);
-    const [, site, org] = (pathname.split('/')[1] ?? '').split('--');
-    if (searchParams.get('scope') === 'admin') {
-      const source = upgraded.includes(`${org}/${site}`)
-        ? `https://api.aem.live/${org}/sites/${site}/source`
-        : `https://content.da.live/${org}/${site}/`;
-      const body = JSON.stringify({ content: { source: { type: 'markup', url: source } } });
-      return new Response(body, { status: 200 });
-    }
-    const body = JSON.stringify({ head: { html: '<meta name="from" content="aem" />' } });
+    const [, site, org] = ((new URL(url)).pathname.split('/')[1] ?? '').split('--');
+    const source = upgraded.includes(`${org}/${site}`)
+      ? `https://api.aem.live/${org}/sites/${site}/source`
+      : `https://content.da.live/${org}/${site}/`;
+    const body = JSON.stringify({
+      head: { html: '<meta name="from" content="aem" />' },
+      contentSource: { type: 'markup', url: source },
+    });
     return new Response(body, { status: 200 });
   };
   return asked;
@@ -69,9 +67,8 @@ const stubLookups = (upgraded = []) => {
 
 const mockRoutes = async () => esmock('../../src/routes/da-admin.js', {
   '../../src/storage/site.js': {
-    default: async () => ({ exists: true, head: '<meta name="from" content="aem" />' }),
+    default: async () => ({ exists: true, head: '<meta name="from" content="aem" />', onSourceBus: false }),
   },
-  '../../src/storage/source-bus.js': { default: async () => false },
   '../../src/utils/aemCtx.js': {
     getAemCtx: () => ({}),
   },
@@ -124,9 +121,8 @@ describe('daSourceGet', () => {
     calls = { compose: [], ue: 0, quickEdit: 0 };
     return (await esmock('../../src/routes/da-admin.js', {
       '../../src/storage/site.js': {
-        default: async () => ({ exists, head: headHtml }),
+        default: async () => ({ exists, head: headHtml, onSourceBus: false }),
       },
-      '../../src/storage/source-bus.js': { default: async () => false },
       '../../src/utils/aemCtx.js': {
         getAemCtx: () => ({}),
       },
@@ -453,7 +449,7 @@ describe('daSourcePost', () => {
 
     // nothing is remembered between requests, so a site enrolled or un-enrolled mid-session takes
     // effect on the next one
-    it('looks the store up once per write, and asks nothing else', async () => {
+    it('looks the site up once per write, and asks nothing else', async () => {
       const asked = stubLookups(['org/lookedupeach']);
       const { env } = recorder();
 
@@ -461,8 +457,8 @@ describe('daSourcePost', () => {
       await write('lookedupeach', env);
 
       assert.deepStrictEqual(asked.sort(), [
-        'https://config.aem.page/main--lookedupeach--org/config.json?scope=admin',
-        'https://config.aem.page/main--lookedupeach--org/config.json?scope=admin',
+        'https://config.aem.page/main--lookedupeach--org/config.json?scope=pipeline',
+        'https://config.aem.page/main--lookedupeach--org/config.json?scope=pipeline',
       ]);
     });
   });

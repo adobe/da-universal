@@ -48,7 +48,7 @@ const build = async (overrides = {}) => {
     busError, templateError, configError, composeError, config = null,
   } = overrides;
   const seen = {
-    bus: [], legacy: [], head: [], aem: [], ue: 0, lookups: 0, storeLookups: 0,
+    bus: [], legacy: [], head: [], aem: [], ue: 0, lookups: 0,
   };
   globalThis.fetch = async (input, init) => {
     const request = input instanceof Request ? input : new Request(input, init);
@@ -72,14 +72,8 @@ const build = async (overrides = {}) => {
         seen.lookups += 1;
         // throws for undefined, which is how the lookup reports a failure
         if (site === undefined) throw lookupError;
-        return { exists: site.exists, head: headHtml };
-      },
-    },
-    '../../src/storage/source-bus.js': {
-      default: async () => {
-        seen.storeLookups += 1;
         if (busError) throw busError;
-        return site !== undefined && site.onSourceBus;
+        return { exists: site.exists, head: headHtml, onSourceBus: site.onSourceBus };
       },
     },
     '../../src/utils/aemCtx.js': {
@@ -114,7 +108,7 @@ const build = async (overrides = {}) => {
   return { ...mod, env, seen };
 };
 
-describe('when the store lookup cannot say which store holds the site', () => {
+describe('when the lookup cannot say which store holds the site', () => {
   afterEach(() => {
     delete globalThis.fetch;
   });
@@ -142,9 +136,9 @@ describe('when the store lookup cannot say which store holds the site', () => {
     assert.ok(Number(res.headers.get('Retry-After')) > 0);
   });
 
-  // the preview iframe renders this body, and the store answered nothing here: it was never
-  // asked, since which store to ask is what could not be determined
-  it('says the store could not be determined, not that it did not answer', async () => {
+  // the preview iframe renders this body, and no store was asked: the one read that names the
+  // store is what failed
+  it('says the site could not be looked up, not that a store did not answer', async () => {
     const { daSourceGet, env } = await build({ busError: dead() });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
@@ -152,7 +146,7 @@ describe('when the store lookup cannot say which store holds the site', () => {
 
     const body = await res.text();
     assert.notStrictEqual(body, messages.SOURCE_UNREACHABLE_HTML_MESSAGE);
-    assert.strictEqual(body, messages.SOURCE_UNDETERMINED_HTML_MESSAGE);
+    assert.strictEqual(body, messages.SITE_UNREACHABLE_HTML_MESSAGE);
   });
 
   it('refuses a non-html read too', async () => {
@@ -177,22 +171,22 @@ describe('when the store lookup cannot say which store holds the site', () => {
   });
 
   // the two lookups are two upstreams now, and both 503s share a status and an unparsed body
-  it('names the probe in x-error', async () => {
+  it('names the lookup in x-error', async () => {
     const { daSourceGet, env } = await build({ busError: dead() });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-    assert.match(res.headers.get('x-error'), /store lookup failed/);
+    assert.match(res.headers.get('x-error'), /site lookup failed/);
   });
 
-  it('names the probe on a HEAD too', async () => {
+  it('names the lookup on a HEAD too', async () => {
     const { daSourceHead, env } = await build({ busError: dead() });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
     const res = await daSourceHead({ env, daCtx: getDaCtx(req) });
 
-    assert.match(res.headers.get('x-error'), /store lookup failed/);
+    assert.match(res.headers.get('x-error'), /site lookup failed/);
   });
 
   // the header is the only thing on the wire that separates a timeout from a dropped connection
@@ -204,7 +198,7 @@ describe('when the store lookup cannot say which store holds the site', () => {
 
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-    assert.strictEqual(res.headers.get('x-error'), 'store lookup failed: TimeoutError: timed out');
+    assert.strictEqual(res.headers.get('x-error'), 'site lookup failed: TimeoutError: timed out');
   });
 
   // rendering a thrown non-Error as "undefined: undefined" would leave the 503 saying nothing
@@ -215,7 +209,7 @@ describe('when the store lookup cannot say which store holds the site', () => {
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
     assert.strictEqual(res.status, 503);
-    assert.strictEqual(res.headers.get('x-error'), 'store lookup failed: Error: boom');
+    assert.strictEqual(res.headers.get('x-error'), 'site lookup failed: Error: boom');
   });
 
   it('tells a probe failure apart from a store failure', async () => {
@@ -675,9 +669,8 @@ describe('reading from the store that holds the site', () => {
       };
       const { daSourceGet } = await esmock('../../src/routes/da-admin.js', {
         '../../src/storage/site.js': {
-          default: async () => ({ exists: true, head: '<meta name="from" content="aem" />' }),
+          default: async () => ({ exists: true, head: '<meta name="from" content="aem" />', onSourceBus: true }),
         },
-        '../../src/storage/source-bus.js': { default: async () => true },
         '../../src/utils/aemCtx.js': {
           getAemCtx: () => ({ ueHostname: 'ue.da.live', previewUrl: 'https://p.example' }),
         },
@@ -870,18 +863,6 @@ describe('reading from the store that holds the site', () => {
     });
 
     // the two lookups go out together, and a site that does not exist needs no store
-    it('reports no such site even when the probe did not answer', async () => {
-      const { daSourceGet, env } = await build({
-        site: NO_SITE,
-        busError: new TypeError('Network connection lost'),
-      });
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
-
-      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-
-      assert.strictEqual(res.status, 404);
-    });
-
     // both failed, and the store answer is no use on its own
     it('reports the failed site lookup when the probe failed with it', async () => {
       const { daSourceGet, env } = await build({
@@ -931,16 +912,14 @@ describe('reading from the store that holds the site', () => {
       assert.strictEqual(seen.head[0], '<meta name="from" content="aem" />');
     });
 
-    // the pipeline scope answers existence and head.html together, so a page that needs the head
-    // pays for no third read
-    it('reads each lookup once for a page', async () => {
+    // the pipeline scope answers existence, head.html and the store together
+    it('reads the config service once for a page', async () => {
       const { daSourceGet, env, seen } = await build();
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
       assert.strictEqual(seen.lookups, 1);
-      assert.strictEqual(seen.storeLookups, 1);
     });
 
     // nothing composes an image, and the head that arrives with the existence answer is dropped
@@ -951,7 +930,6 @@ describe('reading from the store that holds the site', () => {
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
       assert.strictEqual(seen.lookups, 1);
-      assert.strictEqual(seen.storeLookups, 1);
       assert.deepStrictEqual(seen.head, []);
     });
 
@@ -962,7 +940,6 @@ describe('reading from the store that holds the site', () => {
       await daSourceHead({ env, daCtx: getDaCtx(req) });
 
       assert.strictEqual(seen.lookups, 1);
-      assert.strictEqual(seen.storeLookups, 1);
       assert.deepStrictEqual(seen.head, []);
     });
   });
@@ -1161,9 +1138,7 @@ describe('when the config service refuses the lookup', () => {
       HLX_CONFIG_SERVICE_TOKEN: 'shared-token',
       daadmin: { fetch: async () => new Response('<body>from da-admin</body>', { status: 200 }) },
     };
-    const { daSourceGet } = await esmock('../../src/routes/da-admin.js', {
-      '../../src/storage/source-bus.js': { default: async () => false },
-    });
+    const { daSourceGet } = await esmock('../../src/routes/da-admin.js', {});
     // a preview host rather than a UE host, so nothing is instrumented onto the composed page
     const req = authedReq('https://main--site--org.preview.da.live/folder/content');
     return daSourceGet({ req, env, daCtx: getDaCtx(req) });

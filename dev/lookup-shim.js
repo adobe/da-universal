@@ -10,9 +10,9 @@
  * governing permissions and limitations under the License.
  */
 
-// stands in for config.aem.page, which needs a shared secret. a read asks it twice: the pipeline
-// scope for whether the site exists and its head.html, the admin scope for the content source. a
-// site in SITES exists, and one with a source url on api.aem.live is source-bus
+// stands in for config.aem.page, which needs a shared secret. one read of the pipeline scope
+// answers whether the site exists, its head.html and which store holds it. a site in SITES exists,
+// and one with a source url on api.aem.live is source-bus
 const SITES = {
   'org/site': 'https://content.da.live/org/site/',
 };
@@ -35,11 +35,12 @@ export default {
     }
 
     // both stores are `type: markup`, so only the url separates them
-    const answer = url.searchParams.get('scope') === 'admin'
-      ? { content: { source: { type: 'markup', url: source } } }
-      : { head: { html: HEAD_HTML } };
     const body = JSON.stringify({
-      ref, site, org, ...answer,
+      ref,
+      site,
+      org,
+      head: { html: HEAD_HTML },
+      contentSource: { type: 'markup', url: source },
     });
     return new Response(body, { status: 200, headers: { 'content-type': 'application/json' } });
   },

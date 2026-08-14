@@ -34,7 +34,7 @@ const build = async (overrides = {}) => {
   const { status = 201, busError } = overrides;
   const onSourceBus = 'site' in overrides ? overrides.site : LEGACY_STORE;
   const seen = {
-    bus: [], legacy: [], lookups: 0, probes: 0, order: [],
+    bus: [], legacy: [], probes: 0, order: [],
   };
   const capture = async (request) => {
     const contentType = request.headers.get('Content-Type');
@@ -70,20 +70,12 @@ const build = async (overrides = {}) => {
     },
   };
   const mod = await esmock('../../src/routes/da-admin.js', {
-    // still mocked, so a write that reached for it would be counted rather than hitting the network
     '../../src/storage/site.js': {
       default: async () => {
-        seen.lookups += 1;
-        seen.order.push('lookup');
-        return { exists: true, head: undefined };
-      },
-    },
-    '../../src/storage/source-bus.js': {
-      default: async () => {
         seen.probes += 1;
-        seen.order.push('probe');
+        seen.order.push('lookup');
         if (busError) throw busError;
-        return onSourceBus;
+        return { exists: true, head: undefined, onSourceBus };
       },
     },
   });
@@ -163,7 +155,7 @@ describe('writing to the store that holds the site', () => {
     it('names the failed probe in x-error', async () => {
       const { res } = await post({ busError: dead() });
 
-      assert.match(res.headers.get('x-error'), /store lookup failed/);
+      assert.match(res.headers.get('x-error'), /site lookup failed/);
     });
 
     it('names the cause, not a category', async () => {
@@ -171,7 +163,7 @@ describe('writing to the store that holds the site', () => {
         busError: new DOMException('timed out', 'TimeoutError'),
       });
 
-      assert.strictEqual(res.headers.get('x-error'), 'store lookup failed: TimeoutError: timed out');
+      assert.strictEqual(res.headers.get('x-error'), 'site lookup failed: TimeoutError: timed out');
     });
   });
 
@@ -188,13 +180,11 @@ describe('writing to the store that holds the site', () => {
   });
 
   describe('what a write asks about the site', () => {
-    // the site lookup and the store lookup read the same service, and a write never reads the
-    // pipeline scope's answer, so asking it twice buys nothing
-    it('asks the store lookup only, and reaches the store after it', async () => {
+    // one read of the pipeline scope answers where the document goes
+    it('asks one lookup, and reaches the store after it', async () => {
       const { res, seen } = await post({});
 
       assert.strictEqual(seen.probes, 1);
-      assert.strictEqual(seen.lookups, 0);
       assert.strictEqual(seen.order[seen.order.length - 1], 'store');
       assert.strictEqual(res.status, 201);
     });
@@ -281,14 +271,14 @@ describe('writing to the store that holds the site', () => {
     });
   });
 
-  describe('the store lookup on a write', () => {
+  describe('the lookup on a write', () => {
     // a legacy write is the case that can tell the two orderings apart: the store is reached
     // either way, so only the sequence says whether the write went out before it was placed
     it('happens before anything is sent to a store', async () => {
       const { seen } = await post({});
 
       assert.deepStrictEqual(seen.order.slice(-1), ['store']);
-      assert.ok(seen.order.includes('probe'));
+      assert.ok(seen.order.includes('lookup'));
     });
 
     it('happens on a source-bus site too, which is what the refusal rests on', async () => {
@@ -336,7 +326,7 @@ describe('writing to the store that holds the site', () => {
       const res = await daSourcePost({ req, env, daCtx: getDaCtx(req) });
 
       assert.strictEqual(res.status, 415);
-      assert.strictEqual(seen.lookups, 0);
+      assert.strictEqual(seen.probes, 0);
       assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
     });
   });

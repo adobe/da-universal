@@ -30,7 +30,6 @@ import {
   PREVIEW_UNREACHABLE_HTML_MESSAGE,
   SITE_NOT_FOUND_HTML_MESSAGE,
   SOURCE_BUS_READ_ONLY_MESSAGE,
-  SOURCE_UNDETERMINED_HTML_MESSAGE,
   SOURCE_UNDETERMINED_MESSAGE,
   SOURCE_UNREACHABLE_HTML_MESSAGE,
   SOURCE_UNREACHABLE_MESSAGE,
@@ -38,7 +37,6 @@ import {
 } from '../utils/constants.js';
 import { getSiteConfig } from '../storage/config.js';
 import getSite from '../storage/site.js';
-import isSourceBus from '../storage/source-bus.js';
 import getStore from '../storage/store.js';
 import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 import {
@@ -46,7 +44,6 @@ import {
   PREVIEW_HOST,
   SITE_CONFIG,
   SITE_LOOKUP,
-  STORE_LOOKUP,
   UpstreamError,
   reach,
 } from '../utils/upstream.js';
@@ -60,12 +57,11 @@ const HTML_POST_TYPE = 'text/html';
 const UNREACHABLE_HTML = {
   [PREVIEW_HOST]: PREVIEW_UNREACHABLE_HTML_MESSAGE,
   [SITE_LOOKUP]: SITE_UNREACHABLE_HTML_MESSAGE,
-  [STORE_LOOKUP]: SOURCE_UNDETERMINED_HTML_MESSAGE,
 };
 // a write reaches no store until the lookup answers, so a failed lookup leaves the destination
 // undetermined rather than unreachable
 const UNREACHABLE_TEXT = {
-  [STORE_LOOKUP]: SOURCE_UNDETERMINED_MESSAGE,
+  [SITE_LOOKUP]: SOURCE_UNDETERMINED_MESSAGE,
 };
 
 /**
@@ -133,28 +129,20 @@ async function getPageTemplate(env, daCtx, aemCtx) {
  * @throws {UpstreamError} when the lookup or the store could not be reached
  */
 async function readSource(env, daCtx, init) {
-  // both lookups go out together: the pipeline scope says whether the site exists and what its
-  // head.html is, the admin scope says which store holds it
-  const [site, onSourceBus] = await Promise.allSettled([
-    reach(SITE_LOOKUP, () => getSite(env, daCtx)),
-    reach(STORE_LOOKUP, () => isSourceBus(env, daCtx)),
-  ]);
+  // one read of the pipeline scope answers whether the site exists, what its head.html is and
+  // which store holds it
+  const site = await reach(SITE_LOOKUP, () => getSite(env, daCtx));
 
-  // answers no-such-site ahead of either 503, which would ask for a retry that cannot help.
-  // drops a failed probe on purpose: a site that does not exist needs no store
-  if (site.status === 'fulfilled' && !site.value.exists) {
+  if (!site.exists) {
     console.log(`404 ${init.method} ${daCtx.sourcePath}, there is no site ${daCtx.org}/${daCtx.site}`);
     return { noSuchSite: true };
   }
-  // the site lookup first, since the store answer is no use on its own
-  if (site.status === 'rejected') throw site.reason;
-  if (onSourceBus.status === 'rejected') throw onSourceBus.reason;
 
-  const store = getStore(env, daCtx, onSourceBus.value);
+  const store = getStore(env, daCtx, site.onSourceBus);
   console.log(`-> ${init.method} ${store.url.toString()}`);
   return {
     response: await reach(CONTENT_STORE, () => store.fetch(store.url, init)),
-    head: site.value.head,
+    head: site.head,
   };
 }
 
@@ -319,7 +307,7 @@ async function sourcePost({ req, env, daCtx }) {
     // the payload is settled, so the only question left is where it goes
     // a 404 is an answer, and it means no AEM site config rather than no DA
     // site, so the write goes to da-admin
-    const onSourceBus = await reach(STORE_LOOKUP, () => isSourceBus(env, daCtx));
+    const { onSourceBus } = await reach(SITE_LOOKUP, () => getSite(env, daCtx));
 
     if (onSourceBus) {
       console.log(`405 POST ${sourcePath}, writes to the source bus are refused through the preview proxy. write directly to the source bus instead.`);
