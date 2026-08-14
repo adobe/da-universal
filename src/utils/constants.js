@@ -55,7 +55,7 @@ export const SITE_NOT_FOUND_MESSAGE = 'There is no site at this address, so noth
 
 export const PREVIEW_FAILED_HTML_MESSAGE = '<html><body><h1>503: Preview host failed</h1><p>The site\'s preview host could not be read. Please retry, or contact your project admin if it persists.</p></body></html>';
 
-export const SITE_CONFIG_FAILED_HTML_MESSAGE = '<html><body><h1>503: Site config failed</h1><p>The site\'s configuration could not be read. Please retry, or contact your project admin if it persists.</p></body></html>';
+export const EDITOR_CONFIG_FAILED_HTML_MESSAGE = '<html><body><h1>503: Editor config failed</h1><p>The editor configuration for this site could not be read. Please retry, or contact your project admin if it persists.</p></body></html>';
 
 export const SITE_LOOKUP_FAILED_HTML_MESSAGE = '<html><body><h1>503: Site lookup failed</h1><p>Whether this site exists could not be determined. Please retry, or contact your project admin if it persists.</p></body></html>';
 

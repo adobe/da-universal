@@ -28,7 +28,7 @@ import {
   DEFAULT_HTML_TEMPLATE,
   SITE_LOOKUP_FAILED_HTML_MESSAGE,
   PREVIEW_FAILED_HTML_MESSAGE,
-  SITE_CONFIG_FAILED_HTML_MESSAGE,
+  EDITOR_CONFIG_FAILED_HTML_MESSAGE,
   SITE_NOT_FOUND_HTML_MESSAGE,
   SITE_NOT_FOUND_MESSAGE,
   SOURCE_BUS_READ_ONLY_MESSAGE,
@@ -44,7 +44,7 @@ import { restoreAbsoluteImages } from '../render/rewrite-images.js';
 import {
   CONTENT_STORE,
   PREVIEW_HOST,
-  SITE_CONFIG,
+  EDITOR_CONFIG,
   SITE_LOOKUP,
   UpstreamError,
   reach,
@@ -55,7 +55,7 @@ const HTML_POST_TYPE = 'text/html';
 /** Names the upstream that failed, since the default body names the store. */
 const UPSTREAM_FAILURE_HTML = {
   [PREVIEW_HOST]: PREVIEW_FAILED_HTML_MESSAGE,
-  [SITE_CONFIG]: SITE_CONFIG_FAILED_HTML_MESSAGE,
+  [EDITOR_CONFIG]: EDITOR_CONFIG_FAILED_HTML_MESSAGE,
   [SITE_LOOKUP]: SITE_LOOKUP_FAILED_HTML_MESSAGE,
 };
 // a write reaches no store until the lookup answers, so a failed lookup says the destination is
@@ -95,7 +95,7 @@ function getTextBody(data) {
 
 async function getPageTemplate(env, daCtx, aemCtx) {
   // answers null for a site with no config, so any other failure throws
-  const config = await reach(SITE_CONFIG, () => getEditorConfig(env, daCtx));
+  const config = await reach(EDITOR_CONFIG, () => getEditorConfig(env, daCtx));
 
   // Search whether a template is configured for this path
   const matchingTemplates = config

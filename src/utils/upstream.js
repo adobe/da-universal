@@ -13,7 +13,7 @@
 /** Names the upstream in the worker log and in `x-error`. */
 export const PREVIEW_HOST = 'preview host';
 export const CONTENT_STORE = 'content store';
-export const SITE_CONFIG = 'site config';
+export const EDITOR_CONFIG = 'editor config';
 export const SITE_LOOKUP = 'site lookup';
 
 /**
