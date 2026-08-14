@@ -37,7 +37,3 @@ async function fetchConfig(env, daCtx, path) {
 export async function getSiteConfig(env, daCtx) {
   return fetchConfig(env, daCtx, `/config/${daCtx.org}/${daCtx.site}`);
 }
-
-export async function getOrgConfig(env, daCtx) {
-  return fetchConfig(env, daCtx, `/config/${daCtx.org}`);
-}
