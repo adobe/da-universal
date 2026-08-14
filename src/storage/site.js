@@ -16,9 +16,9 @@ const NO_SITE = { exists: false, head: undefined, onSourceBus: false };
 /**
  * Asks the config service whether a site exists, what its head.html is and which store holds it.
  *
- * The pipeline scope answers all three. A site behind Helix authentication refuses
- * `{ref}--{site}--{org}.aem.page/head.html` without a site token, and the config service does not.
- * `contentSource.url` names the store, since both stores are `type: markup`.
+ * A site behind Helix authentication refuses `{ref}--{site}--{org}.aem.page/head.html` without a
+ * site token, and the config service does not. `contentSource.url` names the store, since both
+ * stores are `type: markup`.
  *
  * Throws on any refusal but a 404, which is the only status that means there is no such site. A ref
  * that was never built exists and has no head.html, which is a 200 with an empty head.
@@ -45,13 +45,16 @@ export default async function getSite(env, daCtx) {
   if (!response.ok) throw new Error(`the config service answered ${response.status}`);
 
   const { head, contentSource } = await response.json();
-  // a config cached from before the service served contentSource names no store, and guessing one
-  // would send a source-bus write to da-admin
-  if (!contentSource?.url) throw new Error('the config service named no content source');
+  // a config that names no store is read as legacy, which is where a site without one has always
+  // been. the warning is there because a source-bus site read that way is written to the store the
+  // site does not serve
+  if (!contentSource?.url) {
+    console.warn(`${url} named no content source, reading ${org}/${site} as legacy`);
+  }
 
   return {
     exists: true,
     head: head?.html,
-    onSourceBus: contentSource.url.startsWith(`${env.AEM_API}/`),
+    onSourceBus: Boolean(contentSource?.url?.startsWith(`${env.AEM_API}/`)),
   };
 }
