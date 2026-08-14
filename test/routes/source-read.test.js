@@ -1081,15 +1081,18 @@ describe('when the site config cannot be reached', () => {
     assert.strictEqual(res.status, 503);
   });
 
-  // da-admin serves the config as well as the document, so the store is what did not answer.
-  // x-error is what separates the two reads
-  it('says the store did not answer', async () => {
+  // the config is read off da-admin while the document can be on the source bus, so naming the
+  // store would name a system that answered
+  it('says the site config failed, not the store', async () => {
     const { daSourceGet, env } = await build(missing());
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-    assert.strictEqual(await res.text(), messages.SOURCE_FAILED_HTML_MESSAGE);
+    assert.strictEqual(
+      await res.text(),
+      '<html><body><h1>503: Site config failed</h1><p>The site\'s configuration could not be read. Please retry, or contact your project admin if it persists.</p></body></html>',
+    );
   });
 
   it('names the site config in x-error', async () => {
