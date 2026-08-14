@@ -26,13 +26,13 @@ import {
 } from '../responses/index.js';
 import {
   DEFAULT_HTML_TEMPLATE,
-  SITE_UNREACHABLE_HTML_MESSAGE,
-  PREVIEW_UNREACHABLE_HTML_MESSAGE,
+  SITE_LOOKUP_FAILED_HTML_MESSAGE,
+  PREVIEW_FAILED_HTML_MESSAGE,
   SITE_NOT_FOUND_HTML_MESSAGE,
   SOURCE_BUS_READ_ONLY_MESSAGE,
   SOURCE_UNDETERMINED_MESSAGE,
-  SOURCE_UNREACHABLE_HTML_MESSAGE,
-  SOURCE_UNREACHABLE_MESSAGE,
+  SOURCE_FAILED_HTML_MESSAGE,
+  SOURCE_FAILED_MESSAGE,
   UNAUTHORIZED_HTML_MESSAGE,
 } from '../utils/constants.js';
 import { getSiteConfig } from '../storage/config.js';
@@ -54,13 +54,13 @@ const HTML_POST_TYPE = 'text/html';
  * Overrides the store's body for the upstreams that need their own. SITE_CONFIG is read off
  * da-admin, so it takes the default body and `x-error` is what tells the two reads apart.
  */
-const UNREACHABLE_HTML = {
-  [PREVIEW_HOST]: PREVIEW_UNREACHABLE_HTML_MESSAGE,
-  [SITE_LOOKUP]: SITE_UNREACHABLE_HTML_MESSAGE,
+const UPSTREAM_FAILURE_HTML = {
+  [PREVIEW_HOST]: PREVIEW_FAILED_HTML_MESSAGE,
+  [SITE_LOOKUP]: SITE_LOOKUP_FAILED_HTML_MESSAGE,
 };
-// a write reaches no store until the lookup answers, so a failed lookup leaves the destination
-// undetermined rather than unreachable
-const UNREACHABLE_TEXT = {
+// a write reaches no store until the lookup answers, so a failed lookup says the destination is
+// undetermined, not that the store failed
+const UPSTREAM_FAILURE_TEXT = {
   [SITE_LOOKUP]: SOURCE_UNDETERMINED_MESSAGE,
 };
 
@@ -68,14 +68,14 @@ const UNREACHABLE_TEXT = {
  * An UpstreamError is retryable, so it is answered 503. Anything else reaches the worker boundary
  * in src/index.js, which logs it and answers 500.
  */
-function refuseUnreachable(e, method, sourcePath) {
+function refuseUpstreamFailure(e, method, sourcePath) {
   if (!(e instanceof UpstreamError)) throw e;
   console.warn(`503 ${method} ${sourcePath}, ${e.message}`);
   if (method === 'HEAD') return head503(e.message);
   if (method === 'POST') {
-    return post503(UNREACHABLE_TEXT[e.upstream] ?? SOURCE_UNREACHABLE_MESSAGE, e.message);
+    return post503(UPSTREAM_FAILURE_TEXT[e.upstream] ?? SOURCE_FAILED_MESSAGE, e.message);
   }
-  return get503(UNREACHABLE_HTML[e.upstream] ?? SOURCE_UNREACHABLE_HTML_MESSAGE, e.message);
+  return get503(UPSTREAM_FAILURE_HTML[e.upstream] ?? SOURCE_FAILED_HTML_MESSAGE, e.message);
 }
 
 export function isHtmlPostType(type) {
@@ -94,7 +94,7 @@ function getTextBody(data) {
 }
 
 async function getPageTemplate(env, daCtx, aemCtx) {
-  // answers null for a site with no config, so a store that refuses or is unreachable throws
+  // answers null for a site with no config, so any other failure throws
   const config = await reach(SITE_CONFIG, () => getSiteConfig(env, daCtx));
 
   // Search whether a template is configured for this path
@@ -126,7 +126,7 @@ async function getPageTemplate(env, daCtx, aemCtx) {
  * Sets `noSuchSite` when there is no such site, `response` otherwise.
  *
  * @returns {Promise<{response?: Response, noSuchSite?: boolean}>}
- * @throws {UpstreamError} when the lookup or the store could not be reached
+ * @throws {UpstreamError} when the lookup or the store fails
  */
 async function readSource(env, daCtx, init) {
   const site = await reach(SITE_LOOKUP, () => getSite(env, daCtx));
@@ -234,12 +234,12 @@ async function sourceGet({ req, env, daCtx }) {
   });
 }
 
-/** Wraps sourceGet, turning an unreachable upstream into a 503 in HTML the editor renders. */
+/** Wraps sourceGet, turning a failed upstream read into a 503 in HTML the editor renders. */
 export async function daSourceGet({ req, env, daCtx }) {
   try {
     return await sourceGet({ req, env, daCtx });
   } catch (e) {
-    return refuseUnreachable(e, 'GET', daCtx.sourcePath);
+    return refuseUpstreamFailure(e, 'GET', daCtx.sourcePath);
   }
 }
 
@@ -259,12 +259,12 @@ async function sourceHead({ env, daCtx }) {
   return new Response(null, { status: response.status, headers: response.headers });
 }
 
-/** Wraps sourceHead, turning an unreachable upstream into a bodyless 503. */
+/** Wraps sourceHead, turning a failed upstream read into a bodyless 503. */
 export async function daSourceHead({ env, daCtx }) {
   try {
     return await sourceHead({ env, daCtx });
   } catch (e) {
-    return refuseUnreachable(e, 'HEAD', daCtx.sourcePath);
+    return refuseUpstreamFailure(e, 'HEAD', daCtx.sourcePath);
   }
 }
 
@@ -327,13 +327,13 @@ async function sourcePost({ req, env, daCtx }) {
 }
 
 /**
- * Wraps sourcePost, turning an unreachable upstream into the plain text the editor shows the
+ * Wraps sourcePost, turning a failed upstream read into the plain text the editor shows the
  * author.
  */
 export async function daSourcePost({ req, env, daCtx }) {
   try {
     return await sourcePost({ req, env, daCtx });
   } catch (e) {
-    return refuseUnreachable(e, 'POST', daCtx.sourcePath);
+    return refuseUpstreamFailure(e, 'POST', daCtx.sourcePath);
   }
 }

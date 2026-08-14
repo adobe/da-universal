@@ -145,8 +145,8 @@ describe('when the lookup cannot say which store holds the site', () => {
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
     const body = await res.text();
-    assert.notStrictEqual(body, messages.SOURCE_UNREACHABLE_HTML_MESSAGE);
-    assert.strictEqual(body, messages.SITE_UNREACHABLE_HTML_MESSAGE);
+    assert.notStrictEqual(body, messages.SOURCE_FAILED_HTML_MESSAGE);
+    assert.strictEqual(body, messages.SITE_LOOKUP_FAILED_HTML_MESSAGE);
   });
 
   it('refuses a non-html read too', async () => {
@@ -269,8 +269,8 @@ describe('when the config service cannot say whether the site exists', () => {
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
     const body = await res.text();
-    assert.notStrictEqual(body, messages.SOURCE_UNREACHABLE_HTML_MESSAGE);
-    assert.strictEqual(body, messages.SITE_UNREACHABLE_HTML_MESSAGE);
+    assert.notStrictEqual(body, messages.SOURCE_FAILED_HTML_MESSAGE);
+    assert.strictEqual(body, messages.SITE_LOOKUP_FAILED_HTML_MESSAGE);
   });
 
   it('refuses a HEAD with 503 and no body', async () => {
@@ -444,8 +444,8 @@ describe('reading from the store that holds the site', () => {
       const htmlRes = await daSourceGet({ req: html, env, daCtx: getDaCtx(html) });
       const assetRes = await daSourceGet({ req: asset, env, daCtx: getDaCtx(asset) });
 
-      assert.strictEqual(await htmlRes.text(), messages.SOURCE_UNREACHABLE_HTML_MESSAGE);
-      assert.strictEqual(await assetRes.text(), messages.SOURCE_UNREACHABLE_HTML_MESSAGE);
+      assert.strictEqual(await htmlRes.text(), messages.SOURCE_FAILED_HTML_MESSAGE);
+      assert.strictEqual(await assetRes.text(), messages.SOURCE_FAILED_HTML_MESSAGE);
     });
 
     it('answers 503 with no body on a HEAD', async () => {
@@ -1089,7 +1089,7 @@ describe('when the site config cannot be reached', () => {
 
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-    assert.strictEqual(await res.text(), messages.SOURCE_UNREACHABLE_HTML_MESSAGE);
+    assert.strictEqual(await res.text(), messages.SOURCE_FAILED_HTML_MESSAGE);
   });
 
   it('names the site config in x-error', async () => {
@@ -1224,7 +1224,7 @@ describe('a path the site config gives a template', () => {
 
     assert.strictEqual(res.status, 503);
     assert.match(res.headers.get('x-error'), /preview host failed/);
-    assert.strictEqual(await res.text(), messages.PREVIEW_UNREACHABLE_HTML_MESSAGE);
+    assert.strictEqual(await res.text(), messages.PREVIEW_FAILED_HTML_MESSAGE);
   });
 
   it('takes the longest matching prefix', async () => {
@@ -1270,7 +1270,7 @@ describe('when the worker itself has a bug', () => {
     delete globalThis.fetch;
   });
 
-  // only an unreachable upstream is retryable, and a 503 would keep the throw out of the log
+  // only a failed upstream read is retryable, and a 503 would keep the throw out of the log
   // the worker boundary writes
   it('lets the throw through rather than rendering it as a 503', async () => {
     const { daSourceGet, env } = await build({ composeError: new TypeError('tree is not iterable') });
