@@ -149,14 +149,39 @@ describe('getSite', () => {
     });
   });
 
-  // the config service has served `contentSource` since 2026-08-13, and a site whose config has not
-  // been rewritten since then is answered from a cache that predates it. guessing a store from a
-  // config that does not name one would send a source-bus write to da-admin
   describe('when the answer names no content source', () => {
-    it('throws rather than guessing', async () => {
+    it('reads as legacy, since that is where a site without one has always been', async () => {
       stubFetch(() => config({ contentSource: undefined }));
 
-      await assert.rejects(() => getSite(env, daCtx()), /content source/);
+      assert.deepStrictEqual(await getSite(env, daCtx()), {
+        exists: true, head: HEAD, onSourceBus: false,
+      });
+    });
+
+    // a source-bus site read as legacy is served the wrong document and written to the wrong store,
+    // so the site says so in the log rather than only in an author's lost edits
+    it('names the site in a warning', async () => {
+      stubFetch(() => config({ contentSource: undefined }));
+      const warnings = [];
+      const saved = console.warn;
+      console.warn = (m) => warnings.push(m);
+
+      try {
+        await getSite(env, daCtx());
+      } finally {
+        console.warn = saved;
+      }
+
+      assert.strictEqual(warnings.length, 1);
+      assert.match(warnings[0], /org\/site/);
+      assert.match(warnings[0], /content source/);
+    });
+
+    it('answers the same when the source carries no url', async () => {
+      stubFetch(() => config({ contentSource: { type: 'markup' } }));
+
+      const { onSourceBus } = await getSite(env, daCtx());
+      assert.strictEqual(onSourceBus, false);
     });
   });
 
