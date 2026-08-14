@@ -31,7 +31,7 @@ const uePost = (url, html = DOC) => {
 };
 
 const build = async (overrides = {}) => {
-  const { status = 201, busError } = overrides;
+  const { status = 201, busError, exists = true } = overrides;
   const onSourceBus = 'site' in overrides ? overrides.site : LEGACY_STORE;
   const seen = {
     bus: [], legacy: [], probes: 0, order: [],
@@ -75,7 +75,7 @@ const build = async (overrides = {}) => {
         seen.probes += 1;
         seen.order.push('lookup');
         if (busError) throw busError;
-        return { exists: true, head: undefined, onSourceBus };
+        return { exists, head: undefined, onSourceBus };
       },
     },
   });
@@ -167,15 +167,31 @@ describe('writing to the store that holds the site', () => {
     });
   });
 
-  // the store lookup answers false for a site the config service does not know, since a 404 means
-  // no AEM site config rather than no DA site
+  // a read of the same path answers 404, and a write the reader cannot get back is worse than a
+  // refusal the author sees
   describe('a site the config service does not know', () => {
-    it('is written to da-admin all the same', async () => {
-      const { res, seen } = await post({ site: LEGACY_STORE });
+    it('is refused with 404 and touches neither store', async () => {
+      const { res, seen } = await post({ exists: false });
 
-      assert.strictEqual(res.status, 201);
-      assert.strictEqual(seen.legacy.length, 1);
+      assert.strictEqual(res.status, 404);
+      assert.strictEqual(seen.legacy.length, 0);
       assert.strictEqual(seen.bus.length, 0);
+    });
+
+    it('says what happened in plain text', async () => {
+      const { res } = await post({ exists: false });
+
+      assert.match(res.headers.get('Content-Type'), /^text\/plain/);
+      assert.strictEqual(
+        await res.text(),
+        'There is no site at this address, so nothing was written.',
+      );
+    });
+
+    it('does not ask the caller to retry, since the site will not appear', async () => {
+      const { res } = await post({ exists: false });
+
+      assert.strictEqual(res.headers.get('Retry-After'), null);
     });
   });
 
