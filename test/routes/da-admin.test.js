@@ -463,8 +463,6 @@ describe('daSourcePost', () => {
       assert.deepStrictEqual(asked.sort(), [
         'https://config.aem.page/main--lookedupeach--org/config.json?scope=admin',
         'https://config.aem.page/main--lookedupeach--org/config.json?scope=admin',
-        'https://config.aem.page/main--lookedupeach--org/config.json?scope=pipeline',
-        'https://config.aem.page/main--lookedupeach--org/config.json?scope=pipeline',
       ]);
     });
   });

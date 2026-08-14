@@ -176,51 +176,8 @@ describe('writing to the store that holds the site', () => {
     });
   });
 
-  // the store answer comes from the config this read asks for, so a config service that cannot
-  // answer puts it in doubt as well
-  describe('when the config service cannot answer', () => {
-    const dead = () => new TypeError('fetch failed');
-
-    it('is refused with 503 and touches neither store', async () => {
-      const { res, seen } = await post({ lookupError: dead() });
-
-      assert.strictEqual(res.status, 503);
-      assert.strictEqual(seen.bus.length, 0);
-      assert.strictEqual(seen.legacy.length, 0);
-    });
-
-    it('asks the caller to retry', async () => {
-      const { res } = await post({ lookupError: dead() });
-
-      assert.ok(Number(res.headers.get('Retry-After')) > 0);
-    });
-
-    it('names the failed lookup in x-error', async () => {
-      const { res } = await post({ lookupError: dead() });
-
-      assert.match(res.headers.get('x-error'), /site lookup failed/);
-    });
-
-    // UES embeds this verbatim, and no store was asked, so "did not answer" would name the wrong
-    // failure
-    it('says the store could not be determined, not that it did not answer', async () => {
-      const { res } = await post({ lookupError: dead() });
-
-      assert.strictEqual(await res.text(), SOURCE_UNDETERMINED_MESSAGE);
-    });
-
-    // the store lookup answered legacy, and that answer is the one in doubt while the site
-    // lookup is down
-    it('is refused even when the store lookup said legacy', async () => {
-      const { res, seen } = await post({ lookupError: dead(), site: LEGACY_STORE });
-
-      assert.strictEqual(res.status, 503);
-      assert.strictEqual(seen.legacy.length, 0);
-    });
-  });
-
-  // a 404 says there is no AEM site config, not that the DA org and site are bogus. the service
-  // answered, so nothing is in doubt, and refusing here would stop saving on a DA-only site
+  // the store lookup answers 404 for a site the config service does not know, and 404 is an
+  // answer: it means no AEM site config rather than no DA site, so the write goes to da-admin
   describe('a site the config service does not know', () => {
     it('is written to da-admin all the same', async () => {
       const { res, seen } = await post({ exists: false });
@@ -232,11 +189,13 @@ describe('writing to the store that holds the site', () => {
   });
 
   describe('what a write asks about the site', () => {
-    it('asks both lookups, and reaches the store after them', async () => {
+    // the site lookup and the store lookup read the same service, and a write never reads the
+    // pipeline scope's answer, so asking it twice buys nothing
+    it('asks the store lookup only, and reaches the store after it', async () => {
       const { res, seen } = await post({});
 
       assert.strictEqual(seen.probes, 1);
-      assert.strictEqual(seen.lookups, 1);
+      assert.strictEqual(seen.lookups, 0);
       assert.strictEqual(seen.order[seen.order.length - 1], 'store');
       assert.strictEqual(res.status, 201);
     });
