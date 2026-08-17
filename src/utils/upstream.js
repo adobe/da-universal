@@ -42,16 +42,16 @@ export class UpstreamError extends Error {
 }
 
 /**
- * Runs `read` and rethrows anything it throws as an UpstreamError naming `upstream`.
+ * Runs `call` and rethrows anything it throws as an UpstreamError naming `upstream`.
  *
  * @param {string} upstream one of the names at the top of this file
- * @param {() => Promise<T>} read
+ * @param {() => Promise<T>} call
  * @returns {Promise<T>}
  * @template T
  */
-export async function reach(upstream, read) {
+export async function withUpstream(upstream, call) {
   try {
-    return await read();
+    return await call();
   } catch (e) {
     // keeps the inner upstream name rather than overwriting it
     if (e instanceof UpstreamError) throw e;
