@@ -21,7 +21,7 @@ export const SITE_LOOKUP = 'site lookup';
  */
 export function causeOf(e) {
   return `${e?.name ?? 'Error'}: ${e?.message ?? e}`
-    .replace(/[^\x20-\x7e]/g, ' ')
+    .replace(/[^\t\u0020-\u007E\u0080-\u00FF]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 1024);
