@@ -47,7 +47,7 @@ import {
   EDITOR_CONFIG,
   SITE_LOOKUP,
   UpstreamError,
-  reach,
+  withUpstream,
 } from '../utils/upstream.js';
 
 const HTML_POST_TYPE = 'text/html';
@@ -95,7 +95,7 @@ function getTextBody(data) {
 
 async function getPageTemplate(env, daCtx, aemCtx) {
   // answers null for a site with no config, so any other failure throws
-  const config = await reach(EDITOR_CONFIG, () => getEditorConfig(env, daCtx));
+  const config = await withUpstream(EDITOR_CONFIG, () => getEditorConfig(env, daCtx));
 
   // Search whether a template is configured for this path
   const matchingTemplates = config
@@ -112,7 +112,7 @@ async function getPageTemplate(env, daCtx, aemCtx) {
   }
 
   const templatePath = matchingTemplates[0].template;
-  const templateHtml = await reach(PREVIEW_HOST, () => getAEMHtml(aemCtx, templatePath));
+  const templateHtml = await withUpstream(PREVIEW_HOST, () => getAEMHtml(aemCtx, templatePath));
   if (templateHtml) {
     return templateHtml;
   }
@@ -129,7 +129,7 @@ async function getPageTemplate(env, daCtx, aemCtx) {
  * @throws {UpstreamError} when the lookup or the store fails
  */
 async function readSource(env, daCtx, init) {
-  const site = await reach(SITE_LOOKUP, () => getSiteConfig(env, daCtx));
+  const site = await withUpstream(SITE_LOOKUP, () => getSiteConfig(env, daCtx));
 
   if (!site.exists) {
     console.log(`404 ${init.method} ${daCtx.sourcePath}, there is no site ${daCtx.org}/${daCtx.site}`);
@@ -139,7 +139,7 @@ async function readSource(env, daCtx, init) {
   const store = getStore(env, daCtx, site.onSourceBus);
   console.log(`-> ${init.method} ${store.url.toString()}`);
   return {
-    response: await reach(CONTENT_STORE, () => store.fetch(store.url, init)),
+    response: await withUpstream(CONTENT_STORE, () => store.fetch(store.url, init)),
     head: site.head,
   };
 }
@@ -302,7 +302,10 @@ async function sourcePost({ req, env, daCtx }) {
 
     const bodyContent = toHtml(bodyNode);
 
-    const { exists, onSourceBus } = await reach(SITE_LOOKUP, () => getSiteConfig(env, daCtx));
+    const { exists, onSourceBus } = await withUpstream(
+      SITE_LOOKUP,
+      () => getSiteConfig(env, daCtx),
+    );
 
     if (!exists) {
       console.log(`404 POST ${sourcePath}, there is no site ${daCtx.org}/${daCtx.site}`);
@@ -319,7 +322,7 @@ async function sourcePost({ req, env, daCtx }) {
     const body = new FormData();
     body.set('data', new Blob([bodyContent], { type: 'text/html' }));
     console.log(`-> ${store.url.toString()}`);
-    const response = await reach(CONTENT_STORE, () => store.fetch(new Request(store.url, {
+    const response = await withUpstream(CONTENT_STORE, () => store.fetch(new Request(store.url, {
       method: 'POST',
       body,
       headers: { Authorization: authToken },
