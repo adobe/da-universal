@@ -14,7 +14,7 @@ import { defineConfig, globalIgnores } from '@eslint/config-helpers';
 import { recommended, source, test } from '@adobe/eslint-config-helix';
 
 export default defineConfig([
-  globalIgnores(['.vscode/*', '**/.wrangler/**', 'coverage/*']),
+  globalIgnores(['.vscode/*', '.wrangler/*', 'coverage/*']),
   {
     languageOptions: {
       ...recommended.languageOptions,

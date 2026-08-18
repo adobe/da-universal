@@ -12,9 +12,9 @@
 import { daResp, get401 } from '../responses/index.js';
 import { isTrustedOrigin } from '../utils/constants.js';
 
-async function exchangeSiteToken(env, org, site, accessToken) {
+async function exchangeSiteToken(org, site, accessToken) {
   try {
-    const response = await fetch(new URL('/auth/adobe/exchange', env.AEM_API), {
+    const response = await fetch('https://admin.hlx.page/auth/adobe/exchange', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -48,7 +48,7 @@ async function exchangeSiteToken(env, org, site, accessToken) {
   }
 }
 
-export async function getCookie({ req, env, daCtx }) {
+export async function getCookie({ req, daCtx }) {
   const { headers } = req;
 
   if (!isTrustedOrigin(headers.get('Origin'))) return daResp({ body: '403 Forbidden', status: 403, contentType: 'text/plain' });
@@ -67,7 +67,7 @@ export async function getCookie({ req, env, daCtx }) {
 
       // Try to exchange for site token
       if (org && site && !daCtx.siteToken) {
-        const siteTokenData = await exchangeSiteToken(env, org, site, cookieValue);
+        const siteTokenData = await exchangeSiteToken(org, site, cookieValue);
         if (siteTokenData) {
           // Calculate Max-Age based on token expiry time (siteTokenExpiry is in milliseconds)
           const now = Date.now();

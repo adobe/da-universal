@@ -49,21 +49,13 @@ export const UNAUTHORIZED_HTML_MESSAGE = `
 
 export const DEFAULT_HTML_TEMPLATE = '<body><header></header><main><div></div></main><footer></footer></body>';
 
-export const SITE_NOT_FOUND_HTML_MESSAGE = '<html><body><h1>404: Site not found</h1><p>There is no site at this address.</p></body></html>';
+export const BRANCH_NOT_FOUND_HTML_MESSAGE = '<html><body><h1>Not found: Unable to retrieve AEM branch</h1></body></html>';
 
-export const SITE_NOT_FOUND_MESSAGE = 'There is no site at this address, so nothing was written.';
+export const SOURCE_UNREACHABLE_HTML_MESSAGE = '<html><body><h1>503: Content store unreachable</h1><p>The store that holds this document did not answer. Please retry.</p></body></html>';
 
-export const PREVIEW_FAILED_HTML_MESSAGE = '<html><body><h1>503: Preview host failed</h1><p>The site\'s preview host could not be read. Please retry, or contact your project admin if it persists.</p></body></html>';
+export const SOURCE_UNREACHABLE_MESSAGE = 'The store that holds this document did not answer, so nothing was written. Please retry.';
 
-export const EDITOR_CONFIG_FAILED_HTML_MESSAGE = '<html><body><h1>503: Editor config failed</h1><p>The editor configuration for this site could not be read. Please retry, or contact your project admin if it persists.</p></body></html>';
-
-export const SITE_LOOKUP_FAILED_HTML_MESSAGE = '<html><body><h1>503: Site lookup failed</h1><p>Whether this site exists could not be determined. Please retry, or contact your project admin if it persists.</p></body></html>';
-
-export const SOURCE_FAILED_HTML_MESSAGE = '<html><body><h1>503: Content store failed</h1><p>The store that holds this document could not be read. Please retry, or contact your project admin if it persists.</p></body></html>';
-
-export const SOURCE_FAILED_MESSAGE = 'The store that holds this document did not answer, so nothing was written. Please retry, or contact your project admin if it persists.';
-
-export const SOURCE_UNDETERMINED_MESSAGE = 'Which store holds this document could not be determined, so nothing was written. Please retry, or contact your project admin if it persists.';
+export const SOURCE_UNDETERMINED_MESSAGE = 'Which store holds this document could not be determined, so nothing was written. Please retry.';
 
 export const SOURCE_BUS_READ_ONLY_MESSAGE = 'This site is on the source bus, which this proxy only reads. Nothing was written, and retrying will not help.';
 

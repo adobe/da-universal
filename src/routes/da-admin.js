@@ -22,60 +22,39 @@ import {
   applyQuickEditToDocument, buildQuickEditCookie, buildQuickEditNotFoundResponse,
 } from '../utils/quick-edit.js';
 import {
-  daResp, get401, get404, get415, get503, head401, head404, head503, post404, post405, post503,
+  daResp, get401, get404, get415, get503, head401, head503, post405, post503,
 } from '../responses/index.js';
 import {
+  BRANCH_NOT_FOUND_HTML_MESSAGE,
   DEFAULT_HTML_TEMPLATE,
-  SITE_LOOKUP_FAILED_HTML_MESSAGE,
-  PREVIEW_FAILED_HTML_MESSAGE,
-  EDITOR_CONFIG_FAILED_HTML_MESSAGE,
-  SITE_NOT_FOUND_HTML_MESSAGE,
-  SITE_NOT_FOUND_MESSAGE,
   SOURCE_BUS_READ_ONLY_MESSAGE,
   SOURCE_UNDETERMINED_MESSAGE,
-  SOURCE_FAILED_HTML_MESSAGE,
-  SOURCE_FAILED_MESSAGE,
+  SOURCE_UNREACHABLE_HTML_MESSAGE,
+  SOURCE_UNREACHABLE_MESSAGE,
   UNAUTHORIZED_HTML_MESSAGE,
 } from '../utils/constants.js';
-import { getEditorConfig } from '../storage/config.js';
-import getSiteConfig from '../storage/site.js';
+import { getSiteConfig } from '../storage/config.js';
+import isSourceBus from '../storage/source-bus.js';
 import getStore from '../storage/store.js';
 import { restoreAbsoluteImages } from '../render/rewrite-images.js';
-import {
-  CONTENT_STORE,
-  PREVIEW_HOST,
-  EDITOR_CONFIG,
-  SITE_LOOKUP,
-  UpstreamError,
-  withUpstream,
-} from '../utils/upstream.js';
 
 const HTML_POST_TYPE = 'text/html';
 
-/** Names the upstream that failed, since the default body names the store. */
-const UPSTREAM_FAILURE_HTML = {
-  [PREVIEW_HOST]: PREVIEW_FAILED_HTML_MESSAGE,
-  [EDITOR_CONFIG]: EDITOR_CONFIG_FAILED_HTML_MESSAGE,
-  [SITE_LOOKUP]: SITE_LOOKUP_FAILED_HTML_MESSAGE,
-};
-// a write reaches no store until the lookup answers, so a failed lookup says the destination is
-// undetermined, not that the store failed
-const UPSTREAM_FAILURE_TEXT = {
-  [SITE_LOOKUP]: SOURCE_UNDETERMINED_MESSAGE,
-};
-
 /**
- * An UpstreamError is retryable, so it is answered 503. Anything else reaches the worker boundary
- * in src/index.js, which logs it and answers 500.
+ * Renders a failure for the `x-error` header.
  */
-function refuseUpstreamFailure(e, method, sourcePath) {
-  if (!(e instanceof UpstreamError)) throw e;
-  console.warn(`503 ${method} ${sourcePath}, ${e.message}`);
-  if (method === 'HEAD') return head503(e.message);
-  if (method === 'POST') {
-    return post503(UPSTREAM_FAILURE_TEXT[e.upstream] ?? SOURCE_FAILED_MESSAGE, e.message);
-  }
-  return get503(UPSTREAM_FAILURE_HTML[e.upstream] ?? SOURCE_FAILED_HTML_MESSAGE, e.message);
+function causeOf(e) {
+  return `${e?.name ?? 'Error'}: ${e?.message ?? e}`
+    .replace(/[^\x20-\x7e]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 1024);
+}
+
+function probeFailed(e, method, sourcePath) {
+  const cause = `/ping failed: ${causeOf(e)}`;
+  console.warn(`503 ${method} ${sourcePath}, ${cause}`);
+  return cause;
 }
 
 export function isHtmlPostType(type) {
@@ -94,8 +73,12 @@ function getTextBody(data) {
 }
 
 async function getPageTemplate(env, daCtx, aemCtx) {
-  // answers null for a site with no config, so any other failure throws
-  const config = await withUpstream(EDITOR_CONFIG, () => getEditorConfig(env, daCtx));
+  let config;
+  try {
+    config = await getSiteConfig(env, daCtx);
+  } catch (e) {
+    return DEFAULT_HTML_TEMPLATE;
+  }
 
   // Search whether a template is configured for this path
   const matchingTemplates = config
@@ -112,7 +95,7 @@ async function getPageTemplate(env, daCtx, aemCtx) {
   }
 
   const templatePath = matchingTemplates[0].template;
-  const templateHtml = await withUpstream(PREVIEW_HOST, () => getAEMHtml(aemCtx, templatePath));
+  const templateHtml = await getAEMHtml(aemCtx, templatePath);
   if (templateHtml) {
     return templateHtml;
   }
@@ -121,30 +104,39 @@ async function getPageTemplate(env, daCtx, aemCtx) {
 }
 
 /**
- * Reads the document from the store that holds the site.
+ * Sends a request to a store and reports why it could not be reached at all.
  *
- * Sets `noSuchSite` when there is no such site, `response` otherwise.
- *
- * @returns {Promise<{response?: Response, noSuchSite?: boolean}>}
- * @throws {UpstreamError} when the lookup or the store fails
+ * @returns {Promise<{response?: Response, error?: string}>}
  */
-async function readSource(env, daCtx, init) {
-  const site = await withUpstream(SITE_LOOKUP, () => getSiteConfig(env, daCtx));
-
-  if (!site.exists) {
-    console.log(`404 ${init.method} ${daCtx.sourcePath}, there is no site ${daCtx.org}/${daCtx.site}`);
-    return { noSuchSite: true };
+async function reachStore(store, send) {
+  try {
+    return { response: await send() };
+  } catch (e) {
+    const error = causeOf(e);
+    console.warn(`503 ${store.url}, the store could not be reached: ${error}`);
+    return { error };
   }
-
-  const store = getStore(env, daCtx, site.onSourceBus);
-  console.log(`-> ${init.method} ${store.url.toString()}`);
-  return {
-    response: await withUpstream(CONTENT_STORE, () => store.fetch(store.url, init)),
-    head: site.head,
-  };
 }
 
-async function sourceGet({ req, env, daCtx }) {
+/**
+ * Reads from the store that holds the site.
+ *
+ * @returns {Promise<{response?: Response, error?: string}>} `error` says why there is no response
+ */
+async function readSource(env, daCtx, init) {
+  let onSourceBus;
+  try {
+    onSourceBus = await isSourceBus(env, daCtx);
+  } catch (e) {
+    return { error: probeFailed(e, init.method, daCtx.sourcePath) };
+  }
+
+  const store = getStore(env, daCtx, onSourceBus);
+  console.log(`-> ${init.method} ${store.url.toString()}`);
+  return reachStore(store, () => store.fetch(store.url, init));
+}
+
+export async function daSourceGet({ req, env, daCtx }) {
   const { ext, authToken } = daCtx;
 
   // check if Authorization header is present
@@ -166,28 +158,27 @@ async function sourceGet({ req, env, daCtx }) {
   if (ext !== 'html') {
     // for non-HTML files, simply proxy the request without processing. A refusal is passed on as
     // itself: nothing renders an image, so the da:401 shell would only corrupt it.
-    const { response, noSuchSite } = await readSource(env, daCtx, { method: 'GET', headers });
-    if (noSuchSite) return get404();
+    const { response, error } = await readSource(env, daCtx, { method: 'GET', headers });
+    if (!response) return get503(SOURCE_UNREACHABLE_HTML_MESSAGE, error);
     console.log(`<- ${daCtx.sourcePath}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
     return response;
   }
 
+  // the store lookup costs a round trip, so it runs alongside head.html rather than after it
   const aemCtx = getAemCtx(env, daCtx);
-  const { response: sourceResp, noSuchSite, head: headHtml } = await readSource(
-    env,
-    daCtx,
-    { method: 'GET', headers },
-  );
-
-  if (noSuchSite) {
+  const [headHtml, { response: sourceResp, error: sourceError }] = await Promise.all([
+    getAEMHtml(aemCtx, '/head.html'),
+    readSource(env, daCtx, { method: 'GET', headers }),
+  ]);
+  if (!headHtml) {
     // quick-edit still needs a working shell (with the import map) so the editor
-    // can load into this page, even when the site does not exist.
+    // can load into this page, even when the AEM branch doesn't exist yet.
     if (isQuickEdit) {
       return buildQuickEditNotFoundResponse();
     }
-    return get404(SITE_NOT_FOUND_HTML_MESSAGE);
+    return get404(BRANCH_NOT_FOUND_HTML_MESSAGE);
   }
-
+  if (!sourceResp) return get503(SOURCE_UNREACHABLE_HTML_MESSAGE, sourceError);
   console.log(`<- ${daCtx.sourcePath}. ${sourceResp.status} ${sourceResp.statusText}`, { status: sourceResp.status, statusText: sourceResp.statusText });
 
   // the store is the only thing to see the token, and the authorbus extension recovers off the
@@ -205,10 +196,10 @@ async function sourceGet({ req, env, daCtx }) {
   // use the stored content when available, otherwise fall back to a template
   const bodyHtml = sourceResp.status === 200
     ? await sourceResp.text()
-    : await getPageTemplate(env, daCtx, aemCtx);
+    : await getPageTemplate(env, daCtx, aemCtx, headHtml);
 
-  // builds the page without head.html, which a ref that was never built does not have
-  const documentTree = await composeHtml(daCtx, aemCtx, bodyHtml, headHtml ?? '');
+  // compose the page the same way for every request type
+  const documentTree = await composeHtml(daCtx, aemCtx, bodyHtml, headHtml);
 
   // layer the request-specific instrumentation on top of the composed page
   const extraHeaders = [];
@@ -234,16 +225,7 @@ async function sourceGet({ req, env, daCtx }) {
   });
 }
 
-/** Wraps sourceGet, turning a failed upstream read into a 503 in HTML the editor renders. */
-export async function daSourceGet({ req, env, daCtx }) {
-  try {
-    return await sourceGet({ req, env, daCtx });
-  } catch (e) {
-    return refuseUpstreamFailure(e, 'GET', daCtx.sourcePath);
-  }
-}
-
-async function sourceHead({ env, daCtx }) {
+export async function daSourceHead({ env, daCtx }) {
   const { authToken } = daCtx;
 
   if (!authToken) {
@@ -253,22 +235,13 @@ async function sourceHead({ env, daCtx }) {
   const headers = new Headers();
   headers.set('Authorization', authToken);
 
-  const { response, noSuchSite } = await readSource(env, daCtx, { method: 'HEAD', headers });
-  if (noSuchSite) return head404();
+  const { response, error } = await readSource(env, daCtx, { method: 'HEAD', headers });
+  if (!response) return head503(error);
   console.log(`<- HEAD ${daCtx.sourcePath}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
   return new Response(null, { status: response.status, headers: response.headers });
 }
 
-/** Wraps sourceHead, turning a failed upstream read into a bodyless 503. */
-export async function daSourceHead({ env, daCtx }) {
-  try {
-    return await sourceHead({ env, daCtx });
-  } catch (e) {
-    return refuseUpstreamFailure(e, 'HEAD', daCtx.sourcePath);
-  }
-}
-
-async function sourcePost({ req, env, daCtx }) {
+export async function daSourcePost({ req, env, daCtx }) {
   const { sourcePath, ext, authToken } = daCtx;
 
   // the body is rewritten as HTML below, so anything but an HTML document would be
@@ -302,14 +275,13 @@ async function sourcePost({ req, env, daCtx }) {
 
     const bodyContent = toHtml(bodyNode);
 
-    const { exists, onSourceBus } = await withUpstream(
-      SITE_LOOKUP,
-      () => getSiteConfig(env, daCtx),
-    );
-
-    if (!exists) {
-      console.log(`404 POST ${sourcePath}, there is no site ${daCtx.org}/${daCtx.site}`);
-      return post404(SITE_NOT_FOUND_MESSAGE);
+    // the payload is settled, so the only question left is where it goes
+    let onSourceBus;
+    try {
+      onSourceBus = await isSourceBus(env, daCtx);
+    } catch (e) {
+      const cause = probeFailed(e, 'POST', sourcePath);
+      return post503(SOURCE_UNDETERMINED_MESSAGE, cause);
     }
 
     if (onSourceBus) {
@@ -322,26 +294,15 @@ async function sourcePost({ req, env, daCtx }) {
     const body = new FormData();
     body.set('data', new Blob([bodyContent], { type: 'text/html' }));
     console.log(`-> ${store.url.toString()}`);
-    const response = await withUpstream(CONTENT_STORE, () => store.fetch(new Request(store.url, {
+    const { response, error } = await reachStore(store, () => store.fetch(new Request(store.url, {
       method: 'POST',
       body,
       headers: { Authorization: authToken },
     })));
+    if (!response) return post503(SOURCE_UNREACHABLE_MESSAGE, error);
     console.log(`<- ${store.url.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
     return response;
   }
 
   return get415();
-}
-
-/**
- * Wraps sourcePost, turning a failed upstream read into the plain text the editor shows the
- * author.
- */
-export async function daSourcePost({ req, env, daCtx }) {
-  try {
-    return await sourcePost({ req, env, daCtx });
-  } catch (e) {
-    return refuseUpstreamFailure(e, 'POST', daCtx.sourcePath);
-  }
 }
