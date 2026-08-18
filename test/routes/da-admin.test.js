@@ -125,6 +125,9 @@ describe('daSourceGet', () => {
       },
       '../../src/utils/aemCtx.js': {
         getAemCtx: () => ({}),
+        // the UE branch reads /head.html off the preview host; stub it so this
+        // suite's focus (UE / quick-edit / composeHtml wiring) is not tangled with it
+        getAEMHtml: async () => undefined,
       },
       '../../src/render/compose.js': {
         composeHtml: async (daCtx, aemCtx, bodyHtml) => {

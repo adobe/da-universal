@@ -687,6 +687,48 @@ describe('reading from the store that holds the site', () => {
       assert.ok(!html.includes('ab-src'), 'no marker on the connection uri');
       assert.ok(!html.includes('content-store'), 'no marker on the connection uri');
     });
+
+    // a preview host behind Helix authentication refuses /head.html without the site token, so
+    // the token has to reach the fetch. the fixture-level tests mock getAEMHtml directly and
+    // never inspect the aemCtx it was given, which leaves this delegation unpinned. an inline
+    // esmock keeps the real getAEMHtml, so a future refactor that swaps it for a bare fetch or
+    // drops the aemCtx argument fails here rather than silently at runtime
+    it('carries the site token on the preview-host /head.html fetch', async () => {
+      const seenReq = [];
+      globalThis.fetch = async (input, init) => {
+        const url = typeof input === 'string' ? input : input.url;
+        const rawHeaders = init?.headers ?? (input instanceof Request ? input.headers : undefined);
+        const headers = new Headers(rawHeaders);
+        seenReq.push({ url, auth: headers.get('Authorization') });
+        return new Response('<meta name="preview-head" />', { status: 200 });
+      };
+      const env = {
+        DA_ADMIN: 'https://admin.da.live',
+        AEM_API: 'https://api.aem.live',
+        daadmin: { fetch: async () => new Response('<body></body>', { status: 200 }) },
+      };
+      // real aemCtx.js, so withAemAuth is exercised. compose is stubbed to keep
+      // metadata.json out of the picture so seenReq holds only the /head.html fetch
+      const { daSourceGet } = await esmock('../../src/routes/da-admin.js', {
+        '../../src/storage/site.js': {
+          default: async () => ({ exists: true, head: '<meta name="from-config" />', onSourceBus: false }),
+        },
+        '../../src/render/compose.js': {
+          composeHtml: async () => ({ type: 'root', children: [] }),
+          serializeHtml: () => '<html>composed</html>',
+        },
+        '../../src/ue/ue.js': { applyUEInstrumentation: async () => {} },
+      });
+      const req = new Request('https://main--site--org.ue.da.live/folder/content', {
+        headers: { Authorization: 'Bearer t', 'x-site-token': 'siteTok' },
+      });
+
+      await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      const headFetch = seenReq.find((r) => r.url.endsWith('/head.html'));
+      assert.ok(headFetch, '/head.html was fetched');
+      assert.strictEqual(headFetch.auth, 'siteTok');
+    });
   });
 
   describe('a non-html read', () => {
@@ -1146,6 +1188,35 @@ describe('reading from the store that holds the site', () => {
       assert.strictEqual(res.status, 404);
       assert.match(await res.text(), /importmap/);
     });
+
+    // the preview host fetch runs alongside the source read, and the site's absence has to win
+    // over a preview host that could not answer, else a page that will never work reads as one
+    // that a retry might
+    it('is 404, not 503, when the preview host fails too on a UE host', async () => {
+      const { daSourceGet, env } = await build({
+        site: NO_SITE,
+        previewHeadError: new TypeError('fetch failed'),
+      });
+      const req = authedReq('https://main--gone--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 404);
+      assert.match(await res.text(), /Site not found/);
+    });
+
+    it('serves the quick-edit shell, not a 503, when the preview host fails too', async () => {
+      const { daSourceGet, env } = await build({
+        site: NO_SITE,
+        previewHeadError: new TypeError('fetch failed'),
+      });
+      const req = authedReq('https://main--gone--org.ue.da.live/folder/content?quick-edit');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 404);
+      assert.match(await res.text(), /importmap/);
+    });
   });
 });
 
@@ -1336,7 +1407,8 @@ describe('a path the editor config gives a template', () => {
     const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
     assert.match(await res.text(), /<main>/);
-    assert.deepStrictEqual(seen.aem, []);
+    // the preview host is also asked for /head.html on a UE host, so filter that out here
+    assert.deepStrictEqual(seen.aem.filter((p) => p !== '/head.html'), []);
   });
 
   // the config names a path the preview host answers 404 for, which leaves the starter
