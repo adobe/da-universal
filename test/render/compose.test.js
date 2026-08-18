@@ -66,4 +66,27 @@ describe('render compose', () => {
     assert.ok(!html.includes('urn:adobe:aue'));
     assert.ok(!html.includes('universal-editor-service'));
   });
+  it('drops a CSP meta the pipeline would have moved to a header', async () => {
+    const cspHead = '<meta http-equiv="Content-Security-Policy"'
+      + ' content="script-src \'nonce-aem\' \'strict-dynamic\';"'
+      + ' move-to-http-header="true" />'
+      + '<script nonce="aem" src="/scripts/aem.js" type="module"></script>';
+
+    const tree = await composeHtml(daCtx, aemCtx, '<div><p>content</p></div>', cspHead);
+    const html = serializeHtml(tree);
+
+    assert.ok(!html.includes('Content-Security-Policy'));
+    assert.ok(!html.includes('move-to-http-header'));
+    // the rest of head.html is untouched
+    assert.ok(html.includes('src="/scripts/aem.js"'));
+  });
+
+  it('keeps a CSP meta the pipeline would have left in place', async () => {
+    const cspHead = '<meta http-equiv="Content-Security-Policy" content="object-src \'none\';" />';
+
+    const tree = await composeHtml(daCtx, aemCtx, '<div><p>content</p></div>', cspHead);
+    const html = serializeHtml(tree);
+
+    assert.ok(html.includes('Content-Security-Policy'));
+  });
 });
