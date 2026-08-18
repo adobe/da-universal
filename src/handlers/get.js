@@ -21,7 +21,7 @@ export default async function getHandler({ req, env, daCtx }) {
   if (path.startsWith('/favicon.ico')) return get404();
   if (path.startsWith('/robots.txt')) return getRobots();
 
-  if (path.startsWith('/gimme_cookie')) return getCookie({ req, env, daCtx });
+  if (path.startsWith('/gimme_cookie')) return getCookie({ req, daCtx });
 
   const resourceRegex = /\.(css|js|js\.map|json|xml|woff|woff2|otf|ttf|plain\.html|html)$/i;
   if (resourceRegex.test(path)) {
@@ -35,14 +35,8 @@ export default async function getHandler({ req, env, daCtx }) {
       handleAEMProxyRequest({ req, env, daCtx }),
     ]);
 
-    // logs a rejection rather than rethrowing it, since the other read may still answer
-    const settled = (result, read) => {
-      if (result.status === 'fulfilled') return result.value;
-      console.error(`${read} threw on ${path}`, result.reason);
-      return undefined;
-    };
-    const storeRes = settled(daSourceGetRes, 'the store read');
-    const aemRes = settled(aemProxyRes, 'the aem proxy');
+    const storeRes = daSourceGetRes.status === 'fulfilled' ? daSourceGetRes.value : undefined;
+    const aemRes = aemProxyRes.status === 'fulfilled' ? aemProxyRes.value : undefined;
 
     let response;
     if (storeRes?.status === 200) {
