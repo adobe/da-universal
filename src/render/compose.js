@@ -33,6 +33,15 @@ function injectAEMHtmlHeadEntries(daCtx, headNode, headHtmlStr) {
   const { org, site, orgSiteInPath } = daCtx;
   const aemHeadHtmlTree = fromHtml(headHtmlStr, { fragment: true });
 
+  // the config service hands over head.html as the code bus holds it, so a meta the pipeline
+  // would have turned into a response header is still a meta here. Emitting it applies a CSP
+  // the page was never meant to carry, and the UE scripts injected later have no nonce.
+  aemHeadHtmlTree.children = aemHeadHtmlTree.children.filter(
+    (node) => !(node.type === 'element'
+      && node.tagName === 'meta'
+      && node.properties?.['move-to-http-header'] !== undefined),
+  );
+
   // TODO: reuse fixUrlsWhenLocalDev from aemCtx.js instead of duplicating.
   if (orgSiteInPath) {
     const headScriptsAndLinks = selectAll(
