@@ -37,13 +37,14 @@ const build = async (overrides = {}) => {
   } = overrides;
   // `in overrides` rather than a destructured default on these, so an explicit undefined reads
   // as a ref with no head.html, a template the preview host does not have, or a failed lookup
-  const headHtml = 'headHtml' in overrides ? overrides.headHtml : '<meta name="from" content="aem" />';
+  const headHtml = 'headHtml' in overrides ? overrides.headHtml : '<meta name="from-config" content="aem" />';
+  const previewHead = 'previewHead' in overrides ? overrides.previewHead : '<meta name="from-preview" content="aem" />';
   const templateHtml = 'templateHtml' in overrides
     ? overrides.templateHtml
     : '<body>from the template</body>';
   const site = 'site' in overrides ? overrides.site : LEGACY_STORE;
   const {
-    lookupError, templateError, configError, composeError, config = null,
+    lookupError, templateError, previewHeadError, configError, composeError, config = null,
   } = overrides;
   const seen = {
     bus: [], legacy: [], head: [], aem: [], ue: 0, lookups: 0,
@@ -76,11 +77,15 @@ const build = async (overrides = {}) => {
     },
     '../../src/utils/aemCtx.js': {
       getAemCtx: () => ({ previewUrl: 'https://main--site--org.aem.page' }),
-      // the template is the preview host read this stub owns. composeHtml reads metadata.json off
-      // the same host, and it is stubbed below, so the suite never sees that one
+      // the preview host serves both head.html and a template. composeHtml reads metadata.json
+      // off the same host, and it is stubbed below, so the suite never sees that one
       getAEMHtml: async (aemCtx, path) => {
-        if (templateError) throw templateError;
         seen.aem.push(path);
+        if (path === '/head.html') {
+          if (previewHeadError) throw previewHeadError;
+          return previewHead;
+        }
+        if (templateError) throw templateError;
         return templateHtml;
       },
     },
@@ -863,7 +868,7 @@ describe('reading from the store that holds the site', () => {
 
     it('reports an unreachable store on a site with no head.html', async () => {
       const { daSourceGet, env } = await build({
-        headHtml: undefined,
+        previewHead: undefined,
         legacy: () => { throw new TypeError('fetch failed'); },
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -876,27 +881,54 @@ describe('reading from the store that holds the site', () => {
 
   // the config service reads head.html off the code bus, which a site behind Helix authentication
   // serves to the worker's own token while its preview host refuses it
+  // the config service returns the raw code-bus head.html: the CSP meta still carries
+  // move-to-http-header and 'nonce-aem', and the script tags still carry nonce="aem". UE
+  // injects its own scripts on top, and none of those carry that nonce, so the browser
+  // refuses them. the preview host runs the pipeline that rewrites the nonces. non-UE hosts
+  // render the composed page as-is, so the raw meta and the raw nonces match and the config
+  // service's head is fine there, one fewer round-trip
   describe('where the page head comes from', () => {
-    it('reads it off the config service, and asks the preview host for nothing', async () => {
+    it('is the preview host on a UE host', async () => {
       const { daSourceGet, env, seen } = await build();
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-      assert.strictEqual(seen.lookups, 1);
-      assert.deepStrictEqual(seen.aem, []);
+      assert.strictEqual(seen.head[0], '<meta name="from-preview" content="aem" />');
+      assert.ok(seen.aem.includes('/head.html'));
     });
 
-    it('composes the page with it', async () => {
+    it('is the preview host on a stage UE host too', async () => {
       const { daSourceGet, env, seen } = await build();
-      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+      const req = authedReq('https://main--site--org.stage-ue.da.live/folder/content');
 
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
-      assert.strictEqual(seen.head[0], '<meta name="from" content="aem" />');
+      assert.strictEqual(seen.head[0], '<meta name="from-preview" content="aem" />');
+      assert.ok(seen.aem.includes('/head.html'));
     });
 
-    // the pipeline scope answers existence, head.html and the store together
+    it('is the config service on a preview host', async () => {
+      const { daSourceGet, env, seen } = await build();
+      const req = authedReq('https://main--site--org.preview.da.live/folder/content');
+
+      await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(seen.head[0], '<meta name="from-config" content="aem" />');
+      assert.ok(!seen.aem.includes('/head.html'));
+    });
+
+    it('is the config service on localhost', async () => {
+      const { daSourceGet, env, seen } = await build();
+      const req = authedReq('http://localhost:8787/folder/content');
+
+      await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(seen.head[0], '<meta name="from-config" content="aem" />');
+      assert.ok(!seen.aem.includes('/head.html'));
+    });
+
+    // the pipeline scope answers existence and the store together
     it('reads the config service once for a page', async () => {
       const { daSourceGet, env, seen } = await build();
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -906,8 +938,8 @@ describe('reading from the store that holds the site', () => {
       assert.strictEqual(seen.lookups, 1);
     });
 
-    // nothing composes an image, and the head that arrives with the existence answer is dropped
-    it('reads the config service once for an asset, and no more', async () => {
+    // nothing composes an image, and neither head is read for a non-html read
+    it('is not read for an asset', async () => {
       const { daSourceGet, env, seen } = await build();
       const req = authedReq('https://main--site--org.ue.da.live/folder/photo.png');
 
@@ -915,9 +947,10 @@ describe('reading from the store that holds the site', () => {
 
       assert.strictEqual(seen.lookups, 1);
       assert.deepStrictEqual(seen.head, []);
+      assert.ok(!seen.aem.includes('/head.html'));
     });
 
-    it('reads the config service once on a HEAD, and no more', async () => {
+    it('is not read on a HEAD', async () => {
       const { daSourceHead, env, seen } = await build();
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
@@ -925,13 +958,14 @@ describe('reading from the store that holds the site', () => {
 
       assert.strictEqual(seen.lookups, 1);
       assert.deepStrictEqual(seen.head, []);
+      assert.ok(!seen.aem.includes('/head.html'));
     });
   });
 
   // #258: head.html does not say whether a site exists, so a missing head.html is not a 404
   describe('when the site serves no head.html', () => {
     it('reads the document anyway', async () => {
-      const { daSourceGet, env, seen } = await build({ headHtml: undefined });
+      const { daSourceGet, env, seen } = await build({ previewHead: undefined });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
@@ -943,7 +977,7 @@ describe('reading from the store that holds the site', () => {
 
     // serves the page without the project's css and js rather than not at all
     it('composes with no project head entries', async () => {
-      const { daSourceGet, env, seen } = await build({ headHtml: undefined });
+      const { daSourceGet, env, seen } = await build({ previewHead: undefined });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       await daSourceGet({ req, env, daCtx: getDaCtx(req) });
@@ -954,7 +988,7 @@ describe('reading from the store that holds the site', () => {
 
     it('composes the starter template when the document is missing too', async () => {
       const { daSourceGet, env } = await build({
-        headHtml: undefined,
+        previewHead: undefined,
         legacy: () => new Response('', { status: 404 }),
       });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
@@ -966,7 +1000,7 @@ describe('reading from the store that holds the site', () => {
     });
 
     it('instruments UE without a head', async () => {
-      const { daSourceGet, env, seen } = await build({ headHtml: undefined });
+      const { daSourceGet, env, seen } = await build({ previewHead: undefined });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
@@ -977,7 +1011,7 @@ describe('reading from the store that holds the site', () => {
 
     // sets no cookie: the cookie names the entry script, and no head.html means no entry script
     it('serves quick-edit the page without an entry-script cookie', async () => {
-      const { daSourceGet, env } = await build({ headHtml: undefined });
+      const { daSourceGet, env } = await build({ previewHead: undefined });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content?quick-edit');
 
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
@@ -987,12 +1021,83 @@ describe('reading from the store that holds the site', () => {
     });
 
     it('is not answered 404 by a missing head.html alone', async () => {
-      const { daSourceGet, env } = await build({ headHtml: undefined });
+      const { daSourceGet, env } = await build({ previewHead: undefined });
       const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
       assert.notStrictEqual(res.status, 404);
+    });
+  });
+
+  // the preview host answers /head.html separately from the store, and the fetch runs alongside
+  // the source read so a UE page is still one round-trip
+  describe('when the preview host cannot answer head.html on a UE host', () => {
+    it('refuses an html read with 503', async () => {
+      const { daSourceGet, env } = await build({
+        previewHeadError: new TypeError('fetch failed'),
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 503);
+    });
+
+    it('names the preview host in x-error', async () => {
+      const { daSourceGet, env } = await build({
+        previewHeadError: new TypeError('fetch failed'),
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.match(res.headers.get('x-error'), /preview host failed/);
+    });
+
+    it('renders the preview-host failure body', async () => {
+      const { daSourceGet, env } = await build({
+        previewHeadError: new TypeError('fetch failed'),
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(await res.text(), messages.PREVIEW_FAILED_HTML_MESSAGE);
+    });
+
+    it('names the cause, not a category', async () => {
+      const { daSourceGet, env } = await build({
+        previewHeadError: new DOMException('timed out', 'TimeoutError'),
+      });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.headers.get('x-error'), 'preview host failed: TimeoutError: timed out');
+    });
+
+    // getAEMHtml returns undefined for 404, so a ref that was never previewed does not fail
+    it('answers 200 with an empty head when the preview host has no head.html', async () => {
+      const { daSourceGet, env, seen } = await build({ previewHead: undefined });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(seen.head[0] ?? '', '');
+    });
+
+    // the preview host is only read on UE, so the non-UE path cannot fail on it
+    it('does not fail a preview-host read on a non-UE host', async () => {
+      const { daSourceGet, env } = await build({
+        previewHeadError: new TypeError('fetch failed'),
+      });
+      const req = authedReq('https://main--site--org.preview.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 200);
     });
   });
 
