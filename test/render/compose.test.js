@@ -77,6 +77,7 @@ describe('render compose', () => {
 
     assert.ok(!html.includes('Content-Security-Policy'));
     assert.ok(!html.includes('move-to-http-header'));
+    assert.ok(!html.includes('nonce="aem"'));
     // the rest of head.html is untouched
     assert.ok(html.includes('src="/scripts/aem.js"'));
   });
