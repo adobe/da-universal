@@ -14,10 +14,18 @@
 import assert from 'assert';
 import esmock from 'esmock';
 import { getDaCtx } from '../../src/utils/daCtx.js';
-import { SOURCE_BUS_READ_ONLY_MESSAGE, SOURCE_UNDETERMINED_MESSAGE } from '../../src/utils/constants.js';
+import {
+  SITE_NOT_FOUND_MESSAGE,
+  SOURCE_BUS_READ_ONLY_MESSAGE,
+  SOURCE_UNDETERMINED_MESSAGE,
+} from '../../src/utils/constants.js';
 
 const AT = 'https://main--site--org.ue.da.live/folder/content';
 const DOC = '<body><main><div><p>the author typed this</p></div></main></body>';
+
+// what the store lookup answers
+const SOURCE_BUS = true;
+const LEGACY_STORE = false;
 
 /** The shape the Universal Editor Service posts: a `data` blob in a multipart form. */
 const uePost = (url, html = DOC) => {
@@ -27,13 +35,10 @@ const uePost = (url, html = DOC) => {
 };
 
 const build = async (overrides = {}) => {
-  const { status = 201 } = overrides;
-  // `in overrides` rather than a destructured default, so passing an explicit undefined really
-  // does simulate a probe that could not answer
-  const onSourceBus = 'onSourceBus' in overrides ? overrides.onSourceBus : false;
-  const probeError = 'probeError' in overrides ? overrides.probeError : new TypeError('fetch failed');
+  const { status = 201, busError, exists = true } = overrides;
+  const onSourceBus = 'site' in overrides ? overrides.site : LEGACY_STORE;
   const seen = {
-    bus: [], legacy: [], lookups: 0, order: [],
+    bus: [], legacy: [], probes: 0, order: [],
   };
   const capture = async (request) => {
     const contentType = request.headers.get('Content-Type');
@@ -69,13 +74,12 @@ const build = async (overrides = {}) => {
     },
   };
   const mod = await esmock('../../src/routes/da-admin.js', {
-    '../../src/storage/source-bus.js': {
+    '../../src/storage/site.js': {
       default: async () => {
-        seen.lookups += 1;
+        seen.probes += 1;
         seen.order.push('lookup');
-        // the probe reports a failure by throwing, so undefined stands for "could not answer"
-        if (onSourceBus === undefined) throw probeError;
-        return onSourceBus;
+        if (busError) throw busError;
+        return { exists, head: undefined, onSourceBus };
       },
     },
   });
@@ -98,7 +102,7 @@ describe('writing to the store that holds the site', () => {
   // the document at 201 for a key nothing serves, so the write is refused rather than misplaced
   describe('a source-bus site', () => {
     it('is refused with 405 and touches neither store', async () => {
-      const { res, seen } = await post({ onSourceBus: true });
+      const { res, seen } = await post({ site: SOURCE_BUS });
 
       assert.strictEqual(res.status, 405);
       assert.strictEqual(seen.bus.length, 0);
@@ -106,13 +110,13 @@ describe('writing to the store that holds the site', () => {
     });
 
     it('names the methods that are left', async () => {
-      const { res } = await post({ onSourceBus: true });
+      const { res } = await post({ site: SOURCE_BUS });
 
       assert.strictEqual(res.headers.get('Allow'), 'GET, HEAD, OPTIONS');
     });
 
     it('does not ask the caller to retry, since retrying cannot help', async () => {
-      const { res } = await post({ onSourceBus: true });
+      const { res } = await post({ site: SOURCE_BUS });
 
       assert.strictEqual(res.headers.get('Retry-After'), null);
     });
@@ -120,7 +124,7 @@ describe('writing to the store that holds the site', () => {
     // nothing renders a POST body, and UES embeds it verbatim in its problem+json error string,
     // so the exact text is what the author is shown
     it('says what happened in plain text', async () => {
-      const { res } = await post({ onSourceBus: true });
+      const { res } = await post({ site: SOURCE_BUS });
 
       assert.match(res.headers.get('Content-Type'), /^text\/plain/);
       assert.strictEqual(await res.text(), SOURCE_BUS_READ_ONLY_MESSAGE);
@@ -129,9 +133,11 @@ describe('writing to the store that holds the site', () => {
 
   // a write is the one operation a wrong store cannot be walked back from, so no answer means no
   // write rather than a guess
-  describe('when /ping cannot say which store holds the site', () => {
+  describe('when the probe cannot say which store holds the site', () => {
+    const dead = () => new TypeError('fetch failed');
+
     it('is refused with 503 and touches neither store', async () => {
-      const { res, seen } = await post({ onSourceBus: undefined });
+      const { res, seen } = await post({ busError: dead() });
 
       assert.strictEqual(res.status, 503);
       assert.strictEqual(seen.bus.length, 0);
@@ -139,30 +145,65 @@ describe('writing to the store that holds the site', () => {
     });
 
     it('asks the caller to retry, unlike the source-bus refusal', async () => {
-      const { res } = await post({ onSourceBus: undefined });
+      const { res } = await post({ busError: dead() });
 
       assert.ok(Number(res.headers.get('Retry-After')) > 0);
     });
 
     it('says which of the two refusals it is', async () => {
-      const { res } = await post({ onSourceBus: undefined });
+      const { res } = await post({ busError: dead() });
 
       assert.strictEqual(await res.text(), SOURCE_UNDETERMINED_MESSAGE);
     });
 
     it('names the failed probe in x-error', async () => {
-      const { res } = await post({ onSourceBus: undefined });
+      const { res } = await post({ busError: dead() });
 
-      assert.match(res.headers.get('x-error'), /ping/);
+      assert.match(res.headers.get('x-error'), /site lookup failed/);
     });
 
-    it('carries the probe cause, not a category', async () => {
+    it('names the cause, not a category', async () => {
       const { res } = await post({
-        onSourceBus: undefined,
-        probeError: new DOMException('timed out', 'TimeoutError'),
+        busError: new DOMException('timed out', 'TimeoutError'),
       });
 
-      assert.strictEqual(res.headers.get('x-error'), '/ping failed: TimeoutError: timed out');
+      assert.strictEqual(res.headers.get('x-error'), 'site lookup failed: TimeoutError: timed out');
+    });
+  });
+
+  // a read of the same path answers 404, and a write the reader cannot get back is worse than a
+  // refusal the author sees
+  describe('a site the config service does not know', () => {
+    it('is refused with 404 and touches neither store', async () => {
+      const { res, seen } = await post({ exists: false });
+
+      assert.strictEqual(res.status, 404);
+      assert.strictEqual(seen.legacy.length, 0);
+      assert.strictEqual(seen.bus.length, 0);
+    });
+
+    it('says what happened in plain text', async () => {
+      const { res } = await post({ exists: false });
+
+      assert.match(res.headers.get('Content-Type'), /^text\/plain/);
+      assert.strictEqual(await res.text(), SITE_NOT_FOUND_MESSAGE);
+    });
+
+    it('does not ask the caller to retry, since the site will not appear', async () => {
+      const { res } = await post({ exists: false });
+
+      assert.strictEqual(res.headers.get('Retry-After'), null);
+    });
+  });
+
+  describe('what a write asks about the site', () => {
+    // one read of the pipeline scope answers where the document goes
+    it('asks one lookup, and reaches the store after it', async () => {
+      const { res, seen } = await post({});
+
+      assert.strictEqual(seen.probes, 1);
+      assert.strictEqual(seen.order[seen.order.length - 1], 'store');
+      assert.strictEqual(res.status, 201);
     });
   });
 
@@ -247,19 +288,20 @@ describe('writing to the store that holds the site', () => {
     });
   });
 
-  describe('the store lookup on a write', () => {
+  describe('the lookup on a write', () => {
     // a legacy write is the case that can tell the two orderings apart: the store is reached
     // either way, so only the sequence says whether the write went out before it was placed
     it('happens before anything is sent to a store', async () => {
       const { seen } = await post({});
 
-      assert.deepStrictEqual(seen.order, ['lookup', 'store']);
+      assert.deepStrictEqual(seen.order.slice(-1), ['store']);
+      assert.ok(seen.order.includes('lookup'));
     });
 
     it('happens on a source-bus site too, which is what the refusal rests on', async () => {
-      const { seen } = await post({ onSourceBus: true });
+      const { seen } = await post({ site: SOURCE_BUS });
 
-      assert.strictEqual(seen.lookups, 1);
+      assert.strictEqual(seen.probes, 1);
     });
   });
 
@@ -287,7 +329,7 @@ describe('writing to the store that holds the site', () => {
 
       const res = await daSourcePost({ req, env, daCtx: getDaCtx(req) });
 
-      assert.strictEqual(res.headers.get('x-error'), 'TypeError: Network connection lost');
+      assert.strictEqual(res.headers.get('x-error'), 'content store failed: TypeError: Network connection lost');
     });
   });
 
@@ -295,13 +337,13 @@ describe('writing to the store that holds the site', () => {
     // driven on a source-bus site, so the 415 has to come from the extension check rather than
     // from the refusal below it. on a legacy site either ordering would pass.
     it('is refused before anything is resolved', async () => {
-      const { daSourcePost, env, seen } = await build({ onSourceBus: true });
+      const { daSourcePost, env, seen } = await build({ site: SOURCE_BUS });
       const req = uePost('https://main--site--org.ue.da.live/folder/data.json');
 
       const res = await daSourcePost({ req, env, daCtx: getDaCtx(req) });
 
       assert.strictEqual(res.status, 415);
-      assert.strictEqual(seen.lookups, 0);
+      assert.strictEqual(seen.probes, 0);
       assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
     });
   });
