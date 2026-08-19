@@ -142,6 +142,20 @@ describe('getCookie', () => {
       assert.strictEqual(calls.length, 0);
     });
 
+    // the stage experience shell has to reach the stage worker so the stage UE path has a
+    // first-class entry point
+    it('trusts the stage experience shell', async () => {
+      stubFetch(mints);
+
+      const res = await getCookie({
+        req: req({ origin: 'https://experience-stage.adobe.com' }),
+        env,
+        daCtx: daCtx(),
+      });
+
+      assert.notStrictEqual(res.status, 403);
+    });
+
     it('answers 401 without an Authorization header', async () => {
       stubFetch(mints);
 
