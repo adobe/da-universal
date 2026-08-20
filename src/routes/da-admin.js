@@ -154,8 +154,8 @@ async function sourceGet({ req, env, daCtx }) {
   }
 
   // determine the request type before `req` is reassigned to the admin request.
-  // quick-edit takes precedence; UE is gated on the hostname; everything else
-  // (preview hosts, local dev) renders the composed page as-is.
+  // quick-edit takes precedence; UE is gated on its hosted suffixes or configured local host;
+  // preview hosts render the composed page as-is.
   const url = new URL(req.url);
   const isQuickEdit = url.searchParams.has('quick-edit');
   const isUE = url.hostname.endsWith('.ue.da.live')

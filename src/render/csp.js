@@ -48,8 +48,9 @@ function createNonce() {
  *   page carries no policy that asks for one
  */
 export default function applyCsp(documentTree) {
-  const meta = select('meta[http-equiv="content-security-policy"]', documentTree)
-    || select('meta[http-equiv="Content-Security-Policy"]', documentTree);
+  // head.html owns the policy and placeholders; the body is author content that round-trips
+  const scope = select('head', documentTree) ?? documentTree;
+  const meta = select('meta[http-equiv="content-security-policy" i]', scope);
   const content = meta?.properties.content;
   if (typeof content !== 'string' || !content.includes(NONCE_AEM)) {
     return undefined;
@@ -65,7 +66,7 @@ export default function applyCsp(documentTree) {
   delete meta.properties['move-to-http-header'];
   delete meta.properties['move-as-header'];
 
-  visit(documentTree, (node) => {
+  visit(scope, (node) => {
     if (node.properties?.nonce !== 'aem') return;
 
     if (scriptNonce
