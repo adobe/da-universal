@@ -26,7 +26,7 @@ describe('applyCsp', () => {
     </head><body></body></html>`);
 
     const nonce = applyCsp(tree);
-    const meta = select('meta[http-equiv="content-security-policy"]', tree);
+    const meta = select('meta', tree);
     const script = select('script', tree);
 
     assert.ok(nonce);
@@ -63,7 +63,7 @@ describe('applyCsp', () => {
       </head></html>`);
 
       const nonce = applyCsp(tree);
-      const content = select('meta', tree).properties.content;
+      const { content } = select('meta', tree).properties;
 
       assert.ok(content.includes(`script-src 'nonce-${nonce}' 'strict-dynamic'`));
       assert.ok(content.includes("object-src 'none'"));

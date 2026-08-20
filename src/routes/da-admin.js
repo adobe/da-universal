@@ -17,6 +17,7 @@ import putHelper from '../helpers/source.js';
 import { removeUEAttributes, unwrapParagraphs } from '../ue/attributes.js';
 import { applyUEInstrumentation } from '../ue/ue.js';
 import { composeHtml, serializeHtml } from '../render/compose.js';
+import applyCsp from '../render/csp.js';
 import { getAemCtx, getAEMHtml } from '../utils/aemCtx.js';
 import {
   applyQuickEditToDocument, buildQuickEditCookie, buildQuickEditNotFoundResponse,
@@ -217,18 +218,19 @@ async function sourceGet({ req, env, daCtx }) {
 
   // builds the page without head.html, which a ref that was never built does not have
   const documentTree = await composeHtml(daCtx, aemCtx, bodyHtml, headHtml ?? '');
+  const nonce = applyCsp(documentTree);
 
   // layer the request-specific instrumentation on top of the composed page
   const extraHeaders = [];
   if (isQuickEdit) {
-    // no upstream AEM CSP to satisfy here, so no nonce is applied
-    const entryPath = applyQuickEditToDocument(documentTree, undefined);
+    // the composed head owns its policy because applyCsp rewrote it
+    const entryPath = applyQuickEditToDocument(documentTree, nonce);
     if (entryPath) {
       console.log(`[quick-edit] doc compose: entry script ${entryPath} found, setting cookie`);
       extraHeaders.push(['Set-Cookie', buildQuickEditCookie(entryPath)]);
     }
   } else if (isUE) {
-    await applyUEInstrumentation(documentTree, daCtx, aemCtx);
+    await applyUEInstrumentation(documentTree, daCtx, aemCtx, nonce);
   }
 
   const body = serializeHtml(documentTree);

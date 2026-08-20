@@ -13,7 +13,7 @@
 import { h } from 'hastscript';
 import { withAemAuth } from '../utils/aemCtx.js';
 
-export function getUEHtmlHeadEntries(daCtx, aemCtx) {
+export function getUEHtmlHeadEntries(daCtx, aemCtx, nonce) {
   const {
     org,
     site,
@@ -49,6 +49,7 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
     h('script', {
       src: 'https://universal-editor-service.adobe.io/cors.js',
       async: '',
+      ...(nonce === undefined ? {} : { nonce }),
     }),
   );
   children.push(
@@ -57,6 +58,7 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
       src: orgSiteInPath
         ? `/${org}/${site}/component-definition.json`
         : '/component-definition.json',
+      ...(nonce === undefined ? {} : { nonce }),
     }),
   );
   children.push(
@@ -65,6 +67,7 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
       src: orgSiteInPath
         ? `/${org}/${site}/component-models.json`
         : '/component-models.json',
+      ...(nonce === undefined ? {} : { nonce }),
     }),
   );
   children.push(
@@ -73,6 +76,7 @@ export function getUEHtmlHeadEntries(daCtx, aemCtx) {
       src: orgSiteInPath
         ? `/${org}/${site}/component-filters.json`
         : '/component-filters.json',
+      ...(nonce === undefined ? {} : { nonce }),
     }),
   );
 
