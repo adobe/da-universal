@@ -174,16 +174,11 @@ async function sourceGet({ req, env, daCtx }) {
   }
 
   const aemCtx = getAemCtx(env, daCtx);
-  // UE needs pipeline-rendered head.html, getting that from preview host.
-  // allSettled: a preview-host failure on a nonexistent site must not overwrite the 404 with 503
-  const [sourceResult, previewResult] = await Promise.allSettled([
-    readSource(env, daCtx, { method: 'GET', headers }),
-    isUE
-      ? withUpstream(PREVIEW_HOST, () => getAEMHtml(aemCtx, '/head.html'))
-      : Promise.resolve(undefined),
-  ]);
-  if (sourceResult.status === 'rejected') throw sourceResult.reason;
-  const { response: sourceResp, noSuchSite, head: siteHead } = sourceResult.value;
+  const { response: sourceResp, noSuchSite, head: headHtml } = await readSource(
+    env,
+    daCtx,
+    { method: 'GET', headers },
+  );
 
   if (noSuchSite) {
     // quick-edit still needs a working shell (with the import map) so the editor
@@ -193,9 +188,6 @@ async function sourceGet({ req, env, daCtx }) {
     }
     return get404(SITE_NOT_FOUND_HTML_MESSAGE);
   }
-
-  if (previewResult.status === 'rejected') throw previewResult.reason;
-  const headHtml = isUE ? previewResult.value : siteHead;
 
   console.log(`<- ${daCtx.sourcePath}. ${sourceResp.status} ${sourceResp.statusText}`, { status: sourceResp.status, statusText: sourceResp.statusText });
 

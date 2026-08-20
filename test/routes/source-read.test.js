@@ -683,7 +683,6 @@ describe('reading from the store that holds the site', () => {
       assert.ok(!html.includes('ab-src'), 'no marker on the connection uri');
       assert.ok(!html.includes('content-store'), 'no marker on the connection uri');
     });
-
   });
 
   describe('a non-html read', () => {
@@ -1041,7 +1040,6 @@ describe('reading from the store that holds the site', () => {
       assert.strictEqual(res.status, 404);
       assert.match(await res.text(), /importmap/);
     });
-
   });
 });
 
