@@ -111,6 +111,21 @@ describe('UE scaffold', () => {
       );
     });
 
+    it('stamps every injected script when a CSP nonce is provided', () => {
+      const entries = scaffold.getUEHtmlHeadEntries(daCtx, aemCtx, 'abc123');
+      const scriptTags = entries.filter((entry) => entry.tagName === 'script');
+
+      assert.strictEqual(scriptTags.length, 4);
+      assert.ok(scriptTags.every((tag) => tag.properties.nonce === 'abc123'));
+    });
+
+    it('does not stamp injected scripts when no CSP nonce is provided', () => {
+      const entries = scaffold.getUEHtmlHeadEntries(daCtx, aemCtx);
+      const scriptTags = entries.filter((entry) => entry.tagName === 'script');
+
+      assert.ok(scriptTags.every((tag) => tag.properties.nonce === undefined));
+    });
+
     it('generates correct head entries for local environment', () => {
       daCtx.isLocal = true;
       daCtx.hostname = 'localhost';

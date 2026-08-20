@@ -118,7 +118,9 @@ describe('daSourceGet', () => {
     // of being masked by the default parameter value.
     const headHtml = 'headHtml' in overrides ? overrides.headHtml : '<meta name="from" content="aem" />';
     const exists = overrides.site?.exists ?? true;
-    calls = { compose: [], ue: 0, quickEdit: 0 };
+    calls = {
+      compose: [], ue: 0, ueNonce: undefined, quickEdit: 0, quickEditNonce: undefined,
+    };
     return (await esmock('../../src/routes/da-admin.js', {
       '../../src/storage/site.js': {
         default: async () => ({ exists, head: headHtml, onSourceBus: false }),
@@ -136,12 +138,19 @@ describe('daSourceGet', () => {
         },
         serializeHtml: () => '<html>composed</html>',
       },
+      '../../src/render/csp.js': {
+        default: () => 'abc123',
+      },
       '../../src/ue/ue.js': {
-        applyUEInstrumentation: async () => { calls.ue += 1; },
+        applyUEInstrumentation: async (documentTree, daCtx, aemCtx, nonce) => {
+          calls.ue += 1;
+          calls.ueNonce = nonce;
+        },
       },
       '../../src/utils/quick-edit.js': {
-        applyQuickEditToDocument: () => {
+        applyQuickEditToDocument: (documentTree, nonce) => {
           calls.quickEdit += 1;
+          calls.quickEditNonce = nonce;
           return '/scripts/scripts.js';
         },
         buildQuickEditCookie: (p) => `da-quick-edit=${encodeURIComponent(p)}; Path=/`,
@@ -162,6 +171,7 @@ describe('daSourceGet', () => {
 
     assert.strictEqual(res.status, 200);
     assert.strictEqual(calls.ue, 1);
+    assert.strictEqual(calls.ueNonce, 'abc123');
     assert.strictEqual(calls.quickEdit, 0);
     assert.strictEqual(res.headers.get('Set-Cookie'), null);
   });
@@ -200,6 +210,7 @@ describe('daSourceGet', () => {
 
     assert.strictEqual(res.status, 200);
     assert.strictEqual(calls.quickEdit, 1);
+    assert.strictEqual(calls.quickEditNonce, 'abc123');
     assert.strictEqual(calls.ue, 0);
     assert.ok(res.headers.get('Set-Cookie')?.includes('da-quick-edit=%2Fscripts%2Fscripts.js'));
   });
