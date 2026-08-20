@@ -159,7 +159,8 @@ async function sourceGet({ req, env, daCtx }) {
   const url = new URL(req.url);
   const isQuickEdit = url.searchParams.has('quick-edit');
   const isUE = url.hostname.endsWith('.ue.da.live')
-    || url.hostname.endsWith('.stage-ue.da.live');
+    || url.hostname.endsWith('.stage-ue.da.live')
+    || url.host === env.UE_HOST;
 
   const headers = new Headers();
   headers.set('Authorization', authToken);
