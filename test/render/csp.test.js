@@ -30,11 +30,34 @@ describe('applyCsp', () => {
     const script = select('script', tree);
 
     assert.ok(nonce);
+    assert.match(nonce, /^[A-Za-z0-9+/]{24}$/);
     assert.ok(meta.properties.content.includes(`'nonce-${nonce}'`));
     assert.ok(!meta.properties.content.includes("'nonce-aem'"));
     assert.strictEqual(meta.properties['move-to-http-header'], undefined);
     assert.strictEqual(meta.properties['move-as-header'], undefined);
     assert.strictEqual(script.properties.nonce, nonce);
+  });
+
+  it('rewrites only the case-insensitive policy and placeholders in the head', () => {
+    const bodyContent = "script-src 'nonce-aem'; object-src 'none'";
+    const tree = fromHtml(`<html><head>
+      <meta http-equiv="CONTENT-SECURITY-POLICY" content="script-src 'nonce-aem'">
+      <script nonce="aem" src="/scripts/scripts.js"></script>
+    </head><body>
+      <meta http-equiv="content-security-policy" content="${bodyContent}">
+      <script nonce="aem">console.log('author content')</script>
+    </body></html>`);
+
+    const nonce = applyCsp(tree);
+    const headMeta = select('head meta', tree);
+    const headScript = select('head script', tree);
+    const bodyMeta = select('body meta', tree);
+    const bodyScript = select('body script', tree);
+
+    assert.ok(headMeta.properties.content.includes(`'nonce-${nonce}'`));
+    assert.strictEqual(headScript.properties.nonce, nonce);
+    assert.strictEqual(bodyMeta.properties.content, bodyContent);
+    assert.strictEqual(bodyScript.properties.nonce, 'aem');
   });
 
   it('re-stamps only elements covered by a nonce-bearing directive', () => {

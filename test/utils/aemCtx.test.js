@@ -19,6 +19,7 @@ import { getDaCtx } from '../../src/utils/daCtx.js';
 describe('AEM context', () => {
   let getAemCtx;
   let getAEMHtml;
+  let withAemAuth;
   let fixUrlsWhenLocalDev;
   let aemCtx;
 
@@ -26,6 +27,7 @@ describe('AEM context', () => {
     const mod = await esmock('../../src/utils/aemCtx.js');
     getAemCtx = mod.getAemCtx;
     getAEMHtml = mod.getAEMHtml;
+    withAemAuth = mod.withAemAuth;
     fixUrlsWhenLocalDev = mod.fixUrlsWhenLocalDev;
   });
 
@@ -63,6 +65,26 @@ describe('AEM context', () => {
 
     it('should return correct UE service', () => {
       assert.strictEqual(aemCtx.ueService, 'test-ue-service');
+    });
+  });
+
+  describe('withAemAuth', () => {
+    it('adds the site token without dropping existing request headers', () => {
+      const init = withAemAuth(
+        { siteToken: 'site-token' },
+        { method: 'GET', headers: { Accept: 'text/html' } },
+      );
+
+      assert.strictEqual(init.method, 'GET');
+      assert.strictEqual(init.headers.get('Accept'), 'text/html');
+      assert.strictEqual(init.headers.get('Authorization'), 'site-token');
+    });
+
+    it('leaves authorization unset when there is no site token', () => {
+      const init = withAemAuth({}, { headers: { Accept: 'text/html' } });
+
+      assert.strictEqual(init.headers.get('Accept'), 'text/html');
+      assert.strictEqual(init.headers.get('Authorization'), null);
     });
   });
 

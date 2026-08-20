@@ -14,6 +14,8 @@
 import assert from 'assert';
 import { describe, it, before } from 'mocha';
 import esmock from 'esmock';
+import { select } from 'hast-util-select';
+import applyCsp from '../../src/render/csp.js';
 
 describe('render compose', () => {
   let composeHtml;
@@ -65,5 +67,19 @@ describe('render compose', () => {
     assert.ok(!html.includes('data-aue-'));
     assert.ok(!html.includes('urn:adobe:aue'));
     assert.ok(!html.includes('universal-editor-service'));
+  });
+
+  it('composes head.html as selectable CSP elements without noncing author body scripts', async () => {
+    const cspHead = '<meta http-equiv="Content-Security-Policy"'
+      + ' content="script-src \'nonce-aem\' \'strict-dynamic\'">'
+      + '<script nonce="aem" src="/scripts/scripts.js"></script>';
+    const body = '<main><script nonce="aem">console.log(\'author content\')</script></main>';
+
+    const tree = await composeHtml(daCtx, aemCtx, body, cspHead);
+    const nonce = applyCsp(tree);
+
+    assert.ok(select('head meta[http-equiv]', tree).properties.content.includes(`'nonce-${nonce}'`));
+    assert.strictEqual(select('head script', tree).properties.nonce, nonce);
+    assert.strictEqual(select('body script', tree).properties.nonce, 'aem');
   });
 });

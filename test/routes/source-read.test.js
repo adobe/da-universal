@@ -1210,6 +1210,18 @@ describe('a path the editor config gives a template', () => {
     assert.strictEqual(await res.text(), messages.PREVIEW_FAILED_HTML_MESSAGE);
   });
 
+  it('names the template failure cause in x-error', async () => {
+    const { daSourceGet, env } = await build({
+      ...missingDoc(['/folder=/scripts/tpl.html']),
+      templateError: new DOMException('timed out', 'TimeoutError'),
+    });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.headers.get('x-error'), 'preview host failed: TimeoutError: timed out');
+  });
+
   it('takes the longest matching prefix', async () => {
     const { daSourceGet, env, seen } = await build(missingDoc([
       '/=/scripts/site.html',
