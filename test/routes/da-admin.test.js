@@ -127,8 +127,8 @@ describe('daSourceGet', () => {
       },
       '../../src/utils/aemCtx.js': {
         getAemCtx: () => ({}),
-        // the UE branch reads /head.html off the preview host; stub it so this
-        // suite's focus (UE / quick-edit / composeHtml wiring) is not tangled with it
+        // template fallback reads the preview host; stub it so this suite's focus
+        // (UE / quick-edit / composeHtml wiring) is not tangled with it
         getAEMHtml: async () => undefined,
       },
       '../../src/render/compose.js': {
@@ -176,6 +176,18 @@ describe('daSourceGet', () => {
     assert.strictEqual(res.headers.get('Set-Cookie'), null);
   });
 
+  it('applies UE instrumentation on a stage UE host', async () => {
+    const daSourceGet = await mockDaSourceGet();
+    const req = authedReq('https://main--site--org.stage-ue.da.live/folder/content');
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourceGet({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(calls.ue, 1);
+    assert.strictEqual(calls.quickEdit, 0);
+  });
+
   it('returns the composed page as-is for a preview host', async () => {
     const daSourceGet = await mockDaSourceGet();
     const req = authedReq('https://main--site--org.preview.da.live/folder/content');
@@ -198,6 +210,22 @@ describe('daSourceGet', () => {
 
     assert.strictEqual(res.status, 200);
     assert.strictEqual(calls.ue, 0);
+    assert.strictEqual(calls.quickEdit, 0);
+  });
+
+  it('applies UE instrumentation when localhost matches UE_HOST', async () => {
+    const daSourceGet = await mockDaSourceGet();
+    const req = authedReq('http://localhost:4712/org/site/folder/content');
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourceGet({
+      req,
+      env: { ...env, UE_HOST: 'localhost:4712' },
+      daCtx,
+    });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(calls.ue, 1);
     assert.strictEqual(calls.quickEdit, 0);
   });
 
