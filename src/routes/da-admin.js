@@ -210,12 +210,10 @@ async function sourceGet({ req, env, daCtx }) {
     ? await withUpstream(CONTENT_STORE, () => sourceResp.text())
     : await getPageTemplate(env, daCtx, aemCtx);
 
-  // builds the page without head.html, which a ref that was never built does not have.
-  // composing reads the metadata sheet off the preview host, so a failure below is that upstream
-  const documentTree = await withUpstream(
-    PREVIEW_HOST,
-    () => composeHtml(daCtx, aemCtx, bodyHtml, headHtml ?? ''),
-  );
+  // builds the page without head.html, which a ref that was never built does not have. the read
+  // composing makes of the preview host names that upstream itself, and the rest of composing
+  // walks the stored document, where a throw is the worker's own
+  const documentTree = await composeHtml(daCtx, aemCtx, bodyHtml, headHtml ?? '');
   const nonce = applyCsp(documentTree);
 
   // layer the request-specific instrumentation on top of the composed page
