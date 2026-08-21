@@ -43,7 +43,7 @@ const build = async (overrides = {}) => {
     : '<body>from the template</body>';
   const site = 'site' in overrides ? overrides.site : LEGACY_STORE;
   const {
-    lookupError, templateError, configError, serializeError, config = null,
+    lookupError, templateError, configError, composeError, serializeError, config = null,
   } = overrides;
   const seen = {
     bus: [], legacy: [], head: [], aem: [], ue: 0, lookups: 0,
@@ -89,6 +89,7 @@ const build = async (overrides = {}) => {
       // returns a hast root, so quick-edit can walk what was built
       composeHtml: async (daCtx, aemCtx, bodyHtml, head) => {
         seen.head.push(head);
+        if (composeError) throw composeError;
         return { type: 'root', children: [], bodyHtml };
       },
       serializeHtml: (tree) => {
@@ -1371,7 +1372,7 @@ describe('the read the composed page makes of the preview host', () => {
 
   // a preview host that accepts the connection and never answers would otherwise hold the page
   // open for the whole request budget
-  it('gives the read a deadline without dropping the auth headers', async () => {
+  it('gives the read a deadline without replacing the fetch init', async () => {
     const { daSourceGet, env, seen } = await buildComposing();
     const req = authedReq(at);
 
@@ -1397,6 +1398,18 @@ describe('when the worker itself has a bug', () => {
     await assert.rejects(
       () => daSourceGet({ req, env, daCtx: getDaCtx(req) }),
       /tree is not iterable/,
+    );
+  });
+
+  // composing reads the metadata sheet, but the rest of it walks the stored document, and a throw
+  // from that work is the worker's own however malformed the document was
+  it('lets a throw from composing through rather than blaming the preview host', async () => {
+    const { daSourceGet, env } = await build({ composeError: new TypeError('cannot read properties of undefined') });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+    await assert.rejects(
+      () => daSourceGet({ req, env, daCtx: getDaCtx(req) }),
+      /cannot read properties of undefined/,
     );
   });
 });
