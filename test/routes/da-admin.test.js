@@ -13,6 +13,8 @@
 /* eslint-env mocha */
 import assert from 'assert';
 import esmock from 'esmock';
+import { fromHtml } from 'hast-util-from-html';
+import { select, selectAll } from 'hast-util-select';
 import reqs from '../mocks/req.js';
 
 const { getDaCtx } = await import('../../src/utils/daCtx.js');
@@ -321,6 +323,81 @@ describe('daSourceGet', () => {
     assert.strictEqual(res.status, 200);
     assert.strictEqual(calls.compose.length, 1);
     assert.strictEqual(calls.ue, 1);
+  });
+});
+
+// the suite above stubs csp.js, so it can only pin which value reached the injectors. this one
+// runs the real compose / csp / ue modules: applyCsp mints the nonce and rewrites the head.html
+// placeholders, and everything injected afterwards has to carry that same value.
+describe('daSourceGet CSP nonce', () => {
+  const cspHead = '<meta http-equiv="Content-Security-Policy"'
+    + ' content="script-src \'nonce-aem\' \'strict-dynamic\'">'
+    + '<script nonce="aem" src="/scripts/scripts.js"></script>';
+
+  const env = {
+    DA_ADMIN: 'https://admin.da.live',
+    AEM_API: 'https://api.aem.live',
+    UE_HOST: 'ue.da.live',
+    daadmin: {
+      fetch: async () => new Response('<main><div><p>stored</p></div></main>', { status: 200 }),
+    },
+  };
+
+  // composing reads the metadata sheet and the UE scaffold reads the component JSON, both off the
+  // preview host; a 404 is what each of them takes as "nothing to merge"
+  beforeEach(() => {
+    globalThis.fetch = async () => new Response('not found', { status: 404 });
+  });
+
+  afterEach(() => {
+    delete globalThis.fetch;
+  });
+
+  const serve = async (url) => {
+    const { daSourceGet } = await esmock('../../src/routes/da-admin.js', {
+      '../../src/storage/site.js': {
+        default: async () => ({ exists: true, head: cspHead, onSourceBus: false }),
+      },
+    });
+    const req = authedReq(url);
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 200);
+    return res.text();
+  };
+
+  const mintedNonce = (tree) => {
+    const meta = select('head meta[http-equiv="content-security-policy" i]', tree);
+    return /'nonce-([^']+)'/.exec(meta.properties.content)?.[1];
+  };
+
+  it('stamps the minted nonce on the injected UE scripts', async () => {
+    const html = await serve('https://main--site--org.ue.da.live/folder/content');
+    const tree = fromHtml(html);
+    const nonce = mintedNonce(tree);
+
+    assert.ok(nonce);
+    assert.notStrictEqual(nonce, 'aem');
+    assert.strictEqual(
+      select('head script[src="https://universal-editor-service.adobe.io/cors.js"]', tree)
+        .properties.nonce,
+      nonce,
+    );
+    const componentScripts = selectAll('head script[src^="/component-"]', tree);
+    assert.strictEqual(componentScripts.length, 3);
+    componentScripts.forEach((script) => assert.strictEqual(script.properties.nonce, nonce));
+    assert.ok(!html.includes('nonce="aem"'));
+  });
+
+  it('stamps the minted nonce on the injected quick-edit import map', async () => {
+    const html = await serve('https://main--site--org.ue.da.live/folder/content?quick-edit');
+    const tree = fromHtml(html);
+    const nonce = mintedNonce(tree);
+
+    assert.ok(nonce);
+    assert.notStrictEqual(nonce, 'aem');
+    assert.strictEqual(select('head script[type="importmap"]', tree).properties.nonce, nonce);
+    assert.ok(!html.includes('nonce="aem"'));
   });
 });
 
