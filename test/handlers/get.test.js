@@ -16,6 +16,7 @@ import esmock from 'esmock';
 import reqs from '../mocks/req.js';
 
 const { getDaCtx } = await import('../../src/utils/daCtx.js');
+const { PREVIEW_HOST, UpstreamError } = await import('../../src/utils/upstream.js');
 
 describe('GET handler', () => {
   describe('early returns', () => {
@@ -303,5 +304,33 @@ describe('GET handler', () => {
       assert.strictEqual(res.status, 200);
       assert.strictEqual(await res.text(), 'page-content');
     });
+  });
+});
+
+describe('GET handler resource reads', () => {
+  let getHandler;
+
+  beforeEach(async () => {
+    getHandler = (await esmock('../../src/handlers/get.js', {
+      '../../src/routes/da-admin.js': { daSourceGet: async () => new Response() },
+      '../../src/routes/aem-proxy.js': {
+        handleAEMProxyRequest: async () => {
+          throw new UpstreamError(PREVIEW_HOST, new TypeError('fetch failed'));
+        },
+      },
+    })).default;
+  });
+
+  it('refuses a stylesheet the preview host could not answer with a bodyless 503', async () => {
+    const req = new Request('https://main--site--org.ue.da.live/styles/styles.css');
+    const daCtx = getDaCtx(req);
+
+    const res = await getHandler({ req, env: {}, daCtx });
+
+    assert.strictEqual(res.status, 503);
+    assert.strictEqual(res.headers.get('Retry-After'), '5');
+    assert.match(res.headers.get('x-error'), /preview host failed/);
+    // an HTML shell would only corrupt a stylesheet the browser is parsing as CSS
+    assert.strictEqual(await res.text(), '');
   });
 });
