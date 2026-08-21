@@ -49,6 +49,7 @@ function createNonce() {
  */
 export default function applyCsp(documentTree) {
   // head.html owns the policy and placeholders; the body is author content that round-trips
+  // this rewrite supersedes 09c3f5f's preview-host head.html read on UE, reversed by aa1dd76
   const scope = select('head', documentTree) ?? documentTree;
   const meta = select('meta[http-equiv="content-security-policy" i]', scope);
   const content = meta?.properties.content;
@@ -63,6 +64,8 @@ export default function applyCsp(documentTree) {
   meta.properties.content = removeTrustedTypesRequire(
     content.replaceAll(NONCE_AEM, `'nonce-${nonce}'`),
   );
+  // the pipeline moves this policy to a response header; we keep it in the document because
+  // frame-ancestors sent as a header stops the editor framing the page, and a meta ignores it
   delete meta.properties['move-to-http-header'];
   delete meta.properties['move-as-header'];
 
