@@ -204,13 +204,18 @@ async function sourceGet({ req, env, daCtx }) {
     return sourceResp;
   }
 
-  // use the stored content when available, otherwise fall back to a template
+  // use the stored content when available, otherwise fall back to a template. the body arrives
+  // after the status, so a read that stops here is still the store's
   const bodyHtml = sourceResp.status === 200
-    ? await sourceResp.text()
+    ? await withUpstream(CONTENT_STORE, () => sourceResp.text())
     : await getPageTemplate(env, daCtx, aemCtx);
 
-  // builds the page without head.html, which a ref that was never built does not have
-  const documentTree = await composeHtml(daCtx, aemCtx, bodyHtml, headHtml ?? '');
+  // builds the page without head.html, which a ref that was never built does not have.
+  // composing reads the metadata sheet off the preview host, so a failure below is that upstream
+  const documentTree = await withUpstream(
+    PREVIEW_HOST,
+    () => composeHtml(daCtx, aemCtx, bodyHtml, headHtml ?? ''),
+  );
   const nonce = applyCsp(documentTree);
 
   // layer the request-specific instrumentation on top of the composed page
@@ -287,24 +292,9 @@ async function sourcePost({ req, env, daCtx }) {
     if (isFile && !isHtmlPostType(obj.data.type)) {
       return get415();
     }
-    const { body: bodyHtml } = isFile
-      ? await getFileBody(obj.data)
-      : getTextBody(obj.data);
-    const documentTree = fromHtml(bodyHtml);
-    let bodyNode = select('body', documentTree);
 
-    // unwrap rich text elements
-    // clean up UE data attributes
-    bodyNode = unwrapParagraphs(bodyNode);
-    bodyNode = removeUEAttributes(bodyNode);
-
-    // restore absolute image URLs for content.da.live
-    restoreAbsoluteImages(bodyNode, daCtx);
-
-    minifyWhitespace(bodyNode);
-
-    const bodyContent = toHtml(bodyNode);
-
+    // resolved before the document is read and rewritten, since a write with nowhere to go is
+    // refused whatever the document turns out to be
     const { exists, onSourceBus } = await withUpstream(
       SITE_LOOKUP,
       () => getSiteConfig(env, daCtx),
@@ -319,6 +309,30 @@ async function sourcePost({ req, env, daCtx }) {
       console.log(`405 POST ${sourcePath}, writes to the source bus are refused through the preview proxy. write directly to the source bus instead.`);
       return post405(SOURCE_BUS_READ_ONLY_MESSAGE);
     }
+
+    const { body: bodyHtml } = isFile
+      ? await getFileBody(obj.data)
+      : getTextBody(obj.data);
+    const documentTree = fromHtml(bodyHtml);
+    let bodyNode = select('body', documentTree);
+
+    // a frameset document parses without a body, and the rewrite below has nothing to run on
+    if (!bodyNode) {
+      console.log(`415 POST ${sourcePath}, the document has no body`);
+      return get415();
+    }
+
+    // unwrap rich text elements
+    // clean up UE data attributes
+    bodyNode = unwrapParagraphs(bodyNode);
+    bodyNode = removeUEAttributes(bodyNode);
+
+    // restore absolute image URLs for content.da.live
+    restoreAbsoluteImages(bodyNode, daCtx);
+
+    minifyWhitespace(bodyNode);
+
+    const bodyContent = toHtml(bodyNode);
 
     // da-admin takes the document as a `data` form part
     const store = getStore(env, daCtx, onSourceBus);
