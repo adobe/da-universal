@@ -123,6 +123,40 @@ describe('getCookie', () => {
       assert.strictEqual(cookies(res).length, 1);
     });
 
+    // a public site and a refused exchange both end with no site token, so only the log tells
+    // an operator which of the two happened
+    it('says which status refused the exchange', async () => {
+      stubFetch(() => new Response('', { status: 404 }));
+      const warnings = [];
+      const saved = console.warn;
+      console.warn = (m) => warnings.push(m);
+
+      try {
+        await getCookie({ req: req(), env, daCtx: daCtx() });
+      } finally {
+        console.warn = saved;
+      }
+
+      assert.strictEqual(warnings.length, 1);
+      assert.match(warnings[0], /org\/site/);
+      assert.match(warnings[0], /404/);
+    });
+
+    it('says nothing when the site simply needs no site token', async () => {
+      stubFetch(noAuthNeeded);
+      const warnings = [];
+      const saved = console.warn;
+      console.warn = (m) => warnings.push(m);
+
+      try {
+        await getCookie({ req: req(), env, daCtx: daCtx() });
+      } finally {
+        console.warn = saved;
+      }
+
+      assert.strictEqual(warnings.length, 0);
+    });
+
     it('asks for no exchange when the caller already has a site token', async () => {
       stubFetch(mints);
 
