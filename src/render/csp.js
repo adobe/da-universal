@@ -49,7 +49,8 @@ function createNonce() {
  */
 export default function applyCsp(documentTree) {
   // head.html owns the policy and placeholders; the body is author content that round-trips
-  // this rewrite supersedes 09c3f5f's preview-host head.html read on UE, reversed by aa1dd76
+  // rewriting here is what lets the config service answer head.html for UE too. reading it from
+  // the preview host for the pipeline's own rewrite was the alternative, at a round trip per page
   const scope = select('head', documentTree) ?? documentTree;
   const meta = select('meta[http-equiv="content-security-policy" i]', scope);
   const content = meta?.properties.content;
