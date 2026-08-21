@@ -33,6 +33,11 @@ export default async function getSiteConfig(env, daCtx) {
   if (!org || !site) return NO_SITE;
 
   const url = new URL(`/${ref}--${site}--${org}/config.json?scope=pipeline`, env.HLX_CONFIG_SERVICE);
+  // an unset token goes out as the string "undefined", so the lookup still runs and still fails,
+  // and only the log says the worker is the one at fault
+  if (!env.HLX_CONFIG_SERVICE_TOKEN) {
+    console.error('no HLX_CONFIG_SERVICE_TOKEN, this worker is misconfigured and every site lookup will be refused');
+  }
   const response = await fetch(url, {
     headers: {
       'x-access-token': env.HLX_CONFIG_SERVICE_TOKEN,
@@ -42,6 +47,10 @@ export default async function getSiteConfig(env, daCtx) {
   });
 
   if (response.status === 404) return NO_SITE;
+  if (response.status === 401 || response.status === 403) {
+    const token = env.HLX_CONFIG_SERVICE_TOKEN ? 'present' : 'missing';
+    throw new Error(`the config service answered ${response.status}, HLX_CONFIG_SERVICE_TOKEN ${token}`);
+  }
   if (!response.ok) throw new Error(`the config service answered ${response.status}`);
 
   const { head, contentSource } = await response.json();
