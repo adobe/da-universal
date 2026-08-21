@@ -10,9 +10,10 @@
  * governing permissions and limitations under the License.
  */
 
-import { getRobots, head404 } from '../responses/index.js';
+import { getRobots, head404, resource503 } from '../responses/index.js';
 import { handleAEMProxyRequest } from '../routes/aem-proxy.js';
 import { daSourceHead } from '../routes/da-admin.js';
+import { UpstreamError } from '../utils/upstream.js';
 
 // for AEM we reuse the handleAEMProxyRequest for now as GETs are cheap here
 // TODO refine and review for later for a full HEAD requests on AEM
@@ -31,7 +32,13 @@ export default async function headHandler({ req, env, daCtx }) {
 
   const resourceRegex = /\.(css|js|js\.map|json|xml|woff|woff2|otf|ttf|plain\.html|html)$/i;
   if (resourceRegex.test(path)) {
-    return aemHead({ req, env, daCtx });
+    try {
+      return await aemHead({ req, env, daCtx });
+    } catch (e) {
+      if (!(e instanceof UpstreamError)) throw e;
+      console.warn(`503 HEAD ${path}, ${e.message}`);
+      return resource503(e.message);
+    }
   }
 
   const assetRegex = /\.(png|jpg|jpeg|webp|gif|svg|ico|avif)$/i;
