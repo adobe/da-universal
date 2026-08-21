@@ -37,6 +37,18 @@ const stubFetch = (respond) => {
   };
 };
 
+const capturingErrors = async (run) => {
+  const errors = [];
+  const saved = console.error;
+  console.error = (m) => errors.push(m);
+  try {
+    await run();
+  } finally {
+    console.error = saved;
+  }
+  return errors;
+};
+
 const config = (over = {}) => new Response(JSON.stringify({
   head: { html: HEAD },
   contentSource: { type: 'markup', url: 'https://content.da.live/org/site/' },
@@ -185,12 +197,60 @@ describe('getSiteConfig', () => {
     });
   });
 
+  // an unset token goes out as the string "undefined" and comes back a refusal, which reads
+  // exactly like an outage unless the worker says which of the two it is
+  describe('when the worker carries no config service token', () => {
+    it('says the worker is misconfigured, and asks anyway', async () => {
+      stubFetch(config);
+
+      const errors = await capturingErrors(
+        () => getSiteConfig({ ...env, HLX_CONFIG_SERVICE_TOKEN: undefined }, daCtx()),
+      );
+
+      assert.strictEqual(errors.length, 1);
+      assert.match(errors[0], /HLX_CONFIG_SERVICE_TOKEN/);
+      assert.match(errors[0], /every site lookup/);
+      assert.strictEqual(calls.length, 1);
+    });
+
+    it('says nothing when the token is there', async () => {
+      stubFetch(config);
+
+      const errors = await capturingErrors(() => getSiteConfig(env, daCtx()));
+
+      assert.deepStrictEqual(errors, []);
+    });
+  });
+
   describe('when the config service refuses', () => {
     [401, 403, 429, 500, 503].forEach((status) => {
       it(`throws on a ${status}`, async () => {
         stubFetch(() => new Response('', { status }));
 
         await assert.rejects(() => getSiteConfig(env, daCtx()), new RegExp(`${status}`));
+      });
+    });
+
+    // a rotated token and an upstream outage are the same status, so the message carries the
+    // one thing that separates them
+    [401, 403].forEach((status) => {
+      it(`names the token as present on a ${status}`, async () => {
+        stubFetch(() => new Response('', { status }));
+
+        await assert.rejects(
+          () => getSiteConfig(env, daCtx()),
+          /HLX_CONFIG_SERVICE_TOKEN present/,
+        );
+      });
+
+      it(`names the token as missing on a ${status}`, async () => {
+        stubFetch(() => new Response('', { status }));
+        const noToken = { ...env, HLX_CONFIG_SERVICE_TOKEN: undefined };
+
+        await capturingErrors(() => assert.rejects(
+          () => getSiteConfig(noToken, daCtx()),
+          /HLX_CONFIG_SERVICE_TOKEN missing/,
+        ));
       });
     });
 
