@@ -38,6 +38,21 @@ describe('applyCsp', () => {
     assert.strictEqual(script.properties.nonce, nonce);
   });
 
+  it('keeps a policy asking for a header in the document', () => {
+    const tree = fromHtml(`<html><head>
+      ${cspMeta("script-src 'nonce-aem'; frame-ancestors 'self';", 'move-to-http-header="true" move-as-header="true"')}
+    </head><body></body></html>`);
+
+    const nonce = applyCsp(tree);
+    const meta = select('head meta[http-equiv="content-security-policy" i]', tree);
+
+    assert.ok(meta, 'the meta has to survive, a header would break framing in the editor');
+    assert.ok(meta.properties.content.includes(`'nonce-${nonce}'`));
+    assert.ok(meta.properties.content.includes("frame-ancestors 'self'"));
+    assert.strictEqual(meta.properties['move-to-http-header'], undefined);
+    assert.strictEqual(meta.properties['move-as-header'], undefined);
+  });
+
   it('rewrites only the case-insensitive policy and placeholders in the head', () => {
     const bodyContent = "script-src 'nonce-aem'; object-src 'none'";
     const tree = fromHtml(`<html><head>
