@@ -27,7 +27,8 @@ async function exchangeSiteToken(env, org, site, accessToken) {
     });
 
     if (!response.ok) {
-      // 401/403 error cases
+      // a public site answers 200 with nothing, so a refusal is the one case with no other signal
+      console.warn(`the site token exchange for ${org}/${site} answered ${response.status}`);
       return null;
     }
 
