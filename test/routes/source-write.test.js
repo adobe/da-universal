@@ -22,6 +22,7 @@ import {
 
 const AT = 'https://main--site--org.ue.da.live/folder/content';
 const DOC = '<body><main><div><p>the author typed this</p></div></main></body>';
+const FRAMESET = '<frameset><frame></frameset>';
 
 // what the store lookup answers
 const SOURCE_BUS = true;
@@ -345,6 +346,58 @@ describe('writing to the store that holds the site', () => {
       assert.strictEqual(res.status, 415);
       assert.strictEqual(seen.probes, 0);
       assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
+    });
+  });
+
+  // parse5 gives a frameset document no body element, and the rewrite has nothing to run on
+  describe('a document with no body', () => {
+    it('is refused with 415 rather than throwing', async () => {
+      const { daSourcePost, env, seen } = await build({});
+      const req = uePost(AT, FRAMESET);
+
+      const res = await daSourcePost({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 415);
+      assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
+    });
+  });
+
+  describe('the order a write refuses in', () => {
+    // the frameset is what tells the two orderings apart: parsed first it is the 415 above,
+    // looked up first it is the 404, and only one of them costs a parse and a rewrite
+    it('answers 404 for a site that does not exist rather than parsing the document', async () => {
+      const { daSourcePost, env, seen } = await build({ exists: false });
+      const req = uePost(AT, FRAMESET);
+
+      const res = await daSourcePost({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 404);
+      assert.strictEqual(await res.text(), SITE_NOT_FOUND_MESSAGE);
+      assert.strictEqual(seen.bus.length + seen.legacy.length, 0);
+    });
+
+    // the extension and the part type are read off the request, so they still refuse a write
+    // before the site is looked up at all
+    it('refuses a non-html path ahead of a site that does not exist', async () => {
+      const { daSourcePost, env, seen } = await build({ exists: false });
+      const req = uePost('https://main--site--org.ue.da.live/folder/data.json');
+
+      const res = await daSourcePost({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 415);
+      assert.strictEqual(seen.probes, 0);
+    });
+
+    it('refuses a non-html part ahead of a site that does not exist', async () => {
+      const { daSourcePost, env, seen } = await build({ exists: false });
+      const body = new FormData();
+      body.set('data', new File([DOC], 'content.html', { type: 'application/json' }));
+      const req = new Request(AT, { method: 'POST', body, headers: { Authorization: 'Bearer t' } });
+
+      const res = await daSourcePost({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 415);
+      assert.strictEqual(seen.probes, 0);
     });
   });
 });

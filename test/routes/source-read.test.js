@@ -43,7 +43,7 @@ const build = async (overrides = {}) => {
     : '<body>from the template</body>';
   const site = 'site' in overrides ? overrides.site : LEGACY_STORE;
   const {
-    lookupError, templateError, configError, composeError, config = null,
+    lookupError, templateError, configError, serializeError, config = null,
   } = overrides;
   const seen = {
     bus: [], legacy: [], head: [], aem: [], ue: 0, lookups: 0,
@@ -88,11 +88,13 @@ const build = async (overrides = {}) => {
     '../../src/render/compose.js': {
       // returns a hast root, so quick-edit can walk what was built
       composeHtml: async (daCtx, aemCtx, bodyHtml, head) => {
-        if (composeError) throw composeError;
         seen.head.push(head);
         return { type: 'root', children: [], bodyHtml };
       },
-      serializeHtml: (tree) => `<html>${tree.bodyHtml}</html>`,
+      serializeHtml: (tree) => {
+        if (serializeError) throw serializeError;
+        return `<html>${tree.bodyHtml}</html>`;
+      },
     },
     '../../src/ue/ue.js': {
       applyUEInstrumentation: async () => { seen.ue += 1; },
@@ -103,6 +105,34 @@ const build = async (overrides = {}) => {
         if (configError) throw configError;
         return config;
       },
+    },
+  });
+  return { ...mod, env, seen };
+};
+
+/**
+ * Builds the route with compose.js and metadata.js left real, so the /metadata.json read
+ * composeHtml makes is the one under test. The site is legacy, so its document comes over the
+ * service binding and `globalThis.fetch` sees nothing but the preview host.
+ */
+const buildComposing = async (overrides = {}) => {
+  const {
+    metadata = () => new Response('{"data":[]}', { status: 200 }),
+    legacy = () => new Response('<main>from da-admin</main>', { status: 200 }),
+  } = overrides;
+  const seen = { metadata: [] };
+  globalThis.fetch = async (input, init) => {
+    seen.metadata.push({ url: String(input), init: init ?? {} });
+    return metadata();
+  };
+  const env = {
+    DA_ADMIN: 'https://admin.da.live',
+    AEM_API: 'https://api.aem.live',
+    daadmin: { fetch: async () => legacy() },
+  };
+  const mod = await esmock('../../src/routes/da-admin.js', {
+    '../../src/storage/site.js': {
+      default: async () => ({ exists: true, head: '', onSourceBus: false }),
     },
   });
   return { ...mod, env, seen };
@@ -522,6 +552,38 @@ describe('reading from the store that holds the site', () => {
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
       assert.strictEqual(res.headers.get('x-error'), 'content store failed: TypeError: lost at fetch');
+    });
+  });
+
+  // the store answered, so the read is past the fetch; the body arrives after it, and a body
+  // that never finishes arriving is the same failed read
+  describe('when the store drops the connection mid-body', () => {
+    const truncated = () => new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('<main>'));
+          controller.error(new TypeError('Network connection lost'));
+        },
+      }),
+      { status: 200 },
+    );
+
+    it('answers 503 rather than throwing', async () => {
+      const { daSourceGet, env } = await build({ legacy: truncated });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 503);
+    });
+
+    it('names the store in x-error', async () => {
+      const { daSourceGet, env } = await build({ legacy: truncated });
+      const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+
+      const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+      assert.match(res.headers.get('x-error'), /^content store failed/);
     });
   });
 
@@ -1260,15 +1322,76 @@ describe('a path the editor config gives a template', () => {
   });
 });
 
+// composing the page reads /metadata.json off the preview host, and that read is the last one on
+// a GET that answered outside the taxonomy: a bodyless 500 where every other upstream says 503
+describe('the read the composed page makes of the preview host', () => {
+  afterEach(() => {
+    delete globalThis.fetch;
+  });
+
+  // a preview host rather than a UE host, so nothing is instrumented onto the composed page
+  const at = 'https://main--site--org.preview.da.live/folder/content';
+
+  it('composes the page when the preview host answers', async () => {
+    const { daSourceGet, env, seen } = await buildComposing();
+    const req = authedReq(at);
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(seen.metadata[0].url, 'https://main--site--org.aem.page/metadata.json');
+  });
+
+  it('refuses with 503 when the preview host cannot be reached', async () => {
+    const { daSourceGet, env } = await buildComposing({
+      metadata: () => { throw new TypeError('fetch failed'); },
+    });
+    const req = authedReq(at);
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 503);
+    assert.match(res.headers.get('x-error'), /^preview host failed/);
+    assert.strictEqual(await res.text(), messages.PREVIEW_FAILED_HTML_MESSAGE);
+  });
+
+  // a preview host serving the 404 page as HTML answers 200, and the sheet read throws on it
+  it('refuses with 503 when metadata.json answers 200 with something other than json', async () => {
+    const { daSourceGet, env } = await buildComposing({
+      metadata: () => new Response('<html>not a sheet</html>', { status: 200 }),
+    });
+    const req = authedReq(at);
+
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 503);
+    assert.match(res.headers.get('x-error'), /^preview host failed/);
+    assert.strictEqual(await res.text(), messages.PREVIEW_FAILED_HTML_MESSAGE);
+  });
+
+  // a preview host that accepts the connection and never answers would otherwise hold the page
+  // open for the whole request budget
+  it('gives the read a deadline without dropping the auth headers', async () => {
+    const { daSourceGet, env, seen } = await buildComposing();
+    const req = authedReq(at);
+
+    await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.ok(seen.metadata[0].init.signal instanceof AbortSignal);
+    assert.ok(seen.metadata[0].init.headers instanceof Headers);
+  });
+});
+
 describe('when the worker itself has a bug', () => {
   afterEach(() => {
     delete globalThis.fetch;
   });
 
-  // only a failed upstream read is retryable, and a 503 would keep the throw out of the log
-  // the worker boundary writes
+  // serializing the composed tree reaches nothing, so a throw there is the worker's own. Only a
+  // failed upstream read is retryable, and a 503 would keep the throw out of the log the worker
+  // boundary writes
   it('lets the throw through rather than rendering it as a 503', async () => {
-    const { daSourceGet, env } = await build({ composeError: new TypeError('tree is not iterable') });
+    const { daSourceGet, env } = await build({ serializeError: new TypeError('tree is not iterable') });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
 
     await assert.rejects(
