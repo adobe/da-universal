@@ -77,6 +77,10 @@ export function post503(message = '', error = '') {
   });
 }
 
+export function post404(message = '') {
+  return daResp({ body: message, status: 404, contentType: 'text/plain; charset=utf-8' });
+}
+
 // RFC 9110 requires an Allow header on a 405, and reads are what is left once the write is gone.
 export function post405(message = '') {
   return daResp({
@@ -92,6 +96,12 @@ export function head401() {
 }
 
 export function head503(error = '') {
+  return new Response(null, { status: 503, headers: retryHeaders(error) });
+}
+
+// a refused stylesheet, script or sheet carries no body: nothing renders CSS, so the HTML shell a
+// page gets would only corrupt what the browser is parsing.
+export function resource503(error = '') {
   return new Response(null, { status: 503, headers: retryHeaders(error) });
 }
 

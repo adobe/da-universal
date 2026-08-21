@@ -10,6 +10,7 @@
  * governing permissions and limitations under the License.
  */
 import { getAemCtx } from '../utils/aemCtx.js';
+import { PREVIEW_HOST, withUpstream } from '../utils/upstream.js';
 import {
   applyQuickEditToScript,
   getQuickEditCookiePath,
@@ -47,7 +48,7 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
   }
 
   console.log(`-> ${aemUrl.toString()}`);
-  let response = await fetch(req, { cf: { cacheTtl: 0 } });
+  let response = await withUpstream(PREVIEW_HOST, () => fetch(req, { cf: { cacheTtl: 0 } }));
   console.log(`<- ${aemUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
 
   const contentType = (response.headers.get('Content-Type') || '').toLowerCase();

@@ -13,6 +13,8 @@
 /* eslint-env mocha */
 import assert from 'assert';
 import esmock from 'esmock';
+import { fromHtml } from 'hast-util-from-html';
+import { select, selectAll } from 'hast-util-select';
 import reqs from '../mocks/req.js';
 
 const { getDaCtx } = await import('../../src/utils/daCtx.js');
@@ -33,7 +35,7 @@ const recorder = () => {
   const env = {
     DA_ADMIN: 'https://admin.da.live',
     AEM_API: 'https://api.aem.live',
-    HLX_ADMIN: 'https://admin.hlx.page',
+    HLX_CONFIG_SERVICE: 'https://config.aem.page',
     daadmin: {
       fetch: async (input) => {
         fetched.push(input instanceof Request ? input.url : input.href);
@@ -44,27 +46,33 @@ const recorder = () => {
   return { env, fetched };
 };
 
-// answers the real /ping, which is the only lookup the routes make. `upgraded` is the set of
-// `org/site` keys the probe reports as enrolled.
-const stubPing = (upgraded = []) => {
+// substitute for the config service read the routes make: the pipeline scope answers whether
+// the site exists, its head.html and which store holds it. Answers that any site exists;
+// `upgraded` lists the `org/site` keys whose content source is the source bus
+const stubLookups = (upgraded = []) => {
   const asked = [];
   globalThis.fetch = async (input) => {
     const url = input.toString();
     asked.push(url);
-    const key = url.slice(url.indexOf('/ping/') + '/ping/'.length);
-    const headers = upgraded.includes(key) ? { 'x-api-upgrade-available': 'true' } : {};
-    return new Response('', { status: 200, headers });
+    const [, site, org] = ((new URL(url)).pathname.split('/')[1] ?? '').split('--');
+    const source = upgraded.includes(`${org}/${site}`)
+      ? `https://api.aem.live/${org}/sites/${site}/source`
+      : `https://content.da.live/${org}/${site}/`;
+    const body = JSON.stringify({
+      head: { html: '<meta name="from" content="aem" />' },
+      contentSource: { type: 'markup', url: source },
+    });
+    return new Response(body, { status: 200 });
   };
   return asked;
 };
 
 const mockRoutes = async () => esmock('../../src/routes/da-admin.js', {
-  '../../src/storage/source-bus.js': {
-    default: async () => false,
+  '../../src/storage/site.js': {
+    default: async () => ({ exists: true, head: '<meta name="from" content="aem" />', onSourceBus: false }),
   },
   '../../src/utils/aemCtx.js': {
     getAemCtx: () => ({}),
-    getAEMHtml: async () => '<meta name="from" content="aem" />',
   },
   '../../src/render/compose.js': {
     composeHtml: async () => ({ tree: true }),
@@ -111,14 +119,19 @@ describe('daSourceGet', () => {
     // `{ headHtml: undefined }` actually simulates a missing head.html, instead
     // of being masked by the default parameter value.
     const headHtml = 'headHtml' in overrides ? overrides.headHtml : '<meta name="from" content="aem" />';
-    calls = { compose: [], ue: 0, quickEdit: 0 };
+    const exists = overrides.site?.exists ?? true;
+    calls = {
+      compose: [], ue: 0, ueNonce: undefined, quickEdit: 0, quickEditNonce: undefined,
+    };
     return (await esmock('../../src/routes/da-admin.js', {
-      '../../src/storage/source-bus.js': {
-        default: async () => false,
+      '../../src/storage/site.js': {
+        default: async () => ({ exists, head: headHtml, onSourceBus: false }),
       },
       '../../src/utils/aemCtx.js': {
         getAemCtx: () => ({}),
-        getAEMHtml: async () => headHtml,
+        // template fallback reads the preview host; stub it so this suite's focus
+        // (UE / quick-edit / composeHtml wiring) is not tangled with it
+        getAEMHtml: async () => undefined,
       },
       '../../src/render/compose.js': {
         composeHtml: async (daCtx, aemCtx, bodyHtml) => {
@@ -127,18 +140,26 @@ describe('daSourceGet', () => {
         },
         serializeHtml: () => '<html>composed</html>',
       },
+      '../../src/render/csp.js': {
+        default: () => 'abc123',
+      },
       '../../src/ue/ue.js': {
-        applyUEInstrumentation: async () => { calls.ue += 1; },
+        applyUEInstrumentation: async (documentTree, daCtx, aemCtx, nonce) => {
+          calls.ue += 1;
+          calls.ueNonce = nonce;
+        },
       },
       '../../src/utils/quick-edit.js': {
-        applyQuickEditToDocument: () => {
+        applyQuickEditToDocument: (documentTree, nonce) => {
           calls.quickEdit += 1;
+          calls.quickEditNonce = nonce;
           return '/scripts/scripts.js';
         },
         buildQuickEditCookie: (p) => `da-quick-edit=${encodeURIComponent(p)}; Path=/`,
       },
       '../../src/storage/config.js': {
-        getSiteConfig: async () => { throw new Error('no config'); },
+        // da-admin answers a site with no config with a 404, which getEditorConfig reports as null
+        getEditorConfig: async () => null,
       },
     })).daSourceGet;
   };
@@ -152,8 +173,21 @@ describe('daSourceGet', () => {
 
     assert.strictEqual(res.status, 200);
     assert.strictEqual(calls.ue, 1);
+    assert.strictEqual(calls.ueNonce, 'abc123');
     assert.strictEqual(calls.quickEdit, 0);
     assert.strictEqual(res.headers.get('Set-Cookie'), null);
+  });
+
+  it('applies UE instrumentation on a stage UE host', async () => {
+    const daSourceGet = await mockDaSourceGet();
+    const req = authedReq('https://main--site--org.stage-ue.da.live/folder/content');
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourceGet({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(calls.ue, 1);
+    assert.strictEqual(calls.quickEdit, 0);
   });
 
   it('returns the composed page as-is for a preview host', async () => {
@@ -181,6 +215,22 @@ describe('daSourceGet', () => {
     assert.strictEqual(calls.quickEdit, 0);
   });
 
+  it('applies UE instrumentation when localhost matches UE_HOST', async () => {
+    const daSourceGet = await mockDaSourceGet();
+    const req = authedReq('http://localhost:4712/org/site/folder/content');
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourceGet({
+      req,
+      env: { ...env, UE_HOST: 'localhost:4712' },
+      daCtx,
+    });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(calls.ue, 1);
+    assert.strictEqual(calls.quickEdit, 0);
+  });
+
   it('applies quick-edit injection and sets the cookie when quick-edit is requested', async () => {
     const daSourceGet = await mockDaSourceGet();
     const req = authedReq('https://main--site--org.ue.da.live/folder/content?quick-edit');
@@ -190,6 +240,7 @@ describe('daSourceGet', () => {
 
     assert.strictEqual(res.status, 200);
     assert.strictEqual(calls.quickEdit, 1);
+    assert.strictEqual(calls.quickEditNonce, 'abc123');
     assert.strictEqual(calls.ue, 0);
     assert.ok(res.headers.get('Set-Cookie')?.includes('da-quick-edit=%2Fscripts%2Fscripts.js'));
   });
@@ -233,8 +284,8 @@ describe('daSourceGet', () => {
     assert.strictEqual(await res.text(), '<html>composed</html>');
   });
 
-  it('returns a working 404 shell for quick-edit when head.html is missing', async () => {
-    const daSourceGet = await mockDaSourceGet({ headHtml: undefined });
+  it('returns a working 404 shell for quick-edit when there is no such site', async () => {
+    const daSourceGet = await mockDaSourceGet({ site: { exists: false } });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content?quick-edit');
     const daCtx = getDaCtx(req);
 
@@ -245,11 +296,11 @@ describe('daSourceGet', () => {
     assert.strictEqual(calls.compose.length, 0);
     const html = await res.text();
     assert.ok(html.includes('importmap'));
-    assert.ok(!html.includes('Unable to retrieve AEM branch'));
+    assert.ok(!html.includes('There is no site at this address'));
   });
 
-  it('still returns branch-not-found for non-quick-edit when head.html is missing', async () => {
-    const daSourceGet = await mockDaSourceGet({ headHtml: undefined });
+  it('returns not-found for non-quick-edit when there is no such site', async () => {
+    const daSourceGet = await mockDaSourceGet({ site: { exists: false } });
     const req = authedReq('https://main--site--org.ue.da.live/folder/content');
     const daCtx = getDaCtx(req);
 
@@ -259,15 +310,101 @@ describe('daSourceGet', () => {
     assert.strictEqual(calls.compose.length, 0);
     assert.strictEqual(calls.ue, 0);
     const html = await res.text();
-    assert.ok(html.includes('Unable to retrieve AEM branch'));
+    assert.ok(html.includes('There is no site at this address'));
+  });
+
+  it('composes the page when the site has no head.html', async () => {
+    const daSourceGet = await mockDaSourceGet({ headHtml: undefined });
+    const req = authedReq('https://main--site--org.ue.da.live/folder/content');
+    const daCtx = getDaCtx(req);
+
+    const res = await daSourceGet({ req, env, daCtx });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(calls.compose.length, 1);
+    assert.strictEqual(calls.ue, 1);
+  });
+});
+
+// the suite above stubs csp.js, so it can only pin which value reached the injectors. this one
+// runs the real compose / csp / ue modules: applyCsp mints the nonce and rewrites the head.html
+// placeholders, and everything injected afterwards has to carry that same value.
+describe('daSourceGet CSP nonce', () => {
+  const cspHead = '<meta http-equiv="Content-Security-Policy"'
+    + ' content="script-src \'nonce-aem\' \'strict-dynamic\'">'
+    + '<script nonce="aem" src="/scripts/scripts.js"></script>';
+
+  const env = {
+    DA_ADMIN: 'https://admin.da.live',
+    AEM_API: 'https://api.aem.live',
+    UE_HOST: 'ue.da.live',
+    daadmin: {
+      fetch: async () => new Response('<main><div><p>stored</p></div></main>', { status: 200 }),
+    },
+  };
+
+  // composing reads the metadata sheet and the UE scaffold reads the component JSON, both off the
+  // preview host; a 404 is what each of them takes as "nothing to merge"
+  beforeEach(() => {
+    globalThis.fetch = async () => new Response('not found', { status: 404 });
+  });
+
+  afterEach(() => {
+    delete globalThis.fetch;
+  });
+
+  const serve = async (url) => {
+    const { daSourceGet } = await esmock('../../src/routes/da-admin.js', {
+      '../../src/storage/site.js': {
+        default: async () => ({ exists: true, head: cspHead, onSourceBus: false }),
+      },
+    });
+    const req = authedReq(url);
+    const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
+
+    assert.strictEqual(res.status, 200);
+    return res.text();
+  };
+
+  const mintedNonce = (tree) => {
+    const meta = select('head meta[http-equiv="content-security-policy" i]', tree);
+    return /'nonce-([^']+)'/.exec(meta.properties.content)?.[1];
+  };
+
+  it('stamps the minted nonce on the injected UE scripts', async () => {
+    const html = await serve('https://main--site--org.ue.da.live/folder/content');
+    const tree = fromHtml(html);
+    const nonce = mintedNonce(tree);
+
+    assert.ok(nonce);
+    assert.notStrictEqual(nonce, 'aem');
+    assert.strictEqual(
+      select('head script[src="https://universal-editor-service.adobe.io/cors.js"]', tree)
+        .properties.nonce,
+      nonce,
+    );
+    const componentScripts = selectAll('head script[src^="/component-"]', tree);
+    assert.strictEqual(componentScripts.length, 3);
+    componentScripts.forEach((script) => assert.strictEqual(script.properties.nonce, nonce));
+    assert.ok(!html.includes('nonce="aem"'));
+  });
+
+  it('stamps the minted nonce on the injected quick-edit import map', async () => {
+    const html = await serve('https://main--site--org.ue.da.live/folder/content?quick-edit');
+    const tree = fromHtml(html);
+    const nonce = mintedNonce(tree);
+
+    assert.ok(nonce);
+    assert.notStrictEqual(nonce, 'aem');
+    assert.strictEqual(select('head script[type="importmap"]', tree).properties.nonce, nonce);
+    assert.ok(!html.includes('nonce="aem"'));
   });
 });
 
 describe('source URLs', () => {
-  // these drive the unmocked module, so the /ping lookup really does reach out; answer it
-  // without the upgrade header, which is the legacy store these tests describe
+  // answers the unmocked lookups with a legacy site, the store these tests describe
   beforeEach(() => {
-    stubPing();
+    stubLookups();
   });
 
   afterEach(() => {
@@ -402,17 +539,16 @@ describe('daSourcePost to a non-HTML path', () => {
 });
 
 describe('daSourcePost', () => {
-  // these drive the unmocked module, so the /ping lookup really does reach out; answer it
-  // without the upgrade header, which is the legacy store these tests describe
+  // answers the unmocked lookups with a legacy site, the store these tests describe
   beforeEach(() => {
-    stubPing();
+    stubLookups();
   });
 
   afterEach(() => {
     delete globalThis.fetch;
   });
 
-  describe('on a site /ping reports as enrolled', () => {
+  describe('on a site the lookup reports as enrolled', () => {
     const write = async (site, env) => {
       const html = new File(['<body>hello</body>'], 'page.html', { type: 'text/html' });
       const req = formReq(`https://main--${site}--org.ue.da.live/page`, html);
@@ -420,7 +556,7 @@ describe('daSourcePost', () => {
     };
 
     it('is refused with 405 and nothing is written', async () => {
-      stubPing(['org/refused']);
+      stubLookups(['org/refused']);
       const { env, fetched } = recorder();
 
       const res = await write('refused', env);
@@ -432,16 +568,16 @@ describe('daSourcePost', () => {
 
     // nothing is remembered between requests, so a site enrolled or un-enrolled mid-session takes
     // effect on the next one
-    it('probes once per write', async () => {
-      const asked = stubPing(['org/probedeach']);
+    it('looks the site up once per write, and asks nothing else', async () => {
+      const asked = stubLookups(['org/lookedupeach']);
       const { env } = recorder();
 
-      await write('probedeach', env);
-      await write('probedeach', env);
+      await write('lookedupeach', env);
+      await write('lookedupeach', env);
 
-      assert.deepStrictEqual(asked, [
-        'https://admin.hlx.page/ping/org/probedeach',
-        'https://admin.hlx.page/ping/org/probedeach',
+      assert.deepStrictEqual(asked.sort(), [
+        'https://config.aem.page/main--lookedupeach--org/config.json?scope=pipeline',
+        'https://config.aem.page/main--lookedupeach--org/config.json?scope=pipeline',
       ]);
     });
   });

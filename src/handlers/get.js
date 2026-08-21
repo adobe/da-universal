@@ -9,10 +9,11 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { get404, getRobots } from '../responses/index.js';
+import { get404, getRobots, resource503 } from '../responses/index.js';
 import { handleAEMProxyRequest } from '../routes/aem-proxy.js';
 import { getCookie } from '../routes/cookie.js';
 import { daSourceGet } from '../routes/da-admin.js';
+import { UpstreamError } from '../utils/upstream.js';
 
 export default async function getHandler({ req, env, daCtx }) {
   const { path } = daCtx;
@@ -21,11 +22,17 @@ export default async function getHandler({ req, env, daCtx }) {
   if (path.startsWith('/favicon.ico')) return get404();
   if (path.startsWith('/robots.txt')) return getRobots();
 
-  if (path.startsWith('/gimme_cookie')) return getCookie({ req, daCtx });
+  if (path.startsWith('/gimme_cookie')) return getCookie({ req, env, daCtx });
 
   const resourceRegex = /\.(css|js|js\.map|json|xml|woff|woff2|otf|ttf|plain\.html|html)$/i;
   if (resourceRegex.test(path)) {
-    return handleAEMProxyRequest({ req, env, daCtx });
+    try {
+      return await handleAEMProxyRequest({ req, env, daCtx });
+    } catch (e) {
+      if (!(e instanceof UpstreamError)) throw e;
+      console.warn(`503 GET ${path}, ${e.message}`);
+      return resource503(e.message);
+    }
   }
 
   const assetRegex = /\.(png|jpg|jpeg|webp|gif|svg|ico|avif)$/i;
@@ -35,8 +42,14 @@ export default async function getHandler({ req, env, daCtx }) {
       handleAEMProxyRequest({ req, env, daCtx }),
     ]);
 
-    const storeRes = daSourceGetRes.status === 'fulfilled' ? daSourceGetRes.value : undefined;
-    const aemRes = aemProxyRes.status === 'fulfilled' ? aemProxyRes.value : undefined;
+    // logs a rejection rather than rethrowing it, since the other read may still answer
+    const settled = (result, read) => {
+      if (result.status === 'fulfilled') return result.value;
+      console.error(`${read} threw on ${path}`, result.reason);
+      return undefined;
+    };
+    const storeRes = settled(daSourceGetRes, 'the store read');
+    const aemRes = settled(aemProxyRes, 'the aem proxy');
 
     let response;
     if (storeRes?.status === 200) {
