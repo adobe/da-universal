@@ -15,14 +15,24 @@
 // and one with a source url on api.aem.live is source-bus
 const SITES = {
   'org/site': 'https://content.da.live/org/site/',
+  'org/sourcebus': 'https://api.aem.live/org/sites/sourcebus/source/',
 };
 
-// what the code bus has at {owner}/{repo}/{ref}/head.html, which the pipeline scope answers with
-const HEAD_HTML = '<link rel="stylesheet" href="/styles/styles.css"/>\n<script src="/scripts/scripts.js" type="module"></script>\n';
+// what the code bus has at {owner}/{repo}/{ref}/head.html, which the pipeline scope answers with.
+// the policy and the placeholders are what applyCsp keys on, so a page served locally exercises
+// the nonce rewrite, the trusted-types strip and the move-to-http-header deletion
+const HEAD_HTML = '<meta http-equiv="Content-Security-Policy" move-to-http-header="true" content="script-src \'nonce-aem\' \'strict-dynamic\'; style-src \'nonce-aem\'; require-trusted-types-for \'script\'">\n<link rel="stylesheet" href="/styles/styles.css" nonce="aem"/>\n<script src="/scripts/scripts.js" type="module" nonce="aem"></script>\n';
 
 export default {
   async fetch(req) {
     const url = new URL(req.url);
+
+    // an unset HLX_CONFIG_SERVICE_TOKEN reaches the header as the string "undefined", and the
+    // real service refuses that the same way it refuses no header at all
+    const token = req.headers.get('x-access-token');
+    if (!token || token === 'undefined') {
+      return new Response('', { status: 401, headers: { 'x-error': 'missing x-access-token.' } });
+    }
 
     const [ref, site, org] = (url.pathname.split('/')[1] ?? '').split('--');
     if (!org || !site) {
