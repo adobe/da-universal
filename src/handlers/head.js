@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 
-import { getRobots, head404, resource503 } from '../responses/index.js';
+import { empty503, getRobots, head404 } from '../responses/index.js';
 import { handleAEMProxyRequest } from '../routes/aem-proxy.js';
 import { daSourceHead } from '../routes/da-admin.js';
 import { UpstreamError } from '../utils/upstream.js';
@@ -37,7 +37,7 @@ export default async function headHandler({ req, env, daCtx }) {
     } catch (e) {
       if (!(e instanceof UpstreamError)) throw e;
       console.warn(`503 HEAD ${path}, ${e.message}`);
-      return resource503(e.message);
+      return empty503(e.message);
     }
   }
 

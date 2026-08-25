@@ -9,7 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { get404, getRobots, resource503 } from '../responses/index.js';
+import { empty503, get404, getRobots } from '../responses/index.js';
 import { handleAEMProxyRequest } from '../routes/aem-proxy.js';
 import { getCookie } from '../routes/cookie.js';
 import { daSourceGet } from '../routes/da-admin.js';
@@ -31,7 +31,7 @@ export default async function getHandler({ req, env, daCtx }) {
     } catch (e) {
       if (!(e instanceof UpstreamError)) throw e;
       console.warn(`503 GET ${path}, ${e.message}`);
-      return resource503(e.message);
+      return empty503(e.message);
     }
   }
 

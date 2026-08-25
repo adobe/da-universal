@@ -23,7 +23,7 @@ import {
   applyQuickEditToDocument, buildQuickEditCookie, buildQuickEditNotFoundResponse,
 } from '../utils/quick-edit.js';
 import {
-  daResp, get401, get404, get415, get503, head401, head404, head503, post404, post405, post503,
+  daResp, empty503, get401, get404, get415, get503, head401, head404, post404, post405, post503,
 } from '../responses/index.js';
 import {
   DEFAULT_HTML_TEMPLATE,
@@ -72,7 +72,7 @@ const UPSTREAM_FAILURE_TEXT = {
 function refuseUpstreamFailure(e, method, sourcePath) {
   if (!(e instanceof UpstreamError)) throw e;
   console.warn(`503 ${method} ${sourcePath}, ${e.message}`);
-  if (method === 'HEAD') return head503(e.message);
+  if (method === 'HEAD') return empty503(e.message);
   if (method === 'POST') {
     return post503(UPSTREAM_FAILURE_TEXT[e.upstream] ?? SOURCE_FAILED_MESSAGE, e.message);
   }

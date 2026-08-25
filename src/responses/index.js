@@ -95,13 +95,7 @@ export function head401() {
   return new Response(null, { status: 401 });
 }
 
-export function head503(error = '') {
-  return new Response(null, { status: 503, headers: retryHeaders(error) });
-}
-
-// a refused stylesheet, script or sheet carries no body: nothing renders CSS, so the HTML shell a
-// page gets would only corrupt what the browser is parsing.
-export function resource503(error = '') {
+export function empty503(error = '') {
   return new Response(null, { status: 503, headers: retryHeaders(error) });
 }
 
