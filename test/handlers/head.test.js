@@ -16,6 +16,7 @@ import esmock from 'esmock';
 import reqs from '../mocks/req.js';
 
 const { getDaCtx } = await import('../../src/utils/daCtx.js');
+const { PREVIEW_HOST, UpstreamError } = await import('../../src/utils/upstream.js');
 
 describe('HEAD handler', () => {
   describe('early returns', () => {
@@ -398,5 +399,31 @@ describe('HEAD handler', () => {
 
       assert.strictEqual(res.status, 401);
     });
+  });
+});
+
+describe('HEAD handler resource reads', () => {
+  let headHandler;
+
+  beforeEach(async () => {
+    headHandler = (await esmock('../../src/handlers/head.js', {
+      '../../src/routes/da-admin.js': { daSourceHead: async () => new Response(null, { status: 200 }) },
+      '../../src/routes/aem-proxy.js': {
+        handleAEMProxyRequest: async () => {
+          throw new UpstreamError(PREVIEW_HOST, new TypeError('fetch failed'));
+        },
+      },
+    })).default;
+  });
+
+  it('refuses a stylesheet the preview host could not answer with a 503', async () => {
+    const req = new Request('https://main--site--org.ue.da.live/styles/styles.css', { method: 'HEAD' });
+    const daCtx = getDaCtx(req);
+
+    const res = await headHandler({ req, env: {}, daCtx });
+
+    assert.strictEqual(res.status, 503);
+    assert.strictEqual(res.headers.get('Retry-After'), '5');
+    assert.match(res.headers.get('x-error'), /preview host failed/);
   });
 });

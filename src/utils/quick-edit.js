@@ -95,9 +95,10 @@ function findEntryScriptInTree(tree) {
  * Inject or update the quick-edit import map in the tree.
  * Returns true when the tree was modified, false when already satisfied.
  * @param {import('hast').Root} tree
+ * @param {string | undefined} nonce
  * @returns {boolean}
  */
-function injectImportMap(tree) {
+function injectImportMap(tree, nonce) {
   const existing = select('script[type="importmap"]', tree);
   if (existing) {
     const text = (existing.children ?? []).find((c) => c.type === 'text')?.value ?? '';
@@ -112,7 +113,10 @@ function injectImportMap(tree) {
     existing.children = [{ type: 'text', value: JSON.stringify(merged) }];
     return true;
   }
-  const node = h('script', { type: 'importmap' }, JSON.stringify(QUICK_EDIT_IMPORT_MAP));
+  const node = h('script', {
+    type: 'importmap',
+    ...(nonce === undefined ? {} : { nonce }),
+  }, JSON.stringify(QUICK_EDIT_IMPORT_MAP));
   const head = select('head', tree);
   if (head) {
     head.children.unshift(node);
@@ -120,19 +124,6 @@ function injectImportMap(tree) {
     tree.children = [node, ...(tree.children ?? [])];
   }
   return true;
-}
-
-/**
- * Add the CSP nonce attribute to every `<script>` element that lacks one.
- * @param {import('hast').Root} tree
- * @param {string | undefined} nonce
- */
-function applyNonceInTree(tree, nonce) {
-  if (!nonce) return;
-  for (const node of selectAll('script', tree)) {
-    node.properties ??= {};
-    node.properties.nonce = nonce;
-  }
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -163,23 +154,21 @@ export function findEntryScriptPath(html) {
 
 /**
  * Apply quick-edit document transforms to a hast tree in place: inject the
- * import map, stamp the CSP nonce onto script tags, and discover the entry
- * script path (used to set the quick-edit cookie).
+ * import map and discover the entry script path (used to set the quick-edit cookie).
  * @param {import('hast').Root} tree The document tree (mutated in place)
- * @param {string | undefined} [nonce] CSP nonce to stamp onto all script tags
+ * @param {string | undefined} [nonce] CSP nonce for an injected import map
  * @returns {string | undefined} The entry script path, if found
  */
 export function applyQuickEditToDocument(tree, nonce) {
   const entryPath = findEntryScriptInTree(tree);
-  injectImportMap(tree);
-  applyNonceInTree(tree, nonce);
+  injectImportMap(tree, nonce);
   return entryPath;
 }
 
 /**
- * Apply quick-edit document transforms: discover entry script, inject import map, apply nonce.
+ * Apply quick-edit document transforms: discover the entry script and inject the import map.
  * @param {string} html
- * @param {string | undefined} [nonce] CSP nonce to stamp onto all script tags
+ * @param {string | undefined} [nonce] CSP nonce for an injected import map
  * @returns {{ html: string, entryPath: string | undefined }}
  */
 export function prepareQuickEditDocument(html, nonce) {
@@ -189,14 +178,12 @@ export function prepareQuickEditDocument(html, nonce) {
 }
 
 /**
- * Build the quick-edit 404 response for when the AEM branch itself can't be
- * resolved (e.g. head.html is missing): a minimal page shell with the import
- * map injected (no entry script), status 404, so the editor can still load
- * into it. Reuse this anywhere quick-edit needs to degrade the same way.
+ * Build the quick-edit 404 response for when there is no such site: a minimal page shell with
+ * the import map injected and no entry script, so the editor can still load into it.
  * @returns {Response}
  */
 export function buildQuickEditNotFoundResponse() {
-  console.log('[quick-edit] doc compose: head.html not found on origin, serving a minimal scaffold');
+  console.log('[quick-edit] doc compose: no such site, serving a minimal scaffold');
   const tree = fromHtml(`<html><head></head>${DEFAULT_HTML_TEMPLATE}</html>`);
   applyQuickEditToDocument(tree, undefined);
   const body = toHtml(tree, { allowDangerousHtml: true });

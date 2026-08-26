@@ -14,6 +14,8 @@ import { select } from 'hast-util-select';
 import { readBlockConfig } from '../utils/hast.js';
 import { withAemAuth } from '../utils/aemCtx.js';
 
+const TIMEOUT_MS = 5 * 1000;
+
 export function extractLocalMetadata(bodyTree) {
   const metaBlock = select('div.metadata', bodyTree);
   let metaConfig = {};
@@ -157,7 +159,9 @@ export class Modifiers {
 
 export async function fetchBulkMetadata(aemCtx) {
   const url = new URL('/metadata.json', aemCtx.previewUrl);
-  const response = await fetch(url, withAemAuth(aemCtx));
+  const response = await fetch(url, withAemAuth(aemCtx, {
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  }));
 
   if (response.ok) {
     const json = await response.json();

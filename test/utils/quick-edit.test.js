@@ -115,22 +115,30 @@ describe('quick-edit script transform', () => {
       assert.ok(out.includes('"da-lit"'));
     });
 
-    it('applies CSP nonce to all script tags', () => {
+    it('applies the CSP nonce only to an import map it creates', () => {
       const html = '<html><head><script src="/scripts/scripts.js" type="module"></script></head><body></body></html>';
       const { html: out } = quickEdit.prepareQuickEditDocument(html, 'abc123');
-      assert.ok(out.includes('nonce="abc123"'));
+      const tree = fromHtml(out);
+      assert.strictEqual(tree.children[0].children[0].children[0].properties.nonce, 'abc123');
+      assert.strictEqual(tree.children[0].children[0].children[1].properties.nonce, undefined);
+    });
+
+    it('does not apply the CSP nonce to an existing author import map', () => {
+      const html = '<html><head><script type="importmap">{"imports":{"author":"/author.js"}}</script></head></html>';
+      const { html: out } = quickEdit.prepareQuickEditDocument(html, 'abc123');
+      assert.ok(!out.includes('nonce='));
     });
   });
 
   describe('applyQuickEditToDocument', () => {
-    it('injects the import map, finds the entry script, and stamps the nonce', () => {
+    it('injects a nonced import map and finds the entry script', () => {
       const tree = fromHtml('<html><head><script src="/scripts/scripts.js" type="module"></script></head><body></body></html>');
       const entryPath = quickEdit.applyQuickEditToDocument(tree, 'abc123');
       const out = toHtml(tree, { allowDangerousHtml: true });
       assert.strictEqual(entryPath, '/scripts/scripts.js');
-      assert.ok(out.includes('<head><script type="importmap"'));
+      assert.ok(out.includes('<head><script type="importmap" nonce="abc123"'));
       assert.ok(out.includes('"da-lit"'));
-      assert.ok(out.includes('nonce="abc123"'));
+      assert.ok(!out.includes('<script src="/scripts/scripts.js" type="module" nonce='));
     });
 
     it('returns undefined entry path when there is no entry script', () => {

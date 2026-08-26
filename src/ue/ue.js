@@ -21,11 +21,12 @@ import { injectUEAttributes } from './attributes.js';
  * @param {import('hast').Root} documentTree - The composed document tree (mutated in place).
  * @param {Object} daCtx - The Dark Alley context object.
  * @param {Object} aemCtx - The AEM context object.
+ * @param {string|undefined} nonce - The composed page's CSP nonce.
  */
-export async function applyUEInstrumentation(documentTree, daCtx, aemCtx) {
+export async function applyUEInstrumentation(documentTree, daCtx, aemCtx, nonce) {
   // add UE head script and meta tags
   const headNode = select('head', documentTree);
-  headNode.children.push(...getUEHtmlHeadEntries(daCtx, aemCtx));
+  headNode.children.push(...getUEHtmlHeadEntries(daCtx, aemCtx, nonce));
 
   // add data attributes for UE to the body
   const bodyNode = select('body', documentTree);

@@ -22,9 +22,13 @@ describe('applyUEInstrumentation', () => {
   it('adds UE head entries and UE body attributes to a composed tree', async () => {
     let ueConfigArg;
     let injectedBody;
+    let scaffoldNonce;
     const { applyUEInstrumentation } = await esmock('../../src/ue/ue.js', {
       '../../src/ue/scaffold.js': {
-        getUEHtmlHeadEntries: () => [h('meta', { name: 'urn:adobe:aue:system:ab', content: 'x' })],
+        getUEHtmlHeadEntries: (daCtx, aemCtx, nonce) => {
+          scaffoldNonce = nonce;
+          return [h('meta', { name: 'urn:adobe:aue:system:ab', content: 'x' })];
+        },
         getUEConfig: async () => {
           ueConfigArg = 'config';
           return { ok: true };
@@ -36,7 +40,7 @@ describe('applyUEInstrumentation', () => {
     });
 
     const tree = fromHtml('<html><head></head><body><div>content</div></body></html>');
-    await applyUEInstrumentation(tree, { org: 'o', site: 's' }, {});
+    await applyUEInstrumentation(tree, { org: 'o', site: 's' }, {}, 'abc123');
 
     // UE head entry was pushed into the head node
     const head = select('head', tree);
@@ -46,5 +50,6 @@ describe('applyUEInstrumentation', () => {
     // UE attributes were applied to the body node, using the fetched config
     assert.strictEqual(ueConfigArg, 'config');
     assert.strictEqual(injectedBody, select('body', tree));
+    assert.strictEqual(scaffoldNonce, 'abc123');
   });
 });

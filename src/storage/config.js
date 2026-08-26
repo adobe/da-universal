@@ -21,19 +21,19 @@ async function fetchConfig(env, daCtx, path) {
   const configUrl = new URL(path, env.DA_ADMIN);
 
   const res = await env.daadmin.fetch(configUrl, opts);
-  if (!res.ok) {
+  // a site with no config answers 404, and an author who may not read it is refused 403. both
+  // answered, so the starter template is used rather than refusing the request
+  if (res.status === 404 || res.status === 401 || res.status === 403) {
+    if (res.status !== 404) console.warn(`${configUrl} answered ${res.status}, using no config`);
     return null;
   }
+  if (!res.ok) throw new Error(`${configUrl} answered ${res.status}`);
   const json = await res.json();
   if (!json) return [];
   const data = getFirstSheet(json);
   return data;
 }
 
-export async function getSiteConfig(env, daCtx) {
+export async function getEditorConfig(env, daCtx) {
   return fetchConfig(env, daCtx, `/config/${daCtx.org}/${daCtx.site}`);
-}
-
-export async function getOrgConfig(env, daCtx) {
-  return fetchConfig(env, daCtx, `/config/${daCtx.org}`);
 }

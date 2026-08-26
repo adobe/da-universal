@@ -20,6 +20,7 @@ import rewriteIcons from './rewrite-icons.js';
 import { makeImagesRelative } from './rewrite-images.js';
 import extractSectionMetadata from './section-metadata.js';
 import { DEFAULT_HTML_TEMPLATE } from '../utils/constants.js';
+import { PREVIEW_HOST, withUpstream } from '../utils/upstream.js';
 
 /**
  * Injects AEM HTML head entries into the head node of an HTML document.
@@ -98,8 +99,9 @@ export async function composeHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
   const bodyTree = fromHtml(bodyHtmlStr, { fragment: true });
   bodyNode.children = bodyTree.children;
 
-  // fetch bulk metadata, extract metadata block from the body and merge them
-  const bulkMetadata = await fetchBulkMetadata(aemCtx);
+  // fetch bulk metadata, extract metadata block from the body and merge them. the sheet is the
+  // only thing here that leaves the worker, so it is the only step that names an upstream
+  const bulkMetadata = await withUpstream(PREVIEW_HOST, () => fetchBulkMetadata(aemCtx));
   const localMetaData = extractLocalMetadata(bodyTree);
   const mergedMetaData = {
     ...localMetaData,

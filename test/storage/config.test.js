@@ -67,7 +67,7 @@ describe('Config Module', () => {
     }
   };
 
-  describe('getSiteConfig', () => {
+  describe('getEditorConfig', () => {
     it('should fetch site config successfully (single-sheet)', async () => {
       const mockData = [
         { key: 'editor.ue.template', value: '/content=/templates' },
@@ -75,7 +75,7 @@ describe('Config Module', () => {
       ];
       setMockResponse({ data: mockData });
 
-      const result = await configModule.getSiteConfig(mockEnv, mockDaCtx);
+      const result = await configModule.getEditorConfig(mockEnv, mockDaCtx);
 
       const expectedCall = {
         url: 'https://admin.da.live/config/test-org/test-site',
@@ -122,84 +122,40 @@ describe('Config Module', () => {
         ':type': 'multi-sheet',
       };
       setMockResponse(multiSheet);
-      const result = await configModule.getSiteConfig(mockEnv, mockDaCtx);
+      const result = await configModule.getEditorConfig(mockEnv, mockDaCtx);
       // Should return only the first sheet's data array
       assert.deepStrictEqual(result, multiSheet.data.data);
     });
 
-    it('should return null when fetch fails', async () => {
-      mockFetch.nextResponse = { ok: false };
+    it('should return null when there is no config', async () => {
+      mockFetch.nextResponse = { ok: false, status: 404 };
 
-      const result = await configModule.getSiteConfig(mockEnv, mockDaCtx);
-
-      assert.strictEqual(result, null);
-    });
-  });
-
-  describe('getOrgConfig', () => {
-    it('should fetch org config successfully (single-sheet)', async () => {
-      const mockData = [
-        { key: 'editor.ue.template', value: '/content=/templates' },
-        { key: 'editor.ue.template', value: '/components=/blocks' },
-        { key: 'editor.ue.template', value: '/assets=/media' },
-      ];
-      setMockResponse({ data: mockData });
-
-      const result = await configModule.getOrgConfig(mockEnv, mockDaCtx);
-
-      const expectedCall = {
-        url: 'https://admin.da.live/config/test-org',
-        opts: {
-          headers: new Headers({
-            authorization: 'test-token',
-          }),
-        },
-      };
-      assert.strictEqual(mockFetch.lastCall.url, expectedCall.url);
-      assert.deepStrictEqual(
-        Object.fromEntries(mockFetch.lastCall.opts.headers.entries()),
-        Object.fromEntries(expectedCall.opts.headers.entries()),
-      );
-      assert.deepStrictEqual(result, mockData);
-    });
-
-    it('should fetch org config successfully (multi-sheet)', async () => {
-      const multiSheet = {
-        data: {
-          total: 2,
-          limit: 2,
-          offset: 0,
-          data: [
-            { key: 'org.setting', value: 'org-value' },
-            { key: 'editor.ue.template', value: '/org=/org-templates.html' },
-          ],
-        },
-        library: {
-          total: 1,
-          limit: 1,
-          offset: 0,
-          data: [
-            {
-              title: 'Org Blocks', path: 'https://content.da.live/org/library/blocks.json', format: '', ref: '', icon: '', experience: '',
-            },
-          ],
-        },
-        ':names': ['data', 'library'],
-        ':version': 3,
-        ':type': 'multi-sheet',
-      };
-      setMockResponse(multiSheet);
-      const result = await configModule.getOrgConfig(mockEnv, mockDaCtx);
-      // Should return only the first sheet's data array
-      assert.deepStrictEqual(result, multiSheet.data.data);
-    });
-
-    it('should return null when fetch fails', async () => {
-      mockFetch.nextResponse = { ok: false };
-
-      const result = await configModule.getOrgConfig(mockEnv, mockDaCtx);
+      const result = await configModule.getEditorConfig(mockEnv, mockDaCtx);
 
       assert.strictEqual(result, null);
+    });
+
+    // da-admin answers 403 when the author may not read the site config, and a retry answers the
+    // same, so the starter template is used rather than refusing
+    [401, 403].forEach((status) => {
+      it(`should return null when the store answers ${status}`, async () => {
+        mockFetch.nextResponse = { ok: false, status };
+
+        assert.strictEqual(await configModule.getEditorConfig(mockEnv, mockDaCtx), null);
+      });
+    });
+
+    // a store that could not answer is not the same as a site with no config, and reading it as
+    // one hands the author a blank page to save over a document that exists
+    [429, 500, 502].forEach((status) => {
+      it(`should throw when the store answers ${status}`, async () => {
+        mockFetch.nextResponse = { ok: false, status };
+
+        await assert.rejects(
+          () => configModule.getEditorConfig(mockEnv, mockDaCtx),
+          new RegExp(String(status)),
+        );
+      });
     });
   });
 
@@ -210,7 +166,7 @@ describe('Config Module', () => {
         { key: 'editor.ue.template', value: '/content=/templates' },
       ]);
 
-      await configModule.getSiteConfig(mockEnv, ctxWithoutToken);
+      await configModule.getEditorConfig(mockEnv, ctxWithoutToken);
 
       const expectedCall = {
         url: 'https://admin.da.live/config/test-org/test-site',

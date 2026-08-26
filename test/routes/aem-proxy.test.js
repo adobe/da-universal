@@ -14,6 +14,7 @@
 import assert from 'assert';
 import esmock from 'esmock';
 import { getDaCtx } from '../../src/utils/daCtx.js';
+import { PREVIEW_HOST, UpstreamError } from '../../src/utils/upstream.js';
 
 describe('AEM proxy quick-edit', () => {
   let handleAEMProxyRequest;
@@ -80,5 +81,33 @@ describe('AEM proxy quick-edit', () => {
     assert.strictEqual(res.status, 404);
     assert.strictEqual(await res.text(), 'missing script');
     assert.strictEqual(res.headers.get('Set-Cookie'), null);
+  });
+});
+
+describe('AEM proxy upstream failures', () => {
+  let handleAEMProxyRequest;
+  const env = { UE_HOST: 'test-host', UE_SERVICE: 'test-service' };
+
+  beforeEach(async () => {
+    const mod = await esmock('../../src/routes/aem-proxy.js');
+    handleAEMProxyRequest = mod.handleAEMProxyRequest;
+  });
+
+  afterEach(() => {
+    delete globalThis.fetch;
+  });
+
+  it('names the preview host when the read cannot be made', async () => {
+    const req = new Request('https://main--site--org.ue.da.live/styles/styles.css');
+    const daCtx = getDaCtx(req);
+
+    globalThis.fetch = async () => {
+      throw new TypeError('fetch failed');
+    };
+
+    await assert.rejects(
+      () => handleAEMProxyRequest({ req, env, daCtx }),
+      (e) => e instanceof UpstreamError && e.upstream === PREVIEW_HOST,
+    );
   });
 });

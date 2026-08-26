@@ -19,6 +19,7 @@ import { getDaCtx } from '../../src/utils/daCtx.js';
 describe('AEM context', () => {
   let getAemCtx;
   let getAEMHtml;
+  let withAemAuth;
   let fixUrlsWhenLocalDev;
   let aemCtx;
 
@@ -26,6 +27,7 @@ describe('AEM context', () => {
     const mod = await esmock('../../src/utils/aemCtx.js');
     getAemCtx = mod.getAemCtx;
     getAEMHtml = mod.getAEMHtml;
+    withAemAuth = mod.withAemAuth;
     fixUrlsWhenLocalDev = mod.fixUrlsWhenLocalDev;
   });
 
@@ -66,15 +68,38 @@ describe('AEM context', () => {
     });
   });
 
+  describe('withAemAuth', () => {
+    it('adds the site token without dropping existing request headers', () => {
+      const init = withAemAuth(
+        { siteToken: 'site-token' },
+        { method: 'GET', headers: { Accept: 'text/html' } },
+      );
+
+      assert.strictEqual(init.method, 'GET');
+      assert.strictEqual(init.headers.get('Accept'), 'text/html');
+      assert.strictEqual(init.headers.get('Authorization'), 'site-token');
+    });
+
+    it('leaves authorization unset when there is no site token', () => {
+      const init = withAemAuth({}, { headers: { Accept: 'text/html' } });
+
+      assert.strictEqual(init.headers.get('Accept'), 'text/html');
+      assert.strictEqual(init.headers.get('Authorization'), null);
+    });
+  });
+
   describe('getAEMHtml function', () => {
     const mockAemCtx = {
       previewUrl: 'https://main--site--org.aem.page',
     };
+    let status;
 
     beforeEach(async () => {
+      status = 200;
       // Mock global fetch
-      global.fetch = async (url) => ({
-        ok: url.includes('success'),
+      global.fetch = async () => ({
+        ok: status === 200,
+        status,
         text: async () => '<html>test content</html>',
       });
     });
@@ -88,9 +113,33 @@ describe('AEM context', () => {
       assert.strictEqual(html, '<html>test content</html>');
     });
 
-    it('should return undefined for failed request', async () => {
+    // a ref that was never previewed has no head.html, and the page is composed without it
+    it('should return undefined for a 404', async () => {
+      status = 404;
       const html = await getAEMHtml(mockAemCtx, '/fail-path');
       assert.strictEqual(html, undefined);
+    });
+
+    // a preview host behind Helix authentication refuses without a site token, and a retry
+    // answers the same, so the page is built without the project head
+    [401, 403].forEach((code) => {
+      it(`should return undefined for a ${code}`, async () => {
+        status = code;
+        const html = await getAEMHtml(mockAemCtx, '/fail-path');
+        assert.strictEqual(html, undefined);
+      });
+    });
+
+    // a preview host that could not answer is not a ref that was never previewed, and reading it
+    // as one serves the page at 200 with no stylesheet, no scripts and no entry script
+    [429, 500, 502].forEach((code) => {
+      it(`should throw on a ${code}`, async () => {
+        status = code;
+        await assert.rejects(
+          () => getAEMHtml(mockAemCtx, '/fail-path'),
+          new RegExp(String(code)),
+        );
+      });
     });
   });
 

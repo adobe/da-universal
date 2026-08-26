@@ -48,8 +48,15 @@ export function withAemAuth(aemCtx, init = {}) {
 
 export async function getAEMHtml(aemCtx, path) {
   const { previewUrl } = aemCtx;
-  const resp = await fetch(`${previewUrl}${path}`, withAemAuth(aemCtx));
-  if (!resp.ok) return undefined;
+  const url = `${previewUrl}${path}`;
+  const resp = await fetch(url, withAemAuth(aemCtx));
+  // a ref that was never previewed answers 404, and a host behind Helix auth refuses without a
+  // site token. both answered, so the page is built without the fragment
+  if (resp.status === 404 || resp.status === 401 || resp.status === 403) {
+    if (resp.status !== 404) console.warn(`${url} answered ${resp.status}, using no fragment`);
+    return undefined;
+  }
+  if (!resp.ok) throw new Error(`${url} answered ${resp.status}`);
   const headHtml = await resp.text();
   return headHtml;
 }
