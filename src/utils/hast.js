@@ -24,6 +24,7 @@ export function childNodes(node) {
 
 export function toMetaName(text) {
   return text
+    .trim()
     .toLowerCase()
     .replace(/[^0-9a-z:_]/gi, '-');
 }
