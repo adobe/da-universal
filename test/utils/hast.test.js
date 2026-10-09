@@ -15,6 +15,8 @@
 import assert from 'assert';
 import { describe, it } from 'mocha';
 import esmock from 'esmock';
+import { fromHtml } from 'hast-util-from-html';
+import { select } from 'hast-util-select';
 
 describe('hast utilities', () => {
   let utils;
@@ -43,6 +45,42 @@ describe('hast utilities', () => {
       assert.equal(utils.toMetaName('Hello World!'), 'hello-world-');
       assert.equal(utils.toMetaName('Test_123'), 'test_123');
       assert.equal(utils.toMetaName('Special@#Characters'), 'special--characters');
+    });
+
+    it('ignores surrounding whitespace', () => {
+      assert.equal(utils.toMetaName('\n          title\n        '), 'title');
+    });
+  });
+
+  describe('readBlockConfig', () => {
+    it('reads names from indented (source bus) html', () => {
+      // Helix 6 stores documents pretty-printed, so cells contain whitespace text nodes
+      const tree = fromHtml(`
+    <div class="metadata">
+      <div>
+        <div>
+          <p>title</p>
+        </div>
+        <div>
+          <p>Already investing in Canada</p>
+        </div>
+      </div>
+      <div>
+        <div>
+          <p>Template</p>
+        </div>
+        <div>
+          <p>article</p>
+        </div>
+      </div>
+    </div>`, { fragment: true });
+
+      const config = utils.readBlockConfig(select('div.metadata', tree));
+
+      assert.deepStrictEqual({ ...config }, {
+        title: 'Already investing in Canada',
+        template: 'article',
+      });
     });
   });
 
