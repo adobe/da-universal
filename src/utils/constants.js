@@ -12,6 +12,7 @@
 
 export const TRUSTED_ORIGINS = [
   'https://da.live',
+  'https://aem.adobe.com',
   'https://experience.adobe.com',
   'https://experience-stage.adobe.com',
   'https://localhost.corp.adobe.com:8080',
