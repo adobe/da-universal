@@ -12,7 +12,7 @@
 
 import { toString } from 'hast-util-to-string';
 import { SKIP, visit } from 'unist-util-visit';
-import { toMetaName } from '../utils/hast.js';
+import { childNodes, toMetaName } from '../utils/hast.js';
 
 export function toBlockCSSClassNames(value) {
   if (!value) return [];
@@ -32,9 +32,10 @@ export default function extractSectionMetadata(hast) {
     && node.properties?.className?.includes('section-metadata');
 
   visit(hast, isSectionMetadata, (node, index, parent) => {
-    for (const $row of node.children) {
-      if ($row.tagName === 'div' && $row.children?.[1]) {
-        const [$name, $value] = $row.children;
+    for (const $row of childNodes(node)) {
+      const $cells = $row.tagName === 'div' ? childNodes($row) : [];
+      if ($cells[1]) {
+        const [$name, $value] = $cells;
         const name = toMetaName(toString($name));
         if (name) {
           const value = toString($value).trim();

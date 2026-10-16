@@ -32,7 +32,7 @@ export function extractLocalMetadata(bodyTree) {
  * @returns {string} the meta name
  */
 export function toMetaName(text) {
-  return text.toLowerCase().replace(/[^0-9a-z:_]/gi, '-');
+  return text.trim().toLowerCase().replace(/[^0-9a-z:_]/gi, '-');
 }
 
 export function globToRegExp(glob) {
