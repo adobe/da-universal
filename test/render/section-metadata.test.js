@@ -17,6 +17,7 @@ import { describe, it, before } from 'mocha';
 import esmock from 'esmock';
 import { h } from 'hastscript';
 import { selectAll } from 'hast-util-select';
+import { fromHtml } from 'hast-util-from-html';
 
 function makeRow(key, value) {
   return h('div', {}, [
@@ -220,6 +221,41 @@ describe('extractSectionMetadata', () => {
 
       assert.doesNotThrow(() => extractSectionMetadata(hast));
       assert.equal(section.children.length, 0);
+    });
+  });
+
+  describe('indented (source bus) html', () => {
+    it('applies style and data attributes from pretty-printed rows', () => {
+      // Helix 6 stores documents pretty-printed, so rows contain whitespace text nodes
+      const tree = fromHtml(`
+  <div>
+    <p>Hello</p>
+    <div class="section-metadata">
+      <div>
+        <div>
+          <p>style</p>
+        </div>
+        <div>
+          <p>pb-0, Dark</p>
+        </div>
+      </div>
+      <div>
+        <div>
+          <p>background</p>
+        </div>
+        <div>
+          <p>blue</p>
+        </div>
+      </div>
+    </div>
+  </div>`, { fragment: true });
+      const section = tree.children.find((n) => n.type === 'element');
+
+      extractSectionMetadata(tree);
+
+      assert.deepStrictEqual(section.properties.className, ['pb-0', 'dark']);
+      assert.strictEqual(section.properties['data-background'], 'blue');
+      assert.strictEqual(selectAll('.section-metadata', tree).length, 0);
     });
   });
 });
