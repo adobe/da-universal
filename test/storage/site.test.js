@@ -100,14 +100,14 @@ describe('getSiteConfig', () => {
       });
     });
 
-    it('reads the url, not the type, since both stores are markup', async () => {
+    it('reads a markup url off the source bus as legacy', async () => {
       stubFetch(config);
 
       const { onSourceBus } = await getSiteConfig(env, daCtx());
       assert.strictEqual(onSourceBus, false);
     });
 
-    // the config service rewrites an api.aem.live source to `type: sourcebus` and drops the url
+    // saving a config turns an api.aem.live source into `type: sourcebus` and drops the url
     it('reads a sourcebus type without a url as source-bus', async () => {
       stubFetch(() => config({ contentSource: { type: 'sourcebus' } }));
       const warnings = [];

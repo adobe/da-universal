@@ -17,8 +17,8 @@ const NO_SITE = { exists: false, head: undefined, onSourceBus: false };
  * Asks the config service whether a site exists, what its head.html is and which store holds it.
  *
  * A site behind Helix authentication refuses `{ref}--{site}--{org}.aem.page/head.html` without a
- * site token, and the config service does not. `contentSource.url` names the store, since both
- * stores are `type: markup`.
+ * site token, and the config service does not. `contentSource` names the store: `type: sourcebus`,
+ * or, in a config saved before that type existed, a `type: markup` url on the source bus.
  *
  * Throws on any refusal but a 404, which is the only status that means there is no such site. A ref
  * that was never built exists and has no head.html, which is a 200 with an empty head.
@@ -54,14 +54,16 @@ export default async function getSiteConfig(env, daCtx) {
   if (!response.ok) throw new Error(`the config service answered ${response.status}`);
 
   const { head, contentSource } = await response.json();
+  const onSourceBus = contentSource?.type === 'sourcebus'
+    || Boolean(contentSource?.url?.startsWith(`${env.AEM_API}/`));
   // a config that names no store is read as legacy
-  if (!contentSource?.url) {
+  if (!onSourceBus && !contentSource?.url) {
     console.warn(`${url} named no content source, reading ${org}/${site} as legacy`);
   }
 
   return {
     exists: true,
     head: head?.html,
-    onSourceBus: Boolean(contentSource?.url?.startsWith(`${env.AEM_API}/`)),
+    onSourceBus,
   };
 }
