@@ -107,6 +107,24 @@ describe('getSiteConfig', () => {
       assert.strictEqual(onSourceBus, false);
     });
 
+    // the config service rewrites an api.aem.live source to `type: sourcebus` and drops the url
+    it('reads a sourcebus type without a url as source-bus', async () => {
+      stubFetch(() => config({ contentSource: { type: 'sourcebus' } }));
+      const warnings = [];
+      const saved = console.warn;
+      console.warn = (m) => warnings.push(m);
+
+      let onSourceBus;
+      try {
+        ({ onSourceBus } = await getSiteConfig(env, daCtx()));
+      } finally {
+        console.warn = saved;
+      }
+
+      assert.strictEqual(onSourceBus, true);
+      assert.deepStrictEqual(warnings, []);
+    });
+
     it('takes the source bus origin from env', async () => {
       stubFetch(() => config({ contentSource: { type: 'markup', url: 'https://api.stage.example/o/sites/s/source' } }));
 
