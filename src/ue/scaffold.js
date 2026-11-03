@@ -113,6 +113,11 @@ export async function getUEConfig(aemCtx) {
       type: 'component-filter',
       url: `${host}/component-filters.json`,
     },
+    {
+      // optional, see src/ue/json-blocks.js
+      type: 'component-json-mapping',
+      url: `${host}/component-json-mappings.json`,
+    },
   ];
 
   const fetchInit = withAemAuth(aemCtx);

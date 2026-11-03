@@ -274,6 +274,7 @@ describe('UE scaffold', () => {
           'https://main--site--org.aem.page/component-filters.json': {
             filters: ['filter1', 'filter2'],
           },
+          'https://main--site--org.aem.page/component-json-mappings.json': [{ block: 'form' }],
         };
 
         return {
@@ -292,6 +293,7 @@ describe('UE scaffold', () => {
         'component-definition': { components: ['def1', 'def2'] },
         'component-model': { models: ['model1', 'model2'] },
         'component-filter': { filters: ['filter1', 'filter2'] },
+        'component-json-mapping': [{ block: 'form' }],
       });
     });
 
@@ -307,6 +309,7 @@ describe('UE scaffold', () => {
         'component-definition': undefined,
         'component-model': undefined,
         'component-filter': undefined,
+        'component-json-mapping': undefined,
       });
     });
 
@@ -324,6 +327,7 @@ describe('UE scaffold', () => {
         'component-definition': undefined,
         'component-model': undefined,
         'component-filter': undefined,
+        'component-json-mapping': undefined,
       });
     });
   });

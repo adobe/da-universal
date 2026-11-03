@@ -18,6 +18,7 @@ import {
   getBlockNameAndClasses,
   removeWhitespaceTextNodes,
 } from '../utils/hast.js';
+import { expandJsonBlock, getJsonBlockConfig } from './json-blocks.js';
 
 function addAttributes(node, attributes) {
   Object.entries(attributes).forEach(([name, value]) => {
@@ -317,9 +318,17 @@ export function injectUEAttributes(bodyTree, ueConfig) {
 
         const blockCmpDef = getComponentDefinition(ueConfig, blockName);
         const filterDef = getFilterDefinition(ueConfig, blockName);
+        const blockResource = `urn:ab:section-${sIndex}/block-${bIndex}`;
+
+        // blocks storing JSON whose items are edited as individual components
+        const jsonBlockConfig = getJsonBlockConfig(ueConfig, blockName);
+        if (jsonBlockConfig
+          && expandJsonBlock(block, blockName, blockResource, jsonBlockConfig, ueConfig)) {
+          return;
+        }
 
         addAttributes(block, {
-          'data-aue-resource': `urn:ab:section-${sIndex}/block-${bIndex}`,
+          'data-aue-resource': blockResource,
           'data-aue-type': 'component',
           'data-aue-label': blockCmpDef
             ? blockCmpDef.title
