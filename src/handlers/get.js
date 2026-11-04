@@ -25,8 +25,13 @@ export default async function getHandler({ req, env, daCtx }) {
   if (path.startsWith('/gimme_cookie')) return getCookie({ req, env, daCtx });
 
   const resourceRegex = /\.(css|js|js\.map|xml|woff|woff2|otf|ttf|plain\.html|html)$/i;
-  if (resourceRegex.test(path)) {
+  const isJson = /\.json$/i.test(path);
+  if (resourceRegex.test(path) || isJson) {
     try {
+      if (isJson) {
+        const response = await daSourceGet({ req, env, daCtx });
+        if (response.status !== 404) return response;
+      }
       return await handleAEMProxyRequest({ req, env, daCtx });
     } catch (e) {
       if (!(e instanceof UpstreamError)) throw e;

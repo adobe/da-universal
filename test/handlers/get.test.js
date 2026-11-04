@@ -143,6 +143,78 @@ describe('GET handler', () => {
 
   describe('JSON sheets', () => {
     ['json', 'JSON'].forEach((ext) => {
+      it(`falls back to AEM for code-stored .${ext} when DA returns 404`, async () => {
+        const req = new Request(`https://main--site--org.preview.da.live/config.${ext}?limit=1`);
+        const daCtx = getDaCtx(req);
+        const body = '{"code":true}';
+        let sourceRead = false;
+        const handler = (await esmock('../../src/handlers/get.js', {
+          '../../src/routes/da-admin.js': {
+            daSourceGet: async () => {
+              sourceRead = true;
+              return new Response(null, { status: 404 });
+            },
+          },
+          '../../src/routes/aem-proxy.js': {
+            handleAEMProxyRequest: async (args) => {
+              assert.ok(sourceRead);
+              assert.strictEqual(args.req, req);
+              assert.strictEqual(args.daCtx, daCtx);
+              return new Response(body, { headers: { 'Content-Type': 'application/json' } });
+            },
+          },
+        })).default;
+
+        const res = await handler({ req, env: {}, daCtx });
+
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.headers.get('Content-Type'), 'application/json');
+        assert.strictEqual(await res.text(), body);
+      });
+    });
+
+    [401, 403, 500, 503].forEach((status) => {
+      it(`preserves DA ${status} for JSON without falling back`, async () => {
+        const req = new Request('https://main--site--org.preview.da.live/config.json');
+        const response = new Response('DA error', { status });
+        const handler = (await esmock('../../src/handlers/get.js', {
+          '../../src/routes/da-admin.js': { daSourceGet: async () => response },
+          '../../src/routes/aem-proxy.js': {
+            handleAEMProxyRequest: async () => assert.fail('Only missing JSON should fall back'),
+          },
+        })).default;
+
+        const res = await handler({ req, env: {}, daCtx: getDaCtx(req) });
+
+        assert.strictEqual(res, response);
+      });
+    });
+
+    [404, 'failure'].forEach((result) => {
+      it(`handles AEM ${result} after DA returns 404 for JSON`, async () => {
+        const req = new Request('https://main--site--org.preview.da.live/config.json');
+        const handler = (await esmock('../../src/handlers/get.js', {
+          '../../src/routes/da-admin.js': {
+            daSourceGet: async () => new Response(null, { status: 404 }),
+          },
+          '../../src/routes/aem-proxy.js': {
+            handleAEMProxyRequest: async () => {
+              if (result === 'failure') {
+                throw new UpstreamError(PREVIEW_HOST, new TypeError('fetch failed'));
+              }
+              return new Response(null, { status: result });
+            },
+          },
+        })).default;
+
+        const res = await handler({ req, env: {}, daCtx: getDaCtx(req) });
+
+        assert.strictEqual(res.status, result === 'failure' ? 503 : result);
+        assert.strictEqual(await res.text(), '');
+      });
+    });
+
+    ['json', 'JSON'].forEach((ext) => {
       it(`reads an unpreviewed .${ext} sheet from DA without changing the JSON`, async () => {
         const body = '{"total":1,"data":[{"title":"Unpreviewed"}]}';
         const req = new Request(`https://main--site--org.preview.da.live/folder/content.${ext}?limit=1`, {
