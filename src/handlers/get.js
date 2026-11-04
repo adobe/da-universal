@@ -24,7 +24,7 @@ export default async function getHandler({ req, env, daCtx }) {
 
   if (path.startsWith('/gimme_cookie')) return getCookie({ req, env, daCtx });
 
-  const resourceRegex = /\.(css|js|js\.map|json|xml|woff|woff2|otf|ttf|plain\.html|html)$/i;
+  const resourceRegex = /\.(css|js|js\.map|xml|woff|woff2|otf|ttf|plain\.html|html)$/i;
   if (resourceRegex.test(path)) {
     try {
       return await handleAEMProxyRequest({ req, env, daCtx });
@@ -35,7 +35,7 @@ export default async function getHandler({ req, env, daCtx }) {
     }
   }
 
-  const assetRegex = /\.(png|jpg|jpeg|webp|gif|svg|ico|avif)$/i;
+  const assetRegex = /\.(png|jpg|jpeg|webp|gif|svg|ico|avif|json)$/i;
   if (assetRegex.test(path)) {
     const [daSourceGetRes, aemProxyRes] = await Promise.allSettled([
       daSourceGet({ req, env, daCtx }),

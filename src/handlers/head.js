@@ -30,7 +30,7 @@ export default async function headHandler({ req, env, daCtx }) {
   if (path.startsWith('/favicon.ico')) return head404();
   if (path.startsWith('/robots.txt')) return getRobots();
 
-  const resourceRegex = /\.(css|js|js\.map|json|xml|woff|woff2|otf|ttf|plain\.html|html)$/i;
+  const resourceRegex = /\.(css|js|js\.map|xml|woff|woff2|otf|ttf|plain\.html|html)$/i;
   if (resourceRegex.test(path)) {
     try {
       return await aemHead({ req, env, daCtx });
@@ -41,7 +41,7 @@ export default async function headHandler({ req, env, daCtx }) {
     }
   }
 
-  const assetRegex = /\.(png|jpg|jpeg|webp|gif|svg|ico|avif)$/i;
+  const assetRegex = /\.(png|jpg|jpeg|webp|gif|svg|ico|avif|json)$/i;
   if (assetRegex.test(path)) {
     const [daSourceHeadRes, aemHeadRes] = await Promise.allSettled([
       daSourceHead({ env, daCtx }),
