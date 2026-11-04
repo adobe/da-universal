@@ -100,18 +100,6 @@ describe('HEAD handler', () => {
       assert.strictEqual(aemProxyCallCount, 1);
     });
 
-    it('proxies to AEM for .json and returns no body', async () => {
-      const req = new Request('https://main--site--org.ue.da.live/folder/content.json', { method: 'HEAD' });
-      const daCtx = getDaCtx(req);
-      const env = {};
-
-      const res = await headHandler({ req, env, daCtx });
-
-      assert.strictEqual(res.status, 200);
-      assert.strictEqual(await res.text(), '');
-      assert.strictEqual(aemProxyCallCount, 1);
-    });
-
     it('proxies to AEM for explicit .html and returns no body', async () => {
       const req = new Request('https://main--site--org.preview.da.live/folder/content.html', { method: 'HEAD' });
       const daCtx = getDaCtx(req);
@@ -122,6 +110,49 @@ describe('HEAD handler', () => {
       assert.strictEqual(res.status, 200);
       assert.strictEqual(await res.text(), '');
       assert.strictEqual(aemProxyCallCount, 1);
+    });
+  });
+
+  describe('JSON sheets', () => {
+    ['json', 'JSON'].forEach((ext) => {
+      it(`reads unpreviewed .${ext} metadata from DA and returns no body`, async () => {
+        const req = new Request(`https://main--site--org.preview.da.live/folder/content.${ext}`, {
+          method: 'HEAD',
+          headers: { Authorization: 'Bearer test-token' },
+        });
+        const daCtx = getDaCtx(req);
+        const { daSourceHead } = await esmock('../../src/routes/da-admin.js', {
+          '../../src/storage/site.js': {
+            default: async () => ({ exists: true, onSourceBus: false }),
+          },
+        });
+        const handler = (await esmock('../../src/handlers/head.js', {
+          '../../src/routes/da-admin.js': { daSourceHead },
+          '../../src/routes/aem-proxy.js': {
+            handleAEMProxyRequest: async () => assert.fail('JSON must not use AEM preview'),
+          },
+        })).default;
+        const env = {
+          DA_ADMIN: 'https://admin.da.live',
+          daadmin: {
+            fetch: async (url, init) => {
+              assert.strictEqual(url.toString(), 'https://admin.da.live/source/org/site/folder/content.json');
+              assert.strictEqual(init.method, 'HEAD');
+              assert.strictEqual(init.headers.get('Authorization'), 'Bearer test-token');
+              return new Response(null, {
+                headers: { 'Content-Type': 'application/json', 'Content-Length': '42' },
+              });
+            },
+          },
+        };
+
+        const res = await handler({ req, env, daCtx });
+
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.headers.get('Content-Type'), 'application/json');
+        assert.strictEqual(res.headers.get('Content-Length'), '42');
+        assert.strictEqual(await res.text(), '');
+      });
     });
   });
 

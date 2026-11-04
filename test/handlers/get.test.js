@@ -129,16 +129,6 @@ describe('GET handler', () => {
       assert.strictEqual(await res.text(), 'proxied-resource');
     });
 
-    it('proxies to AEM for .json', async () => {
-      const daCtx = getDaCtx(reqs.nonHtmlFile);
-      const env = {};
-
-      const res = await getHandler({ req: reqs.nonHtmlFile, env, daCtx });
-
-      assert.strictEqual(res.status, 200);
-      assert.strictEqual(await res.text(), 'proxied-resource');
-    });
-
     it('proxies to AEM for explicit .html', async () => {
       const req = new Request('https://main--site--org.preview.da.live/folder/content.html');
       const daCtx = getDaCtx(req);
@@ -148,6 +138,46 @@ describe('GET handler', () => {
 
       assert.strictEqual(res.status, 200);
       assert.strictEqual(await res.text(), 'proxied-resource');
+    });
+  });
+
+  describe('JSON sheets', () => {
+    ['json', 'JSON'].forEach((ext) => {
+      it(`reads an unpreviewed .${ext} sheet from DA without changing the JSON`, async () => {
+        const body = '{"total":1,"data":[{"title":"Unpreviewed"}]}';
+        const req = new Request(`https://main--site--org.preview.da.live/folder/content.${ext}?limit=1`, {
+          headers: { Authorization: 'Bearer test-token' },
+        });
+        const daCtx = getDaCtx(req);
+        const { daSourceGet } = await esmock('../../src/routes/da-admin.js', {
+          '../../src/storage/site.js': {
+            default: async () => ({ exists: true, onSourceBus: false }),
+          },
+        });
+        const handler = (await esmock('../../src/handlers/get.js', {
+          '../../src/routes/da-admin.js': { daSourceGet },
+          '../../src/routes/aem-proxy.js': {
+            handleAEMProxyRequest: async () => assert.fail('JSON must not use AEM preview'),
+          },
+        })).default;
+        const env = {
+          DA_ADMIN: 'https://admin.da.live',
+          daadmin: {
+            fetch: async (url, init) => {
+              assert.strictEqual(url.toString(), 'https://admin.da.live/source/org/site/folder/content.json');
+              assert.strictEqual(init.method, 'GET');
+              assert.strictEqual(init.headers.get('Authorization'), 'Bearer test-token');
+              return new Response(body, { headers: { 'Content-Type': 'application/json' } });
+            },
+          },
+        };
+
+        const res = await handler({ req, env, daCtx });
+
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.headers.get('Content-Type'), 'application/json');
+        assert.strictEqual(await res.text(), body);
+      });
     });
   });
 
