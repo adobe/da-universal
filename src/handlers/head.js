@@ -31,13 +31,8 @@ export default async function headHandler({ req, env, daCtx }) {
   if (path.startsWith('/robots.txt')) return getRobots();
 
   const resourceRegex = /\.(css|js|js\.map|xml|woff|woff2|otf|ttf|plain\.html|html)$/i;
-  const isJson = /\.json$/i.test(path);
-  if (resourceRegex.test(path) || isJson) {
+  if (resourceRegex.test(path)) {
     try {
-      if (isJson) {
-        const response = await daSourceHead({ env, daCtx });
-        if (response.status !== 404) return response;
-      }
       return await aemHead({ req, env, daCtx });
     } catch (e) {
       if (!(e instanceof UpstreamError)) throw e;
@@ -46,7 +41,7 @@ export default async function headHandler({ req, env, daCtx }) {
     }
   }
 
-  const assetRegex = /\.(png|jpg|jpeg|webp|gif|svg|ico|avif)$/i;
+  const assetRegex = /\.(png|jpg|jpeg|webp|gif|svg|ico|avif|json)$/i;
   if (assetRegex.test(path)) {
     const [daSourceHeadRes, aemHeadRes] = await Promise.allSettled([
       daSourceHead({ env, daCtx }),

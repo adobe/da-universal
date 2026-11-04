@@ -25,13 +25,8 @@ export default async function getHandler({ req, env, daCtx }) {
   if (path.startsWith('/gimme_cookie')) return getCookie({ req, env, daCtx });
 
   const resourceRegex = /\.(css|js|js\.map|xml|woff|woff2|otf|ttf|plain\.html|html)$/i;
-  const isJson = /\.json$/i.test(path);
-  if (resourceRegex.test(path) || isJson) {
+  if (resourceRegex.test(path)) {
     try {
-      if (isJson) {
-        const response = await daSourceGet({ req, env, daCtx });
-        if (response.status !== 404) return response;
-      }
       return await handleAEMProxyRequest({ req, env, daCtx });
     } catch (e) {
       if (!(e instanceof UpstreamError)) throw e;
@@ -40,7 +35,7 @@ export default async function getHandler({ req, env, daCtx }) {
     }
   }
 
-  const assetRegex = /\.(png|jpg|jpeg|webp|gif|svg|ico|avif)$/i;
+  const assetRegex = /\.(png|jpg|jpeg|webp|gif|svg|ico|avif|json)$/i;
   if (assetRegex.test(path)) {
     const [daSourceGetRes, aemProxyRes] = await Promise.allSettled([
       daSourceGet({ req, env, daCtx }),

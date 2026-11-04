@@ -142,6 +142,32 @@ describe('GET handler', () => {
   });
 
   describe('JSON sheets', () => {
+    it('starts the AEM read before the DA JSON read settles', async () => {
+      const req = new Request('https://main--site--org.preview.da.live/config.json');
+      let resolveSource;
+      const source = new Promise((resolve) => {
+        resolveSource = resolve;
+      });
+      let aemStarted = false;
+      const handler = (await esmock('../../src/handlers/get.js', {
+        '../../src/routes/da-admin.js': { daSourceGet: async () => source },
+        '../../src/routes/aem-proxy.js': {
+          handleAEMProxyRequest: async () => {
+            aemStarted = true;
+            return new Response('{"code":true}');
+          },
+        },
+      })).default;
+
+      const pending = handler({ req, env: {}, daCtx: getDaCtx(req) });
+      const startedBeforeSourceSettled = aemStarted;
+      resolveSource(new Response(null, { status: 404 }));
+      const res = await pending;
+
+      assert.ok(startedBeforeSourceSettled);
+      assert.strictEqual(await res.text(), '{"code":true}');
+    });
+
     ['json', 'JSON'].forEach((ext) => {
       it(`falls back to AEM for code-stored .${ext} when DA returns 404`, async () => {
         const req = new Request(`https://main--site--org.preview.da.live/config.${ext}?limit=1`);
@@ -174,19 +200,47 @@ describe('GET handler', () => {
     });
 
     [401, 403, 500, 503].forEach((status) => {
-      it(`preserves DA ${status} for JSON without falling back`, async () => {
+      it(`prefers AEM 200 for JSON when DA returns ${status}`, async () => {
         const req = new Request('https://main--site--org.preview.da.live/config.json');
-        const response = new Response('DA error', { status });
+        const response = new Response('{"code":true}', {
+          headers: { 'Content-Type': 'application/json' },
+        });
         const handler = (await esmock('../../src/handlers/get.js', {
-          '../../src/routes/da-admin.js': { daSourceGet: async () => response },
+          '../../src/routes/da-admin.js': {
+            daSourceGet: async () => new Response(null, { status }),
+          },
           '../../src/routes/aem-proxy.js': {
-            handleAEMProxyRequest: async () => assert.fail('Only missing JSON should fall back'),
+            handleAEMProxyRequest: async () => response,
           },
         })).default;
 
         const res = await handler({ req, env: {}, daCtx: getDaCtx(req) });
 
         assert.strictEqual(res, response);
+      });
+    });
+
+    [500, 503].forEach((status) => {
+      [404, 'failure'].forEach((result) => {
+        it(`preserves DA ${status} for JSON when AEM returns ${result}`, async () => {
+          const req = new Request('https://main--site--org.preview.da.live/config.json');
+          const response = new Response('DA error', { status });
+          const handler = (await esmock('../../src/handlers/get.js', {
+            '../../src/routes/da-admin.js': { daSourceGet: async () => response },
+            '../../src/routes/aem-proxy.js': {
+              handleAEMProxyRequest: async () => {
+                if (result === 'failure') {
+                  throw new UpstreamError(PREVIEW_HOST, new TypeError('fetch failed'));
+                }
+                return new Response(null, { status: result });
+              },
+            },
+          })).default;
+
+          const res = await handler({ req, env: {}, daCtx: getDaCtx(req) });
+
+          assert.strictEqual(res, response);
+        });
       });
     });
 
@@ -209,7 +263,7 @@ describe('GET handler', () => {
 
         const res = await handler({ req, env: {}, daCtx: getDaCtx(req) });
 
-        assert.strictEqual(res.status, result === 'failure' ? 503 : result);
+        assert.strictEqual(res.status, 404);
         assert.strictEqual(await res.text(), '');
       });
     });
@@ -229,7 +283,9 @@ describe('GET handler', () => {
         const handler = (await esmock('../../src/handlers/get.js', {
           '../../src/routes/da-admin.js': { daSourceGet },
           '../../src/routes/aem-proxy.js': {
-            handleAEMProxyRequest: async () => assert.fail('JSON must not use AEM preview'),
+            handleAEMProxyRequest: async () => new Response('{"code":true}', {
+              headers: { 'Content-Type': 'application/json' },
+            }),
           },
         })).default;
         const env = {

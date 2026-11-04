@@ -114,6 +114,35 @@ describe('HEAD handler', () => {
   });
 
   describe('JSON sheets', () => {
+    it('starts the AEM read before the DA JSON read settles', async () => {
+      const req = new Request('https://main--site--org.preview.da.live/config.json', {
+        method: 'HEAD',
+      });
+      let resolveSource;
+      const source = new Promise((resolve) => {
+        resolveSource = resolve;
+      });
+      let aemStarted = false;
+      const handler = (await esmock('../../src/handlers/head.js', {
+        '../../src/routes/da-admin.js': { daSourceHead: async () => source },
+        '../../src/routes/aem-proxy.js': {
+          handleAEMProxyRequest: async () => {
+            aemStarted = true;
+            return new Response('{"code":true}');
+          },
+        },
+      })).default;
+
+      const pending = handler({ req, env: {}, daCtx: getDaCtx(req) });
+      const startedBeforeSourceSettled = aemStarted;
+      resolveSource(new Response(null, { status: 404 }));
+      const res = await pending;
+
+      assert.ok(startedBeforeSourceSettled);
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(await res.text(), '');
+    });
+
     ['json', 'JSON'].forEach((ext) => {
       it(`falls back to AEM metadata for code-stored .${ext} when DA returns 404`, async () => {
         const req = new Request(`https://main--site--org.preview.da.live/config.${ext}?limit=1`, {
@@ -151,21 +180,54 @@ describe('HEAD handler', () => {
     });
 
     [401, 403, 500, 503].forEach((status) => {
-      it(`preserves DA ${status} for JSON without falling back`, async () => {
+      it(`prefers AEM 200 for JSON when DA returns ${status}`, async () => {
         const req = new Request('https://main--site--org.preview.da.live/config.json', {
           method: 'HEAD',
         });
-        const response = new Response(null, { status });
         const handler = (await esmock('../../src/handlers/head.js', {
-          '../../src/routes/da-admin.js': { daSourceHead: async () => response },
+          '../../src/routes/da-admin.js': {
+            daSourceHead: async () => new Response(null, { status }),
+          },
           '../../src/routes/aem-proxy.js': {
-            handleAEMProxyRequest: async () => assert.fail('Only missing JSON should fall back'),
+            handleAEMProxyRequest: async () => new Response('{"code":true}', {
+              headers: { 'Content-Type': 'application/json', 'Content-Length': '13' },
+            }),
           },
         })).default;
 
         const res = await handler({ req, env: {}, daCtx: getDaCtx(req) });
 
-        assert.strictEqual(res, response);
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.headers.get('Content-Type'), 'application/json');
+        assert.strictEqual(res.headers.get('Content-Length'), '13');
+        assert.strictEqual(await res.text(), '');
+      });
+    });
+
+    [500, 503].forEach((status) => {
+      [404, 'failure'].forEach((result) => {
+        it(`preserves DA ${status} for JSON when AEM returns ${result}`, async () => {
+          const req = new Request('https://main--site--org.preview.da.live/config.json', {
+            method: 'HEAD',
+          });
+          const response = new Response(null, { status });
+          const handler = (await esmock('../../src/handlers/head.js', {
+            '../../src/routes/da-admin.js': { daSourceHead: async () => response },
+            '../../src/routes/aem-proxy.js': {
+              handleAEMProxyRequest: async () => {
+                if (result === 'failure') {
+                  throw new UpstreamError(PREVIEW_HOST, new TypeError('fetch failed'));
+                }
+                return new Response(null, { status: result });
+              },
+            },
+          })).default;
+
+          const res = await handler({ req, env: {}, daCtx: getDaCtx(req) });
+
+          assert.strictEqual(res, response);
+          assert.strictEqual(await res.text(), '');
+        });
       });
     });
 
@@ -190,7 +252,7 @@ describe('HEAD handler', () => {
 
         const res = await handler({ req, env: {}, daCtx: getDaCtx(req) });
 
-        assert.strictEqual(res.status, result === 'failure' ? 503 : result);
+        assert.strictEqual(res.status, 404);
         assert.strictEqual(await res.text(), '');
       });
     });
@@ -210,7 +272,9 @@ describe('HEAD handler', () => {
         const handler = (await esmock('../../src/handlers/head.js', {
           '../../src/routes/da-admin.js': { daSourceHead },
           '../../src/routes/aem-proxy.js': {
-            handleAEMProxyRequest: async () => assert.fail('JSON must not use AEM preview'),
+            handleAEMProxyRequest: async () => new Response('{"code":true}', {
+              headers: { 'Content-Type': 'application/json', 'Content-Length': '13' },
+            }),
           },
         })).default;
         const env = {
