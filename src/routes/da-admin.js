@@ -16,6 +16,8 @@ import { minifyWhitespace } from 'hast-util-minify-whitespace';
 import putHelper from '../helpers/source.js';
 import { removeUEAttributes, unwrapParagraphs } from '../ue/attributes.js';
 import { applyUEInstrumentation } from '../ue/ue.js';
+import { collapseJsonBlocks } from '../ue/json-blocks.js';
+import { getUEConfig } from '../ue/scaffold.js';
 import { composeHtml, serializeHtml } from '../render/compose.js';
 import applyCsp from '../render/csp.js';
 import { getAemCtx, getAEMHtml } from '../utils/aemCtx.js';
@@ -318,6 +320,17 @@ async function sourcePost({ req, env, daCtx }) {
     if (!bodyNode) {
       console.log(`415 POST ${sourcePath}, the document has no body`);
       return get415();
+    }
+
+    // fold the virtual items of JSON blocks back into their JSON source
+    if (select('[data-json-block]', bodyNode)) {
+      let ueConfig;
+      try {
+        ueConfig = await getUEConfig(getAemCtx(env, daCtx));
+      } catch (e) {
+        console.log(`failed to load UE config for JSON blocks of ${sourcePath}: ${e.message}`);
+      }
+      collapseJsonBlocks(bodyNode, ueConfig);
     }
 
     // unwrap rich text elements

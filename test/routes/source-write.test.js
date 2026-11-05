@@ -401,3 +401,63 @@ describe('writing to the store that holds the site', () => {
     });
   });
 });
+
+describe('writing a page with JSON blocks', () => {
+  afterEach(() => {
+    delete globalThis.fetch;
+  });
+
+  const ueConfig = {
+    'component-definition': { groups: [{ components: [{ id: 'text-input', title: 'Text' }] }] },
+    'component-model': [{ id: 'text-input', fields: [{ component: 'text', name: 'label.value' }] }],
+    'component-json-mapping': [{ block: 'form', component: { keys: ['fieldType'] } }],
+  };
+  const json = { items: [{ id: 'a', fieldType: 'text-input', label: { value: 'Old' } }] };
+  const html = '<body><main><div><div class="form" data-json-block="form" data-aue-type="container">'
+    + `<div><div><pre><code>${JSON.stringify(json)}</code></pre></div></div>`
+    + '<div class="text-input" data-json-index="0" data-aue-component="text-input"'
+    + ' data-aue-resource="urn:ab:section-0/block-0/item-0">'
+    + '<div><div>label.value</div><div>New</div></div></div>'
+    + '</div></div></main></body>';
+
+  const write = async (getUEConfig) => {
+    const stored = [];
+    const mod = await esmock('../../src/routes/da-admin.js', {
+      '../../src/storage/site.js': {
+        default: async () => ({ exists: true, head: undefined, onSourceBus: false }),
+      },
+      '../../src/ue/scaffold.js': { getUEConfig },
+    });
+    const env = {
+      DA_ADMIN: 'https://admin.da.live',
+      AEM_API: 'https://api.aem.live',
+      daadmin: {
+        fetch: async (request) => {
+          stored.push(await (await request.formData()).get('data').text());
+          return new Response('', { status: 201 });
+        },
+      },
+    };
+    const req = uePost(AT, html);
+    await mod.daSourcePost({ req, env, daCtx: getDaCtx(req) });
+    return stored[0];
+  };
+
+  it('folds the edited items into the JSON and stores only the JSON', async () => {
+    const stored = await write(async () => ueConfig);
+
+    assert.ok(!stored.includes('data-json'));
+    assert.ok(!stored.includes('<div>label.value</div>'));
+    const code = stored.match(/<code>([\s\S]*)<\/code>/)[1].replace(/&#x22;|&quot;/g, '"');
+    assert.deepStrictEqual(JSON.parse(code).items[0].label, { value: 'New' });
+  });
+
+  it('keeps the JSON and drops the virtual items when the UE config cannot be loaded', async () => {
+    const stored = await write(async () => {
+      throw new Error('offline');
+    });
+
+    assert.ok(!stored.includes('data-json'));
+    assert.ok(stored.includes('Old'));
+  });
+});
