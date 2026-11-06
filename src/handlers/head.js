@@ -31,7 +31,11 @@ export default async function headHandler({ req, env, daCtx }) {
   if (path.startsWith('/robots.txt')) return getRobots();
 
   const resourceRegex = /\.(css|js|js\.map|xml|woff|woff2|otf|ttf|plain\.html|html)$/i;
-  if (resourceRegex.test(path)) {
+  // DA source JSON does not apply sheet selection or pagination.
+  const { searchParams } = new URL(req.url);
+  const isSheetRequest = /\.json$/i.test(path)
+    && ['sheet', 'offset', 'limit'].some((param) => searchParams.has(param));
+  if (resourceRegex.test(path) || isSheetRequest) {
     try {
       return await aemHead({ req, env, daCtx });
     } catch (e) {
