@@ -114,6 +114,90 @@ describe('HEAD handler', () => {
   });
 
   describe('JSON sheets', () => {
+    ['sheet=tags', 'offset=0', 'limit=255'].forEach((query) => {
+      it(`proxies JSON with ${query} directly to AEM without a body`, async () => {
+        const req = new Request(`https://main--site--org.preview.da.live/taxonomy.json?${query}`, {
+          method: 'HEAD',
+        });
+        const handler = (await esmock('../../src/handlers/head.js', {
+          '../../src/routes/da-admin.js': {
+            daSourceHead: async () => assert.fail('Sheet requests must not read DA'),
+          },
+          '../../src/routes/aem-proxy.js': {
+            handleAEMProxyRequest: async ({ req: proxiedReq }) => {
+              assert.strictEqual(proxiedReq.method, 'GET');
+              assert.strictEqual(proxiedReq.url, req.url);
+              return new Response('AEM response', {
+                headers: { 'Content-Type': 'application/json', 'Content-Length': '12' },
+              });
+            },
+          },
+        })).default;
+
+        const res = await handler({ req, env: {}, daCtx: getDaCtx(req) });
+
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.headers.get('Content-Type'), 'application/json');
+        assert.strictEqual(res.headers.get('Content-Length'), '12');
+        assert.strictEqual(await res.text(), '');
+      });
+    });
+
+    it('preserves AEM 404 for uppercase JSON with combined sheet parameters', async () => {
+      const req = new Request('https://main--site--org.preview.da.live/taxonomy.JSON?sheet=tags&offset=0&limit=255', {
+        method: 'HEAD',
+      });
+      const handler = (await esmock('../../src/handlers/head.js', {
+        '../../src/routes/da-admin.js': {
+          daSourceHead: async () => assert.fail('Sheet requests must not read DA'),
+        },
+        '../../src/routes/aem-proxy.js': {
+          handleAEMProxyRequest: async () => new Response(null, { status: 404 }),
+        },
+      })).default;
+
+      const res = await handler({ req, env: {}, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 404);
+      assert.strictEqual(await res.text(), '');
+    });
+
+    it('keeps JSON with an unrelated query DA-first', async () => {
+      const req = new Request('https://main--site--org.preview.da.live/taxonomy.json?cache=123', {
+        method: 'HEAD',
+      });
+      const response = new Response(null);
+      const handler = (await esmock('../../src/handlers/head.js', {
+        '../../src/routes/da-admin.js': { daSourceHead: async () => response },
+        '../../src/routes/aem-proxy.js': {
+          handleAEMProxyRequest: async () => new Response('AEM response'),
+        },
+      })).default;
+
+      assert.strictEqual(await handler({ req, env: {}, daCtx: getDaCtx(req) }), response);
+    });
+
+    it('returns 503 without reading DA when a sheet request cannot reach AEM', async () => {
+      const req = new Request('https://main--site--org.preview.da.live/taxonomy.json?sheet=tags', {
+        method: 'HEAD',
+      });
+      const handler = (await esmock('../../src/handlers/head.js', {
+        '../../src/routes/da-admin.js': {
+          daSourceHead: async () => assert.fail('Parameterized JSON must not read DA'),
+        },
+        '../../src/routes/aem-proxy.js': {
+          handleAEMProxyRequest: async () => {
+            throw new UpstreamError(PREVIEW_HOST, new TypeError('fetch failed'));
+          },
+        },
+      })).default;
+
+      const res = await handler({ req, env: {}, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 503);
+      assert.strictEqual(await res.text(), '');
+    });
+
     it('starts the AEM read before the DA JSON read settles', async () => {
       const req = new Request('https://main--site--org.preview.da.live/config.json', {
         method: 'HEAD',
@@ -145,7 +229,7 @@ describe('HEAD handler', () => {
 
     ['json', 'JSON'].forEach((ext) => {
       it(`falls back to AEM metadata for code-stored .${ext} when DA returns 404`, async () => {
-        const req = new Request(`https://main--site--org.preview.da.live/config.${ext}?limit=1`, {
+        const req = new Request(`https://main--site--org.preview.da.live/config.${ext}`, {
           method: 'HEAD',
         });
         const daCtx = getDaCtx(req);
