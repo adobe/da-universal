@@ -10,6 +10,10 @@
  * governing permissions and limitations under the License.
  */
 
+// DA source JSON does not apply sheet selection or pagination.
+export const isSheetQuery = (path, searchParams) => /\.json$/i.test(path)
+  && ['sheet', 'offset', 'limit'].some((param) => searchParams.has(param));
+
 export const getSheetByIndex = (json, index = 0) => {
   if (json[':type'] !== 'multi-sheet') {
     return json.data;

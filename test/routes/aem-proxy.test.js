@@ -16,6 +16,45 @@ import esmock from 'esmock';
 import { getDaCtx } from '../../src/utils/daCtx.js';
 import { PREVIEW_HOST, UpstreamError } from '../../src/utils/upstream.js';
 
+describe('JSON sheet query routing', () => {
+  afterEach(() => {
+    delete globalThis.fetch;
+  });
+
+  ['GET', 'HEAD'].forEach((method) => {
+    it(`sends ${method} sheet parameters only to AEM, not DA source`, async () => {
+      const req = new Request('https://main--site--org.preview.da.live/taxonomy.json?sheet=tags&offset=0&limit=1', {
+        method,
+      });
+      let sourceReads = 0;
+      const readSource = async () => {
+        sourceReads += 1;
+        return new Response('DA source');
+      };
+      const handler = (await esmock(`../../src/handlers/${method.toLowerCase()}.js`, {
+        '../../src/routes/da-admin.js': {
+          daSourceGet: readSource,
+          daSourceHead: readSource,
+        },
+      })).default;
+      const upstreamUrls = [];
+      globalThis.fetch = async (upstreamReq) => {
+        upstreamUrls.push(upstreamReq.url);
+        return new Response('AEM sheet', { headers: { 'Content-Type': 'application/json' } });
+      };
+
+      const res = await handler({ req, env: {}, daCtx: getDaCtx(req) });
+
+      assert.deepStrictEqual(upstreamUrls, [
+        'https://main--site--org.aem.page/taxonomy.json?sheet=tags&offset=0&limit=1',
+      ]);
+      assert.strictEqual(sourceReads, 0);
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(await res.text(), method === 'HEAD' ? '' : 'AEM sheet');
+    });
+  });
+});
+
 describe('AEM proxy quick-edit', () => {
   let handleAEMProxyRequest;
   const env = { UE_HOST: 'test-host', UE_SERVICE: 'test-service' };

@@ -142,6 +142,78 @@ describe('GET handler', () => {
   });
 
   describe('JSON sheets', () => {
+    ['sheet=tags', 'offset=0', 'limit=255'].forEach((query) => {
+      it(`proxies JSON with ${query} directly to AEM`, async () => {
+        const req = new Request(`https://main--site--org.preview.da.live/taxonomy.json?${query}`);
+        const response = new Response('AEM response');
+        const handler = (await esmock('../../src/handlers/get.js', {
+          '../../src/routes/da-admin.js': {
+            daSourceGet: async () => assert.fail('Sheet requests must not read DA'),
+          },
+          '../../src/routes/aem-proxy.js': {
+            handleAEMProxyRequest: async ({ req: proxiedReq }) => {
+              assert.strictEqual(proxiedReq, req);
+              return response;
+            },
+          },
+        })).default;
+
+        const res = await handler({ req, env: {}, daCtx: getDaCtx(req) });
+
+        assert.strictEqual(res, response);
+      });
+    });
+
+    it('preserves AEM 404 for uppercase JSON with combined sheet parameters', async () => {
+      const req = new Request('https://main--site--org.preview.da.live/taxonomy.JSON?sheet=tags&offset=0&limit=255');
+      const response = new Response(null, { status: 404 });
+      const handler = (await esmock('../../src/handlers/get.js', {
+        '../../src/routes/da-admin.js': {
+          daSourceGet: async () => assert.fail('Sheet requests must not read DA'),
+        },
+        '../../src/routes/aem-proxy.js': {
+          handleAEMProxyRequest: async ({ req: proxiedReq }) => {
+            assert.strictEqual(proxiedReq.url, req.url);
+            return response;
+          },
+        },
+      })).default;
+
+      assert.strictEqual(await handler({ req, env: {}, daCtx: getDaCtx(req) }), response);
+    });
+
+    it('keeps JSON with an unrelated query DA-first', async () => {
+      const req = new Request('https://main--site--org.preview.da.live/taxonomy.json?cache=123');
+      const response = new Response('DA response');
+      const handler = (await esmock('../../src/handlers/get.js', {
+        '../../src/routes/da-admin.js': { daSourceGet: async () => response },
+        '../../src/routes/aem-proxy.js': {
+          handleAEMProxyRequest: async () => new Response('AEM response'),
+        },
+      })).default;
+
+      assert.strictEqual(await handler({ req, env: {}, daCtx: getDaCtx(req) }), response);
+    });
+
+    it('returns 503 without reading DA when a sheet request cannot reach AEM', async () => {
+      const req = new Request('https://main--site--org.preview.da.live/taxonomy.json?sheet=tags');
+      const handler = (await esmock('../../src/handlers/get.js', {
+        '../../src/routes/da-admin.js': {
+          daSourceGet: async () => assert.fail('Parameterized JSON must not read DA'),
+        },
+        '../../src/routes/aem-proxy.js': {
+          handleAEMProxyRequest: async () => {
+            throw new UpstreamError(PREVIEW_HOST, new TypeError('fetch failed'));
+          },
+        },
+      })).default;
+
+      const res = await handler({ req, env: {}, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(res.status, 503);
+      assert.strictEqual(await res.text(), '');
+    });
+
     it('starts the AEM read before the DA JSON read settles', async () => {
       const req = new Request('https://main--site--org.preview.da.live/config.json');
       let resolveSource;
@@ -170,7 +242,7 @@ describe('GET handler', () => {
 
     ['json', 'JSON'].forEach((ext) => {
       it(`falls back to AEM for code-stored .${ext} when DA returns 404`, async () => {
-        const req = new Request(`https://main--site--org.preview.da.live/config.${ext}?limit=1`);
+        const req = new Request(`https://main--site--org.preview.da.live/config.${ext}`);
         const daCtx = getDaCtx(req);
         const body = '{"code":true}';
         let sourceRead = false;
@@ -271,7 +343,7 @@ describe('GET handler', () => {
     ['json', 'JSON'].forEach((ext) => {
       it(`reads an unpreviewed .${ext} sheet from DA without changing the JSON`, async () => {
         const body = '{"total":1,"data":[{"title":"Unpreviewed"}]}';
-        const req = new Request(`https://main--site--org.preview.da.live/folder/content.${ext}?limit=1`, {
+        const req = new Request(`https://main--site--org.preview.da.live/folder/content.${ext}`, {
           headers: { Authorization: 'Bearer test-token' },
         });
         const daCtx = getDaCtx(req);

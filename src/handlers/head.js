@@ -13,6 +13,7 @@
 import { empty503, getRobots, head404 } from '../responses/index.js';
 import { handleAEMProxyRequest } from '../routes/aem-proxy.js';
 import { daSourceHead } from '../routes/da-admin.js';
+import { isSheetQuery } from '../utils/sheet.js';
 import { UpstreamError } from '../utils/upstream.js';
 
 // for AEM we reuse the handleAEMProxyRequest for now as GETs are cheap here
@@ -31,7 +32,8 @@ export default async function headHandler({ req, env, daCtx }) {
   if (path.startsWith('/robots.txt')) return getRobots();
 
   const resourceRegex = /\.(css|js|js\.map|xml|woff|woff2|otf|ttf|plain\.html|html)$/i;
-  if (resourceRegex.test(path)) {
+  const { searchParams } = new URL(req.url);
+  if (resourceRegex.test(path) || isSheetQuery(path, searchParams)) {
     try {
       return await aemHead({ req, env, daCtx });
     } catch (e) {
