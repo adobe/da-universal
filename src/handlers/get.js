@@ -13,6 +13,7 @@ import { empty503, get404, getRobots } from '../responses/index.js';
 import { handleAEMProxyRequest } from '../routes/aem-proxy.js';
 import { getCookie } from '../routes/cookie.js';
 import { daSourceGet } from '../routes/da-admin.js';
+import { isSheetQuery } from '../utils/sheet.js';
 import { UpstreamError } from '../utils/upstream.js';
 
 export default async function getHandler({ req, env, daCtx }) {
@@ -25,11 +26,8 @@ export default async function getHandler({ req, env, daCtx }) {
   if (path.startsWith('/gimme_cookie')) return getCookie({ req, env, daCtx });
 
   const resourceRegex = /\.(css|js|js\.map|xml|woff|woff2|otf|ttf|plain\.html|html)$/i;
-  // DA source JSON does not apply sheet selection or pagination.
   const { searchParams } = new URL(req.url);
-  const isSheetRequest = /\.json$/i.test(path)
-    && ['sheet', 'offset', 'limit'].some((param) => searchParams.has(param));
-  if (resourceRegex.test(path) || isSheetRequest) {
+  if (resourceRegex.test(path) || isSheetQuery(path, searchParams)) {
     try {
       return await handleAEMProxyRequest({ req, env, daCtx });
     } catch (e) {
