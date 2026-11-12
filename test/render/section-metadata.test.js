@@ -224,6 +224,28 @@ describe('extractSectionMetadata', () => {
     });
   });
 
+  describe('structured values', () => {
+    it('keeps paragraph boundaries, all media/link values and meaningful internal whitespace', () => {
+      const tree = fromHtml(`<div><div class="section-metadata">
+        <div><div>Style</div><div><p>Wide (Light, Center)</p><p>Dark</p></div></div>
+        <div><div>Masonry</div><div><p>span 6, span 6</p><p>span 4, span 8&nbsp;</p></div></div>
+        <div><div>Background</div><div><picture><img src="./images/bg.jpg"></picture>
+          <a href="/second.jpg">Ignore label</a></div></div>
+        <div><div>Mixed</div><div>before, <a href="https://example.com/">
+          <img src="/ignored.jpg">Ignore label</a>, after  text</div></div>
+      </div></div>`, { fragment: true });
+
+      extractSectionMetadata(tree, { baseUrl: new URL('https://main--site--org.aem.live/folder/page') });
+
+      const section = tree.children[0];
+      assert.deepStrictEqual(section.properties.className, ['wide', 'light', 'center', 'dark']);
+      assert.strictEqual(section.properties['data-masonry'], 'span 6,span 6,span 4,span 8');
+      assert.strictEqual(section.properties['data-background'], 'https://main--site--org.aem.live/folder/images/bg.jpg,https://main--site--org.aem.live/second.jpg');
+      assert.strictEqual(section.properties['data-mixed'], 'before,https://example.com/,after  text');
+      assert.strictEqual(selectAll('.section-metadata', tree).length, 0);
+    });
+  });
+
   describe('indented (source bus) html', () => {
     it('applies style and data attributes from pretty-printed rows', () => {
       // Helix 6 stores documents pretty-printed, so rows contain whitespace text nodes

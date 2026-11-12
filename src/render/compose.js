@@ -15,12 +15,31 @@ import { fromHtml } from 'hast-util-from-html';
 import { select, selectAll } from 'hast-util-select';
 import { toHtml } from 'hast-util-to-html';
 import { h } from 'hastscript';
+import { toString } from 'hast-util-to-string';
 import { extractLocalMetadata, fetchBulkMetadata } from './metadata.js';
 import rewriteIcons from './rewrite-icons.js';
 import { makeImagesRelative } from './rewrite-images.js';
 import extractSectionMetadata from './section-metadata.js';
 import { DEFAULT_HTML_TEMPLATE } from '../utils/constants.js';
 import { PREVIEW_HOST, withUpstream } from '../utils/upstream.js';
+import { childNodes } from '../utils/hast.js';
+
+const EMPTY_LOCAL_OVERRIDES = new Set([
+  'title', 'description', 'image', 'image-alt', 'url', 'twitter:card', 'og:url', 'canonical',
+]);
+
+function normalizeBlocks(bodyTree) {
+  selectAll('main > div > div[class]', bodyTree).forEach((block) => {
+    if (!block.properties.className.length) return;
+    if (!childNodes(block).length && !toString(block).trim()) {
+      block.children = [h('div', [h('div')])];
+    }
+    selectAll(':scope > div > div', block).forEach((cell) => {
+      cell.children = cell.children.filter((node) => node.tagName !== 'p'
+        || childNodes(node).length || toString(node).trim());
+    });
+  });
+}
 
 /**
  * Injects AEM HTML head entries into the head node of an HTML document.
@@ -61,6 +80,7 @@ function injectAEMHtmlHeadEntries(daCtx, headNode, headHtmlStr) {
  */
 function injectMetadata(metadata, headNode) {
   Object.entries(metadata).forEach(([name, value]) => {
+    if (value === undefined) return;
     if (name === 'title') {
       headNode.children.push(
         h('title', {}, [{ type: 'text', value }]),
@@ -85,9 +105,17 @@ function injectMetadata(metadata, headNode) {
  * @param {Object} aemCtx - The AEM context object.
  * @param {string} bodyHtmlStr - The stored body HTML fragment.
  * @param {string} headHtmlStr - The AEM head.html fragment.
+ * @param {Object} options - Effective site rendering options.
+ * @param {boolean} options.sectionMetadataEnabled - Whether to extract rendering-v2 metadata.
  * @returns {Promise<import('hast').Root>} The composed (unserialized) document tree.
  */
-export async function composeHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
+export async function composeHtml(
+  daCtx,
+  aemCtx,
+  bodyHtmlStr,
+  headHtmlStr,
+  { sectionMetadataEnabled = false } = {},
+) {
   // get the HTML document tree
   const documentTree = fromHtml(`<html><head></head>${DEFAULT_HTML_TEMPLATE}</html>`);
 
@@ -103,17 +131,24 @@ export async function composeHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
   // only thing here that leaves the worker, so it is the only step that names an upstream
   const bulkMetadata = await withUpstream(PREVIEW_HOST, () => fetchBulkMetadata(aemCtx));
   const localMetaData = extractLocalMetadata(bodyTree);
-  const mergedMetaData = {
-    ...localMetaData,
-    ...bulkMetadata.getModifiers(daCtx.path),
-  };
+  const mergedMetaData = { ...bulkMetadata.getModifiers(daCtx.path) };
+  Object.entries(mergedMetaData).forEach(([name, value]) => {
+    if (!value || value === '""') delete mergedMetaData[name];
+  });
+  Object.entries(localMetaData).forEach(([name, value]) => {
+    if (value || EMPTY_LOCAL_OVERRIDES.has(name)) mergedMetaData[name] = value;
+  });
   injectMetadata(mergedMetaData, headNode);
 
   // inject AEM head script and meta tags
   injectAEMHtmlHeadEntries(daCtx, headNode, headHtmlStr);
 
-  // extract section metadata and apply as data attributes / classes to parent sections
-  extractSectionMetadata(bodyTree);
+  normalizeBlocks(bodyTree);
+
+  if (sectionMetadataEnabled) {
+    const baseUrl = new URL(daCtx.aemPathname ?? daCtx.path, aemCtx.liveUrl ?? aemCtx.previewUrl);
+    extractSectionMetadata(bodyTree, { baseUrl });
+  }
 
   // rewrite content.da.live images to relative paths
   makeImagesRelative(bodyNode, daCtx);
