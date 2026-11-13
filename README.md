@@ -35,5 +35,24 @@ with the shared secret, use `npm run dev` at the real services instead of the st
 
 You can deploy da-universal on Cloudflare stage via `npm run deploy:stage` to test it in a real worker environment.
 
+## JSON blocks
+
+A block can store a structured document as JSON in one cell (by default `<pre><code>`), for
+example an Adaptive Form definition. When a site lists such a block in the optional
+`component-json-mappings.json` (served next to `component-definition.json`), every entry of the
+JSON's item list becomes its own Universal Editor component:
+
+- in the UE rendition each item is added to the block as a virtual key-value element
+  (`urn:ab:section-<s>/block-<b>/item-<i>`), so the DA plugin of the UE service can show and
+  patch its properties, and add, move, copy and remove items
+- on write the virtual elements are folded back into the JSON; only the JSON is stored
+
+The model fields of the item components are named by the JSON path they edit (for example
+`label.value`), and new items start with the `value` of their model fields. Components with a
+`filter` in their definition hold child items, and an optional `root` component edits the
+properties of the document itself (for example a form's submit settings). The mapping is
+optional per block; see `src/ue/json-blocks.js` for the format. Sites without the file are not
+affected.
+
 ## Customer documentation
 https://docs.da.live/developers/reference/universal-editor
