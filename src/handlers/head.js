@@ -16,11 +16,10 @@ import { daSourceHead } from '../routes/da-admin.js';
 import { isSheetQuery } from '../utils/sheet.js';
 import { UpstreamError } from '../utils/upstream.js';
 
-// for AEM we reuse the handleAEMProxyRequest for now as GETs are cheap here
-// TODO refine and review for later for a full HEAD requests on AEM
+// Keep the existing GET fallback for code assets, but never download video bodies for HEAD.
 async function aemHead({ req, env, daCtx }) {
-  const getReq = new Request(req, { method: 'GET' });
-  const resp = await handleAEMProxyRequest({ req: getReq, env, daCtx });
+  const proxyReq = /\.mp4$/i.test(daCtx.path) ? req : new Request(req, { method: 'GET' });
+  const resp = await handleAEMProxyRequest({ req: proxyReq, env, daCtx });
   return new Response(null, { status: resp.status, headers: resp.headers });
 }
 
@@ -31,7 +30,7 @@ export default async function headHandler({ req, env, daCtx }) {
   if (path.startsWith('/favicon.ico')) return head404();
   if (path.startsWith('/robots.txt')) return getRobots();
 
-  const resourceRegex = /\.(css|js|js\.map|xml|woff|woff2|otf|ttf|plain\.html|html)$/i;
+  const resourceRegex = /\.(css|js|js\.map|xml|woff|woff2|otf|ttf|plain\.html|html|mp4)$/i;
   const { searchParams } = new URL(req.url);
   if (resourceRegex.test(path) || isSheetQuery(path, searchParams)) {
     try {

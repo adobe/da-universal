@@ -16,6 +16,88 @@ import esmock from 'esmock';
 import { getDaCtx } from '../../src/utils/daCtx.js';
 import { PREVIEW_HOST, UpstreamError } from '../../src/utils/upstream.js';
 
+describe('MP4 routing and proxying', () => {
+  let savedFetch;
+
+  beforeEach(() => {
+    savedFetch = globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = savedFetch;
+  });
+
+  [
+    { method: 'GET', path: '/site/media_example.mp4', status: 200 },
+    {
+      method: 'GET', path: '/site/media_example.MP4?download=1', range: 'bytes=0-63', status: 206,
+    },
+    { method: 'HEAD', path: '/site/media_example.mp4', status: 200 },
+    {
+      method: 'HEAD', path: '/site/media_example.mp4', range: 'bytes=0-63', status: 200,
+    },
+  ].forEach(({
+    method, path, range, status,
+  }) => {
+    it(`proxies ${method} ${path} with range=${range ?? 'none'} without reading DA source`, async () => {
+      const headers = { 'x-site-token': 'token site-secret' };
+      if (range) headers.Range = range;
+      const req = new Request(`https://main--site--org.preview.da.live${path}`, { method, headers });
+      const handler = (await esmock(`../../src/handlers/${method.toLowerCase()}.js`, {
+        '../../src/routes/da-admin.js': {
+          daSourceGet: async () => assert.fail('MP4 must not read DA source'),
+          daSourceHead: async () => assert.fail('MP4 must not read DA source'),
+        },
+      })).default;
+      const bytes = Uint8Array.from({ length: 64 }, (_, i) => i);
+      let upstream;
+      globalThis.fetch = async (request) => {
+        upstream = request;
+        return new Response(method === 'HEAD' ? null : bytes, {
+          status,
+          headers: {
+            'Content-Type': 'video/mp4',
+            'Content-Length': '64',
+            'Accept-Ranges': 'bytes',
+            ...(status === 206 ? { 'Content-Range': 'bytes 0-63/692174' } : {}),
+          },
+        });
+      };
+
+      const response = await handler({ req, env: {}, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(upstream.method, method);
+      assert.strictEqual(upstream.url, `https://main--site--org.aem.page${path}`);
+      assert.strictEqual(upstream.headers.get('Range'), range ?? null);
+      assert.strictEqual(upstream.headers.get('Authorization'), 'token site-secret');
+      assert.strictEqual(response.status, status);
+      assert.strictEqual(response.headers.get('Content-Type'), 'video/mp4');
+      assert.strictEqual(response.headers.get('Content-Length'), '64');
+      assert.strictEqual(response.headers.get('Accept-Ranges'), 'bytes');
+      assert.strictEqual(response.headers.get('Content-Range'), status === 206 ? 'bytes 0-63/692174' : null);
+      assert.deepStrictEqual(new Uint8Array(await response.arrayBuffer()), method === 'HEAD' ? new Uint8Array() : bytes);
+    });
+  });
+
+  ['GET', 'HEAD'].forEach((method) => {
+    [403, 404, 416].forEach((status) => {
+      it(`preserves ${method} upstream ${status} responses`, async () => {
+        const req = new Request('https://main--site--org.preview.da.live/media_example.mp4', { method });
+        const handler = (await esmock(`../../src/handlers/${method.toLowerCase()}.js`)).default;
+        globalThis.fetch = async () => new Response(null, {
+          status, headers: { 'Content-Range': 'bytes */692174' },
+        });
+
+        const response = await handler({ req, env: {}, daCtx: getDaCtx(req) });
+
+        assert.strictEqual(response.status, status);
+        assert.strictEqual(response.headers.get('Content-Range'), 'bytes */692174');
+        assert.strictEqual(await response.text(), '');
+      });
+    });
+  });
+});
+
 describe('JSON sheet query routing', () => {
   afterEach(() => {
     delete globalThis.fetch;
