@@ -120,7 +120,6 @@ const buildComposing = async (overrides = {}) => {
   const {
     metadata = () => new Response('{"data":[]}', { status: 200 }),
     legacy = () => new Response('<main>from da-admin</main>', { status: 200 }),
-    sectionMetadataEnabled = false,
   } = overrides;
   const seen = { metadata: [] };
   globalThis.fetch = async (input, init) => {
@@ -134,41 +133,11 @@ const buildComposing = async (overrides = {}) => {
   };
   const mod = await esmock('../../src/routes/da-admin.js', {
     '../../src/storage/site.js': {
-      default: async () => ({
-        exists: true, head: '', onSourceBus: false, sectionMetadataEnabled,
-      }),
+      default: async () => ({ exists: true, head: '', onSourceBus: false }),
     },
   });
   return { ...mod, env, seen };
 };
-
-describe('site rendering mode in composed responses', () => {
-  afterEach(() => {
-    delete globalThis.fetch;
-  });
-
-  [false, true].forEach((sectionMetadataEnabled) => {
-    [false, true].forEach((quickEdit) => {
-      it(`honors sectionMetadataEnabled=${sectionMetadataEnabled} with quick-edit=${quickEdit}`, async () => {
-        const { daSourceGet, env } = await buildComposing({
-          sectionMetadataEnabled,
-          legacy: () => new Response(`<main><div><p>Content</p>
-            <div class="section-metadata">
-              <div><div>Grid</div><div>4</div></div>
-            </div></div></main>`),
-        });
-        const req = authedReq(`https://main--site--org.preview.da.live/page${quickEdit ? '?quick-edit' : ''}`);
-
-        const response = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
-        const html = await response.text();
-
-        assert.strictEqual(response.status, 200);
-        assert.strictEqual(html.includes('class="section-metadata"'), !sectionMetadataEnabled);
-        assert.strictEqual(html.includes('data-grid="4"'), sectionMetadataEnabled);
-      });
-    });
-  });
-});
 
 describe('when the lookup cannot say which store holds the site', () => {
   afterEach(() => {

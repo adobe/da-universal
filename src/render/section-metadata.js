@@ -11,17 +11,13 @@
  */
 
 import { toString } from 'hast-util-to-string';
-import { CONTINUE, SKIP, visit } from 'unist-util-visit';
+import { SKIP, visit } from 'unist-util-visit';
 import { childNodes, toMetaName } from '../utils/hast.js';
 
 export function toBlockCSSClassNames(value) {
   if (!value) return [];
   return value
     .split(',')
-    .flatMap((val) => {
-      const idx = val.lastIndexOf('(');
-      return idx >= 0 ? [val.substring(0, idx), val.substring(idx + 1)] : [val];
-    })
     .map((val) => val
       .toLowerCase()
       .trim()
@@ -31,36 +27,7 @@ export function toBlockCSSClassNames(value) {
     .filter(Boolean);
 }
 
-function getValues(node, baseUrl) {
-  const values = [];
-  visit(node, (child) => {
-    const url = (child.tagName === 'img' && child.properties?.src)
-      || (child.tagName === 'a' && child.properties?.href);
-    if (url) {
-      try {
-        values.push(baseUrl ? new URL(url, baseUrl).href : url);
-      } catch {
-        values.push(url);
-      }
-      return SKIP;
-    }
-    if (child.type === 'text') {
-      values.push(...child.value.split(',').map((value) => value.trim()).filter(Boolean));
-    }
-    return CONTINUE;
-  });
-  return values.join(',');
-}
-
-function getStyleClasses(node) {
-  const classes = [];
-  visit(node, 'text', (child) => {
-    classes.push(...toBlockCSSClassNames(child.value));
-  });
-  return classes;
-}
-
-export default function extractSectionMetadata(hast, { baseUrl } = {}) {
+export default function extractSectionMetadata(hast) {
   const isSectionMetadata = (node) => node.tagName === 'div'
     && node.properties?.className?.includes('section-metadata');
 
@@ -71,13 +38,14 @@ export default function extractSectionMetadata(hast, { baseUrl } = {}) {
         const [$name, $value] = $cells;
         const name = toMetaName(toString($name));
         if (name) {
+          const value = toString($value).trim();
           if (name === 'style') {
             if (!parent.properties.className) {
               parent.properties.className = [];
             }
-            parent.properties.className.push(...getStyleClasses($value));
+            parent.properties.className.push(...toBlockCSSClassNames(value));
           } else {
-            parent.properties[`data-${name}`] = getValues($value, baseUrl);
+            parent.properties[`data-${name}`] = value;
           }
         }
       }

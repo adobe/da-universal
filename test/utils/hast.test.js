@@ -53,24 +53,6 @@ describe('hast utilities', () => {
   });
 
   describe('readBlockConfig', () => {
-    ['<p> \u00a0 c2\u00a0 </p>', '<ul><li> \u00a0 c2\u00a0 </li></ul>', '<ol><li> \u00a0 c2\u00a0 </li></ol>'].forEach((value) => {
-      it(`trims outer whitespace from ${value}`, () => {
-        const tree = fromHtml(`<div class="metadata"><div>
-          <div><p>foundation&nbsp;</p></div><div>${value}</div>
-        </div></div>`, { fragment: true });
-
-        assert.strictEqual(utils.readBlockConfig(select('.metadata', tree)).foundation, 'c2');
-      });
-    });
-
-    it('trims individual list/paragraph values without collapsing internal whitespace', () => {
-      const tree = fromHtml(`<div class="metadata"><div>
-        <div>Values</div><div><p> first  value&nbsp;</p><p>&nbsp;second value </p></div>
-      </div></div>`, { fragment: true });
-
-      assert.strictEqual(utils.readBlockConfig(select('.metadata', tree)).values, 'first  value, second value');
-    });
-
     it('reads names from indented (source bus) html', () => {
       // Helix 6 stores documents pretty-printed, so cells contain whitespace text nodes
       const tree = fromHtml(`

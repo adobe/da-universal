@@ -62,7 +62,7 @@ export function readBlockConfig($block) {
           }
 
           if (list) {
-            value = list.map((child) => toString(child).trim()).join(', ');
+            value = list.map((child) => toString(child)).join(', ');
           }
         }
 

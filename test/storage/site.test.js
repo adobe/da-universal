@@ -96,28 +96,7 @@ describe('getSiteConfig', () => {
       stubFetch(onBus);
 
       assert.deepStrictEqual(await getSiteConfig(env, daCtx()), {
-        exists: true, head: HEAD, onSourceBus: true, sectionMetadataEnabled: false,
-      });
-    });
-
-    describe('effective rendering mode', () => {
-      [
-        [{ features: { rendering: { version: 1 } }, created: '2026-06-01' }, false],
-        [{ features: { rendering: { version: 2 } }, created: '2026-01-01' }, true],
-        [{ features: { rendering: { version: 3 } } }, true],
-        [{ created: '2026-04-30T23:59:59Z' }, false],
-        [{ created: '2026-05-01T00:00:00Z' }, true],
-        [{}, false],
-        [{ created: 'invalid' }, false],
-      ].forEach(([settings, enabled]) => {
-        it(`honors ${JSON.stringify(settings)}`, async () => {
-          stubFetch(() => config(settings));
-
-          const site = await getSiteConfig(env, daCtx());
-
-          assert.strictEqual(site.sectionMetadataEnabled, enabled);
-          assert.strictEqual(calls.length, 1);
-        });
+        exists: true, head: HEAD, onSourceBus: true,
       });
     });
 
@@ -205,7 +184,7 @@ describe('getSiteConfig', () => {
       stubFetch(() => config({ contentSource: undefined }));
 
       assert.deepStrictEqual(await getSiteConfig(env, daCtx()), {
-        exists: true, head: HEAD, onSourceBus: false, sectionMetadataEnabled: false,
+        exists: true, head: HEAD, onSourceBus: false,
       });
     });
 

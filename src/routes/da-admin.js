@@ -142,7 +142,6 @@ async function readSource(env, daCtx, init) {
   return {
     response: await withUpstream(CONTENT_STORE, () => store.fetch(store.url, init)),
     head: site.head,
-    sectionMetadataEnabled: site.sectionMetadataEnabled,
   };
 }
 
@@ -176,9 +175,7 @@ async function sourceGet({ req, env, daCtx }) {
   }
 
   const aemCtx = getAemCtx(env, daCtx);
-  const {
-    response: sourceResp, noSuchSite, head: headHtml, sectionMetadataEnabled,
-  } = await readSource(
+  const { response: sourceResp, noSuchSite, head: headHtml } = await readSource(
     env,
     daCtx,
     { method: 'GET', headers },
@@ -216,9 +213,7 @@ async function sourceGet({ req, env, daCtx }) {
   // builds the page without head.html, which a ref that was never built does not have. the read
   // composing makes of the preview host names that upstream itself, and the rest of composing
   // walks the stored document, where a throw is the worker's own
-  const documentTree = await composeHtml(daCtx, aemCtx, bodyHtml, headHtml ?? '', {
-    sectionMetadataEnabled,
-  });
+  const documentTree = await composeHtml(daCtx, aemCtx, bodyHtml, headHtml ?? '');
   const nonce = applyCsp(documentTree);
 
   // layer the request-specific instrumentation on top of the composed page

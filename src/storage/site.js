@@ -26,8 +26,7 @@ const NO_SITE = { exists: false, head: undefined, onSourceBus: false };
  * @param {Object} env worker env. `HLX_CONFIG_SERVICE` is where the lookup goes,
  * `HLX_CONFIG_SERVICE_TOKEN` authorizes it and `AEM_API` is the source bus
  * @param {Object} daCtx
- * @returns {Promise<{exists: boolean, head: string|undefined, onSourceBus: boolean,
- * sectionMetadataEnabled?: boolean}>}
+ * @returns {Promise<{exists: boolean, head: string|undefined, onSourceBus: boolean}>}
  */
 export default async function getSiteConfig(env, daCtx) {
   const { org, site, ref } = daCtx;
@@ -54,13 +53,7 @@ export default async function getSiteConfig(env, daCtx) {
   }
   if (!response.ok) throw new Error(`the config service answered ${response.status}`);
 
-  const {
-    head, contentSource, features, created,
-  } = await response.json();
-  const { version } = features?.rendering ?? {};
-  const sectionMetadataEnabled = version !== undefined
-    ? version >= 2
-    : new Date(created) >= new Date('2026-05-01');
+  const { head, contentSource } = await response.json();
   const onSourceBus = contentSource?.type === 'sourcebus'
     || Boolean(contentSource?.url?.startsWith(`${env.AEM_API}/`));
   // a config that names no store is read as legacy
@@ -72,6 +65,5 @@ export default async function getSiteConfig(env, daCtx) {
     exists: true,
     head: head?.html,
     onSourceBus,
-    sectionMetadataEnabled,
   };
 }
