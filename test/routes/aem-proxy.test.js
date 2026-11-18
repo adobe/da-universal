@@ -98,6 +98,104 @@ describe('MP4 routing and proxying', () => {
   });
 });
 
+describe('native AEM HEAD proxying', () => {
+  let savedFetch;
+
+  beforeEach(() => {
+    savedFetch = globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = savedFetch;
+  });
+
+  [
+    '/styles/styles.css',
+    '/scripts/scripts.js',
+    '/fonts/font.woff2',
+    '/folder/content.html',
+    '/image.png',
+    '/config.json',
+    '/taxonomy.json?sheet=tags&offset=0&limit=1',
+  ].forEach((path) => {
+    it(`forwards HEAD for ${path} without reading a response body`, async () => {
+      const req = new Request(`https://main--site--org.preview.da.live${path}`, {
+        method: 'HEAD',
+        headers: { 'x-site-token': 'token site-secret' },
+      });
+      const handler = (await esmock('../../src/handlers/head.js', {
+        '../../src/routes/da-admin.js': {
+          daSourceHead: async () => new Response(null, { status: 404 }),
+        },
+      })).default;
+      const headers = {
+        'Content-Type': 'application/octet-stream',
+        'Content-Length': '12345',
+        'Content-Encoding': 'gzip',
+        ETag: '"origin-etag"',
+      };
+      let upstreamCalls = 0;
+      globalThis.fetch = async (upstreamReq, options) => {
+        upstreamCalls += 1;
+        assert.strictEqual(upstreamReq.method, 'HEAD');
+        assert.strictEqual(upstreamReq.url, `https://main--site--org.aem.page${path}`);
+        assert.strictEqual(upstreamReq.headers.get('Origin'), 'https://main--site--org.aem.page');
+        assert.strictEqual(upstreamReq.headers.get('Authorization'), 'token site-secret');
+        assert.strictEqual(options.cf.cacheTtl, 0);
+        const response = new Response(null, { headers });
+        response.text = () => assert.fail('HEAD must not read the upstream body');
+        return response;
+      };
+
+      const response = await handler({ req, env: {}, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(upstreamCalls, 1);
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(response.body, null);
+      Object.entries(headers).forEach(([name, value]) => {
+        assert.strictEqual(response.headers.get(name), value);
+      });
+    });
+  });
+
+  [200, 304, 403, 404, 503].forEach((status) => {
+    it(`does not inject Quick Edit into a HEAD entry script with status ${status}`, async () => {
+      const req = new Request('https://main--site--org.preview.da.live/scripts/scripts.js', {
+        method: 'HEAD',
+        headers: {
+          Cookie: 'da-quick-edit=%2Fscripts%2Fscripts.js',
+          'Accept-Encoding': 'gzip',
+        },
+      });
+      const { handleAEMProxyRequest } = await esmock('../../src/routes/aem-proxy.js', {
+        '../../src/utils/quick-edit.js': {
+          applyQuickEditToScript: async () => assert.fail('HEAD must not inject Quick Edit'),
+        },
+      });
+      const headers = {
+        'Content-Type': 'application/javascript',
+        'Content-Length': '12345',
+        'Content-Encoding': 'gzip',
+        ETag: '"script-etag"',
+      };
+      globalThis.fetch = async (upstreamReq) => {
+        assert.strictEqual(upstreamReq.method, 'HEAD');
+        assert.strictEqual(upstreamReq.headers.get('Accept-Encoding'), 'gzip');
+        return new Response(null, { status, statusText: 'Origin status', headers });
+      };
+
+      const response = await handleAEMProxyRequest({ req, env: {}, daCtx: getDaCtx(req) });
+
+      assert.strictEqual(response.status, status);
+      assert.strictEqual(response.statusText, 'Origin status');
+      assert.strictEqual(response.body, null);
+      Object.entries(headers).forEach(([name, value]) => {
+        assert.strictEqual(response.headers.get(name), value);
+      });
+    });
+  });
+});
+
 describe('JSON sheet query routing', () => {
   afterEach(() => {
     delete globalThis.fetch;
@@ -121,8 +219,11 @@ describe('JSON sheet query routing', () => {
       })).default;
       const upstreamUrls = [];
       globalThis.fetch = async (upstreamReq) => {
+        assert.strictEqual(upstreamReq.method, method);
         upstreamUrls.push(upstreamReq.url);
-        return new Response('AEM sheet', { headers: { 'Content-Type': 'application/json' } });
+        return new Response(method === 'HEAD' ? null : 'AEM sheet', {
+          headers: { 'Content-Type': 'application/json' },
+        });
       };
 
       const res = await handler({ req, env: {}, daCtx: getDaCtx(req) });

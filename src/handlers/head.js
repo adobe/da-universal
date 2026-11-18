@@ -16,13 +16,6 @@ import { daSourceHead } from '../routes/da-admin.js';
 import { isSheetQuery } from '../utils/sheet.js';
 import { UpstreamError } from '../utils/upstream.js';
 
-// Keep the existing GET fallback for code assets, but never download video bodies for HEAD.
-async function aemHead({ req, env, daCtx }) {
-  const proxyReq = /\.mp4$/i.test(daCtx.path) ? req : new Request(req, { method: 'GET' });
-  const resp = await handleAEMProxyRequest({ req: proxyReq, env, daCtx });
-  return new Response(null, { status: resp.status, headers: resp.headers });
-}
-
 export default async function headHandler({ req, env, daCtx }) {
   const { path } = daCtx;
 
@@ -34,7 +27,7 @@ export default async function headHandler({ req, env, daCtx }) {
   const { searchParams } = new URL(req.url);
   if (resourceRegex.test(path) || isSheetQuery(path, searchParams)) {
     try {
-      return await aemHead({ req, env, daCtx });
+      return await handleAEMProxyRequest({ req, env, daCtx });
     } catch (e) {
       if (!(e instanceof UpstreamError)) throw e;
       console.warn(`503 HEAD ${path}, ${e.message}`);
@@ -46,7 +39,7 @@ export default async function headHandler({ req, env, daCtx }) {
   if (assetRegex.test(path)) {
     const [daSourceHeadRes, aemHeadRes] = await Promise.allSettled([
       daSourceHead({ env, daCtx }),
-      aemHead({ req, env, daCtx }),
+      handleAEMProxyRequest({ req, env, daCtx }),
     ]);
 
     const storeRes = daSourceHeadRes.status === 'fulfilled' ? daSourceHeadRes.value : undefined;
