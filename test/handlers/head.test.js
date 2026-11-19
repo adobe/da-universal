@@ -68,9 +68,10 @@ describe('HEAD handler', () => {
       headHandler = (await esmock('../../src/handlers/head.js', {
         '../../src/routes/da-admin.js': { daSourceHead: async () => new Response(null, { status: 200 }) },
         '../../src/routes/aem-proxy.js': {
-          handleAEMProxyRequest: async () => {
+          handleAEMProxyRequest: async ({ req }) => {
             aemProxyCallCount += 1;
-            return new Response('proxied', { status: 200, headers: { 'Content-Type': 'text/css' } });
+            assert.strictEqual(req.method, 'HEAD');
+            return new Response(null, { status: 200, headers: { 'Content-Type': 'text/css' } });
           },
         },
       })).default;
@@ -125,9 +126,9 @@ describe('HEAD handler', () => {
           },
           '../../src/routes/aem-proxy.js': {
             handleAEMProxyRequest: async ({ req: proxiedReq }) => {
-              assert.strictEqual(proxiedReq.method, 'GET');
+              assert.strictEqual(proxiedReq.method, 'HEAD');
               assert.strictEqual(proxiedReq.url, req.url);
-              return new Response('AEM response', {
+              return new Response(null, {
                 headers: { 'Content-Type': 'application/json', 'Content-Length': '12' },
               });
             },
@@ -170,7 +171,7 @@ describe('HEAD handler', () => {
       const handler = (await esmock('../../src/handlers/head.js', {
         '../../src/routes/da-admin.js': { daSourceHead: async () => response },
         '../../src/routes/aem-proxy.js': {
-          handleAEMProxyRequest: async () => new Response('AEM response'),
+          handleAEMProxyRequest: async () => new Response(null),
         },
       })).default;
 
@@ -212,7 +213,7 @@ describe('HEAD handler', () => {
         '../../src/routes/aem-proxy.js': {
           handleAEMProxyRequest: async () => {
             aemStarted = true;
-            return new Response('{"code":true}');
+            return new Response(null);
           },
         },
       })).default;
@@ -244,10 +245,10 @@ describe('HEAD handler', () => {
           '../../src/routes/aem-proxy.js': {
             handleAEMProxyRequest: async (args) => {
               assert.ok(sourceRead);
-              assert.strictEqual(args.req.method, 'GET');
+              assert.strictEqual(args.req.method, 'HEAD');
               assert.strictEqual(args.req.url, req.url);
               assert.strictEqual(args.daCtx, daCtx);
-              return new Response('{"code":true}', {
+              return new Response(null, {
                 headers: { 'Content-Type': 'application/json', 'Content-Length': '13' },
               });
             },
@@ -273,7 +274,7 @@ describe('HEAD handler', () => {
             daSourceHead: async () => new Response(null, { status }),
           },
           '../../src/routes/aem-proxy.js': {
-            handleAEMProxyRequest: async () => new Response('{"code":true}', {
+            handleAEMProxyRequest: async () => new Response(null, {
               headers: { 'Content-Type': 'application/json', 'Content-Length': '13' },
             }),
           },
@@ -356,7 +357,7 @@ describe('HEAD handler', () => {
         const handler = (await esmock('../../src/handlers/head.js', {
           '../../src/routes/da-admin.js': { daSourceHead },
           '../../src/routes/aem-proxy.js': {
-            handleAEMProxyRequest: async () => new Response('{"code":true}', {
+            handleAEMProxyRequest: async () => new Response(null, {
               headers: { 'Content-Type': 'application/json', 'Content-Length': '13' },
             }),
           },
@@ -564,8 +565,8 @@ describe('HEAD handler', () => {
       headHandler = (await esmock('../../src/handlers/head.js', {
         '../../src/routes/da-admin.js': { daSourceHead: async () => new Response(null, { status: 200 }) },
         '../../src/routes/aem-proxy.js': {
-          // distinct status so a regression to routing through aemHead is caught
-          handleAEMProxyRequest: async () => new Response('from-aem', { status: 400 }),
+          // distinct status so a regression to routing through AEM is caught
+          handleAEMProxyRequest: async () => new Response(null, { status: 400 }),
         },
       })).default;
     });

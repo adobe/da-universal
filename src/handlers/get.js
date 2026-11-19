@@ -25,7 +25,7 @@ export default async function getHandler({ req, env, daCtx }) {
 
   if (path.startsWith('/gimme_cookie')) return getCookie({ req, env, daCtx });
 
-  const resourceRegex = /\.(css|js|js\.map|xml|woff|woff2|otf|ttf|plain\.html|html)$/i;
+  const resourceRegex = /\.(css|js|js\.map|xml|woff|woff2|otf|ttf|plain\.html|html|mp4)$/i;
   const { searchParams } = new URL(req.url);
   if (resourceRegex.test(path) || isSheetQuery(path, searchParams)) {
     try {

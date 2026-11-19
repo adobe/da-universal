@@ -16,14 +16,6 @@ import { daSourceHead } from '../routes/da-admin.js';
 import { isSheetQuery } from '../utils/sheet.js';
 import { UpstreamError } from '../utils/upstream.js';
 
-// for AEM we reuse the handleAEMProxyRequest for now as GETs are cheap here
-// TODO refine and review for later for a full HEAD requests on AEM
-async function aemHead({ req, env, daCtx }) {
-  const getReq = new Request(req, { method: 'GET' });
-  const resp = await handleAEMProxyRequest({ req: getReq, env, daCtx });
-  return new Response(null, { status: resp.status, headers: resp.headers });
-}
-
 export default async function headHandler({ req, env, daCtx }) {
   const { path } = daCtx;
 
@@ -31,11 +23,11 @@ export default async function headHandler({ req, env, daCtx }) {
   if (path.startsWith('/favicon.ico')) return head404();
   if (path.startsWith('/robots.txt')) return getRobots();
 
-  const resourceRegex = /\.(css|js|js\.map|xml|woff|woff2|otf|ttf|plain\.html|html)$/i;
+  const resourceRegex = /\.(css|js|js\.map|xml|woff|woff2|otf|ttf|plain\.html|html|mp4)$/i;
   const { searchParams } = new URL(req.url);
   if (resourceRegex.test(path) || isSheetQuery(path, searchParams)) {
     try {
-      return await aemHead({ req, env, daCtx });
+      return await handleAEMProxyRequest({ req, env, daCtx });
     } catch (e) {
       if (!(e instanceof UpstreamError)) throw e;
       console.warn(`503 HEAD ${path}, ${e.message}`);
@@ -47,7 +39,7 @@ export default async function headHandler({ req, env, daCtx }) {
   if (assetRegex.test(path)) {
     const [daSourceHeadRes, aemHeadRes] = await Promise.allSettled([
       daSourceHead({ env, daCtx }),
-      aemHead({ req, env, daCtx }),
+      handleAEMProxyRequest({ req, env, daCtx }),
     ]);
 
     const storeRes = daSourceHeadRes.status === 'fulfilled' ? daSourceHeadRes.value : undefined;
