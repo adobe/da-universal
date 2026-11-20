@@ -251,23 +251,32 @@ describe('AEM proxy quick-edit', () => {
     delete globalThis.fetch;
   });
 
-  it('appends the bootstrap to the entry script matched by the cookie', async () => {
+  it('preserves the entry script and encoding headers even with a legacy quick-edit cookie', async () => {
     const req = new Request('https://main--site--org.ue.da.live/scripts/scripts.js', {
       headers: { Cookie: 'da-quick-edit=%2Fscripts%2Fscripts.js' },
     });
     const daCtx = getDaCtx(req);
 
-    globalThis.fetch = async () => new Response('function loadPage() {}', {
-      status: 200,
-      headers: { 'Content-Type': 'application/javascript' },
-    });
+    const code = 'function loadPage() {}';
+    globalThis.fetch = async (upstreamReq) => {
+      assert.strictEqual(upstreamReq.headers.get('Accept-Encoding'), 'gzip');
+      return new Response(code, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/javascript',
+          'Content-Length': String(code.length),
+          'Content-Encoding': 'gzip',
+        },
+      });
+    };
+    req.headers.set('Accept-Encoding', 'gzip');
 
     const res = await handleAEMProxyRequest({ req, env, daCtx });
 
     assert.strictEqual(res.status, 200);
-    const code = await res.text();
-    assert.ok(code.includes('function loadPage() {}'));
-    assert.ok(code.includes('quick-edit'));
+    assert.strictEqual(await res.text(), code);
+    assert.strictEqual(res.headers.get('Content-Length'), String(code.length));
+    assert.strictEqual(res.headers.get('Content-Encoding'), 'gzip');
   });
 
   it('does not inject for a script that does not match the cookie path', async () => {
