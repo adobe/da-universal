@@ -20,7 +20,7 @@ import { composeHtml, serializeHtml } from '../render/compose.js';
 import applyCsp from '../render/csp.js';
 import { getAemCtx, getAEMHtml } from '../utils/aemCtx.js';
 import {
-  applyQuickEditToDocument, buildQuickEditCookie, buildQuickEditNotFoundResponse,
+  applyQuickEditToDocument, buildQuickEditNotFoundResponse,
 } from '../utils/quick-edit.js';
 import {
   daResp, empty503, get401, get404, get415, get503, head401, head404, post404, post405, post503,
@@ -217,14 +217,9 @@ async function sourceGet({ req, env, daCtx }) {
   const nonce = applyCsp(documentTree);
 
   // layer the request-specific instrumentation on top of the composed page
-  const extraHeaders = [];
   if (isQuickEdit) {
     // the composed head owns its policy because applyCsp rewrote it
-    const entryPath = applyQuickEditToDocument(documentTree, nonce);
-    if (entryPath) {
-      console.log(`[quick-edit] doc compose: entry script ${entryPath} found, setting cookie`);
-      extraHeaders.push(['Set-Cookie', buildQuickEditCookie(entryPath)]);
-    }
+    applyQuickEditToDocument(documentTree, nonce);
   } else if (isUE) {
     await applyUEInstrumentation(documentTree, daCtx, aemCtx, nonce);
   }
@@ -236,7 +231,6 @@ async function sourceGet({ req, env, daCtx }) {
     body,
     contentLength: body.length,
     contentType: 'text/html; charset=utf-8',
-    headers: extraHeaders,
   });
 }
 

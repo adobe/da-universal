@@ -3,6 +3,19 @@
 Document Authoring is a research project and which works nicely with Universal Editor.
 Implemented as a worker that prepares the stored CMS page for UE, injects the corresponding scripts and provides a reverse proxy for Edge Delivery Services assets.
 
+## Quick edit
+
+Requests with `?quick-edit` load
+`https://da.live/nx/public/plugins/quick-edit/quick-edit-init.js` as a module in the
+HTML head, alongside the quick-edit import map. Injected scripts receive the
+page's CSP nonce when present. If the document already contains a script whose
+`src` ends in `quick-edit-init.js` (optionally followed by a query or fragment),
+the quick-edit injection leaves the document unchanged.
+
+Site JavaScript is proxied unchanged; no quick-edit cookie is required. The
+initializer owns bootstrapping and handles coexistence with legacy quick-edit
+calls in site scripts.
+
 ## Developing locally
 
 ### Run
