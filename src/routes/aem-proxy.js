@@ -37,7 +37,7 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
   // matching that cookie — which handles entry scripts in subfolders and
   // ignores unrelated files named scripts.js — and append the bootstrap.
   const cookiePath = getQuickEditCookiePath(cookieHeader);
-  const isEntryScript = !!cookiePath && cookiePath === daCtx.aemPathname;
+  const isEntryScript = req.method === 'GET' && !!cookiePath && cookiePath === daCtx.aemPathname;
 
   // Request an uncompressed body when we are going to read it to inject the
   // bootstrap. Otherwise the body comes back gzip/brotli encoded and
@@ -50,6 +50,10 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
   console.log(`-> ${aemUrl.toString()}`);
   let response = await withUpstream(PREVIEW_HOST, () => fetch(req, { cf: { cacheTtl: 0 } }));
   console.log(`<- ${aemUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+
+  if (req.method === 'HEAD') {
+    return new Response(null, response);
+  }
 
   const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
   const isJs = contentType.includes('javascript');
