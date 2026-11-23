@@ -103,8 +103,8 @@ export function extractCspNonce(cspHeader) {
 }
 
 /**
- * Inject the quick-edit import map and initializer into the head unless the
- * document already loads quick-edit-init.js.
+ * Inject the quick-edit import map and initializer before other head scripts
+ * unless the document already loads quick-edit-init.js.
  * @param {import('hast').Root} tree The document tree (mutated in place)
  * @param {string | undefined} [nonce] CSP nonce for injected scripts
  */
@@ -123,11 +123,20 @@ export function applyQuickEditToDocument(tree, nonce) {
 
   injectImportMap(tree, nonce);
   const head = select('head', tree);
-  head.children.push(h('script', {
+  const scripts = head.children.filter((node) => node.tagName === 'script'
+    && node.properties.type !== 'importmap');
+  head.children = head.children.filter((node) => !scripts.includes(node));
+  // Keep policies, base URLs and import maps in place before any script can run.
+  const prerequisites = head.children.filter((node) => node.tagName === 'base'
+    || node.tagName === 'script'
+    || (node.tagName === 'meta'
+      && String(node.properties.httpEquiv).toLowerCase() === 'content-security-policy'));
+  const lastPrerequisite = head.children.lastIndexOf(prerequisites.at(-1));
+  head.children.splice(lastPrerequisite + 1, 0, h('script', {
     type: 'module',
     src: QUICK_EDIT_INIT,
     ...(nonce === undefined ? {} : { nonce }),
-  }));
+  }), ...scripts);
 }
 
 /**
