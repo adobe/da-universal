@@ -10,10 +10,12 @@
  * governing permissions and limitations under the License.
  */
 
+import { slug } from 'github-slugger';
 import { format } from 'hast-util-format';
 import { fromHtml } from 'hast-util-from-html';
 import { select, selectAll } from 'hast-util-select';
 import { toHtml } from 'hast-util-to-html';
+import { toString } from 'hast-util-to-string';
 import { h } from 'hastscript';
 import { extractLocalMetadata, fetchBulkMetadata } from './metadata.js';
 import rewriteIcons from './rewrite-icons.js';
@@ -76,6 +78,26 @@ function injectMetadata(metadata, headNode) {
   });
 }
 
+function addHeadingIds(bodyNode) {
+  const occurrences = new Map();
+  selectAll('h1, h2, h3, h4, h5, h6', bodyNode).forEach((heading) => {
+    if (heading.properties.id) return;
+    const text = toString(heading).trim();
+    if (!text) return;
+
+    // Match helix-html-pipeline's add-heading-ids and IDSlugger.
+    const original = slug(text).replace(/^\d+-+/, '');
+    let id = original;
+    while (occurrences.has(id)) {
+      const count = occurrences.get(original) + 1;
+      occurrences.set(original, count);
+      id = `${original}-${count}`;
+    }
+    occurrences.set(id, 0);
+    heading.properties.id = id;
+  });
+}
+
 /**
  * Composes the HTML document tree from the DA source body and AEM head, without
  * applying any instrumentation (UE or quick-edit). The resulting tree is the
@@ -114,6 +136,8 @@ export async function composeHtml(daCtx, aemCtx, bodyHtmlStr, headHtmlStr) {
 
   // extract section metadata and apply as data attributes / classes to parent sections
   extractSectionMetadata(bodyTree);
+
+  addHeadingIds(bodyNode);
 
   // rewrite content.da.live images to relative paths
   makeImagesRelative(bodyNode, daCtx);
