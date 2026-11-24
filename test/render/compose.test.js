@@ -14,7 +14,8 @@
 import assert from 'assert';
 import { describe, it, before } from 'mocha';
 import esmock from 'esmock';
-import { select } from 'hast-util-select';
+import { select, selectAll } from 'hast-util-select';
+import { fromHtml } from 'hast-util-from-html';
 import applyCsp from '../../src/render/csp.js';
 
 describe('render compose', () => {
@@ -67,6 +68,56 @@ describe('render compose', () => {
     assert.ok(!html.includes('data-aue-'));
     assert.ok(!html.includes('urn:adobe:aue'));
     assert.ok(!html.includes('universal-editor-service'));
+  });
+
+  it('renders AEM-compatible fragment targets for library variant headings', async () => {
+    const body = '<main><div><h1>Default Hero</h1>'
+      + '<div class="hero"><div><div>Default</div></div></div></div>'
+      + '<div><h2>Legacy <em>Hero</em></h2>'
+      + '<div class="hero legacy"><div><div>Legacy</div></div></div>'
+      + '<h3>Cards &amp; Tabs</h3><h4>2 Columns</h4>'
+      + '<h5>\u00dcber</h5><h6>  More examples!  </h6></div></main>';
+    const tree = await composeHtml(daCtx, aemCtx, body, headHtml);
+    const rendered = fromHtml(serializeHtml(tree));
+
+    assert.deepStrictEqual(
+      selectAll('h1, h2, h3, h4, h5, h6', rendered).map((node) => node.properties.id),
+      ['default-hero', 'legacy-hero', 'cards--tabs', 'columns', '\u00fcber', 'more-examples'],
+    );
+    assert.ok(select('#legacy-hero + div.hero.legacy', rendered));
+  });
+
+  it('deduplicates heading IDs across sections and handles suffixed heading collisions', async () => {
+    const body = '<main><div><h2>Default</h2><h3>Default-1</h3></div>'
+      + '<div><h2>Default</h2><h2>Default</h2><h3>Default-1</h3></div></main>';
+    const tree = await composeHtml(daCtx, aemCtx, body, headHtml);
+
+    assert.deepStrictEqual(
+      selectAll('h2, h3', tree).map((node) => node.properties.id),
+      ['default', 'default-1', 'default-2', 'default-3', 'default-1-1'],
+    );
+  });
+
+  it('preserves authored IDs and empty headings without consuming generated heading counts', async () => {
+    const body = '<main><div><h2 id="authored">Default</h2>'
+      + '<h2> \n </h2><h2 id="">Default</h2></div></main>';
+    const tree = await composeHtml(daCtx, aemCtx, body, headHtml);
+
+    assert.deepStrictEqual(
+      selectAll('h2', tree).map((node) => node.properties.id),
+      ['authored', undefined, 'default'],
+    );
+  });
+
+  it('starts heading ID counts fresh for each composed document', async () => {
+    const body = '<main><div><h2>Default</h2><h2>Default</h2></div></main>';
+    await composeHtml(daCtx, aemCtx, body, headHtml);
+    const tree = await composeHtml(daCtx, aemCtx, body, headHtml);
+
+    assert.deepStrictEqual(
+      selectAll('h2', tree).map((node) => node.properties.id),
+      ['default', 'default-1'],
+    );
   });
 
   it('composes head.html as selectable CSP elements without noncing author body scripts', async () => {
