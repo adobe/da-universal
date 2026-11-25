@@ -77,12 +77,7 @@ function injectImportMap(tree, nonce) {
     type: 'importmap',
     ...(nonce === undefined ? {} : { nonce }),
   }, JSON.stringify(QUICK_EDIT_IMPORT_MAP));
-  const head = select('head', tree);
-  if (head) {
-    head.children.unshift(node);
-  } else {
-    tree.children = [node, ...(tree.children ?? [])];
-  }
+  select('head', tree).children.unshift(node);
   return true;
 }
 
@@ -103,8 +98,8 @@ export function extractCspNonce(cspHeader) {
 }
 
 /**
- * Inject the quick-edit import map and initializer before other head scripts
- * unless the document already loads quick-edit-init.js.
+ * Inject the quick-edit import map, and the initializer just before the first
+ * external head script, unless the document already loads quick-edit-init.js.
  * @param {import('hast').Root} tree The document tree (mutated in place)
  * @param {string | undefined} [nonce] CSP nonce for injected scripts
  */
@@ -123,20 +118,19 @@ export function applyQuickEditToDocument(tree, nonce) {
 
   injectImportMap(tree, nonce);
   const head = select('head', tree);
-  const scripts = head.children.filter((node) => node.tagName === 'script'
-    && node.properties.type !== 'importmap');
-  head.children = head.children.filter((node) => !scripts.includes(node));
-  // Keep policies, base URLs and import maps in place before any script can run.
-  const prerequisites = head.children.filter((node) => node.tagName === 'base'
-    || node.tagName === 'script'
-    || (node.tagName === 'meta'
-      && String(node.properties.httpEquiv).toLowerCase() === 'content-security-policy'));
-  const lastPrerequisite = head.children.lastIndexOf(prerequisites.at(-1));
-  head.children.splice(lastPrerequisite + 1, 0, h('script', {
+  const isScript = (node) => node.tagName === 'script';
+  const firstExternal = head.children.findIndex((node) => isScript(node) && node.properties.src);
+  // Older browsers ignore an import map that follows a module script that has started loading.
+  const afterImportMaps = head.children
+    .findLastIndex((node) => isScript(node) && node.properties.type === 'importmap') + 1;
+  const position = firstExternal === -1
+    ? head.children.length
+    : Math.max(firstExternal, afterImportMaps);
+  head.children.splice(position, 0, h('script', {
     type: 'module',
     src: QUICK_EDIT_INIT,
     ...(nonce === undefined ? {} : { nonce }),
-  }), ...scripts);
+  }));
 }
 
 /**

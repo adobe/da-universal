@@ -173,7 +173,6 @@ describe('daSourceGet', () => {
     assert.strictEqual(calls.ue, 1);
     assert.strictEqual(calls.ueNonce, 'abc123');
     assert.strictEqual(calls.quickEdit, 0);
-    assert.strictEqual(res.headers.get('Set-Cookie'), null);
   });
 
   it('applies UE instrumentation on a stage UE host', async () => {
@@ -229,7 +228,7 @@ describe('daSourceGet', () => {
     assert.strictEqual(calls.quickEdit, 0);
   });
 
-  it('applies quick-edit head injection without setting a cookie when requested', async () => {
+  it('applies quick-edit head injection with the minted nonce when requested', async () => {
     const daSourceGet = await mockDaSourceGet();
     const req = authedReq('https://main--site--org.ue.da.live/folder/content?quick-edit');
     const daCtx = getDaCtx(req);
@@ -240,7 +239,6 @@ describe('daSourceGet', () => {
     assert.strictEqual(calls.quickEdit, 1);
     assert.strictEqual(calls.quickEditNonce, 'abc123');
     assert.strictEqual(calls.ue, 0);
-    assert.strictEqual(res.headers.get('Set-Cookie'), null);
   });
 
   it('composes a template when the stored content is missing', async () => {
@@ -272,13 +270,12 @@ describe('daSourceGet', () => {
     const res = await daSourceGet({ req, env: missingEnv, daCtx });
 
     // status doesn't matter here — what matters is a working shell: the full
-    // compose pipeline (real head.html, template body) ran, quick-edit
-    // instrumentation applied without depending on a site entry script
+    // compose pipeline (real head.html, template body) ran and quick-edit
+    // instrumentation was applied
     assert.strictEqual(res.status, 200);
     assert.strictEqual(calls.compose.length, 1);
     assert.ok(!calls.compose[0].includes('stored'));
     assert.strictEqual(calls.quickEdit, 1);
-    assert.strictEqual(res.headers.get('Set-Cookie'), null);
     assert.strictEqual(await res.text(), '<html>composed</html>');
   });
 

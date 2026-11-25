@@ -37,39 +37,41 @@ describe('quick-edit head injection', () => {
       assert.ok(out.indexOf('quick-edit-init.js') < out.indexOf('/scripts/scripts.js'));
     });
 
-    it('places the import map and initializer before existing scripts while keeping CSP ahead', () => {
-      const html = '<html><head><meta http-equiv="Content-Security-Policy" content="script-src \'nonce-test\'">'
-        + '<script src="/classic.js"></script><script type="module" src="/scripts/scripts.js"></script>'
-        + '<script type="importmap">{"imports":{"author":"/author.js"}}</script></head><body></body></html>';
-      const { html: out } = quickEdit.prepareQuickEditDocument(html, 'test');
-      const tree = fromHtml(out);
-      const scripts = selectAll('head script', tree);
-      assert.strictEqual(scripts[0].properties.type, 'importmap');
-      assert.strictEqual(scripts[1].properties.src, 'https://da.live/nx/public/plugins/quick-edit/quick-edit-init.js');
-      assert.strictEqual(scripts[2].properties.src, '/classic.js');
-      assert.strictEqual(scripts[3].properties.src, '/scripts/scripts.js');
-      assert.ok(out.indexOf('Content-Security-Policy') < out.indexOf('importmap'));
-      assert.ok(out.includes('"author":"/author.js"'));
-    });
+    const INIT = 'https://da.live/nx/public/plugins/quick-edit/quick-edit-init.js';
+    const headOrder = (html) => select('head', fromHtml(html)).children
+      .filter((node) => node.type === 'element')
+      .map(({ tagName, properties }) => properties.src ?? properties.type ?? tagName);
 
-    it('keeps CSP ahead even when a data script originally precedes the policy', () => {
+    it('inserts the initializer just before the first external script and leaves the rest of the head in place', () => {
       const { html: out } = quickEdit.prepareQuickEditDocument('<html><head>'
+        + '<title>Page</title><meta name="template" content="article">'
         + '<script type="application/ld+json">{}</script>'
         + '<meta http-equiv="Content-Security-Policy" content="script-src \'nonce-test\'">'
-        + '<script type="module" src="/scripts/scripts.js"></script></head></html>', 'test');
-      assert.ok(out.indexOf('Content-Security-Policy') < out.indexOf('quick-edit-init.js'));
-      assert.ok(out.indexOf('quick-edit-init.js') < out.indexOf('/scripts/scripts.js'));
+        + '<script>window.template = document.querySelector(\'meta[name="template"]\')?.content;</script>'
+        + '<script src="/scripts/aem.js" type="module"></script>'
+        + '<script src="/scripts/scripts.js" type="module"></script>'
+        + '<link rel="stylesheet" href="/styles/styles.css"></head><body></body></html>', 'test');
+      assert.deepStrictEqual(headOrder(out), [
+        'importmap', 'title', 'meta', 'application/ld+json', 'meta', 'script',
+        INIT, '/scripts/aem.js', '/scripts/scripts.js', 'link',
+      ]);
     });
 
-    it('keeps an existing import map after the base URL when ordering scripts', () => {
+    it('inserts the initializer after an existing import map that follows the first external script', () => {
       const { html: out } = quickEdit.prepareQuickEditDocument('<html><head>'
         + '<script src="/classic.js"></script><base href="/assets/">'
         + '<script type="importmap">{"imports":{"app":"./app.js"}}</script>'
         + '<script type="module" src="/scripts/scripts.js"></script></head></html>');
-      assert.ok(out.indexOf('<base') < out.indexOf('importmap'));
-      assert.ok(out.indexOf('importmap') < out.indexOf('quick-edit-init.js'));
-      assert.ok(out.indexOf('quick-edit-init.js') < out.indexOf('/classic.js'));
+      assert.deepStrictEqual(headOrder(out), [
+        '/classic.js', 'base', 'importmap', INIT, '/scripts/scripts.js',
+      ]);
       assert.ok(out.includes('"app":"./app.js"'));
+    });
+
+    it('appends the initializer to the head when there is no external script', () => {
+      const { html: out } = quickEdit.prepareQuickEditDocument('<html><head>'
+        + '<title>Page</title><script>window.inline = true;</script></head><body></body></html>');
+      assert.deepStrictEqual(headOrder(out), ['importmap', 'title', 'script', INIT]);
     });
 
     it('injects import map before module scripts in head', () => {

@@ -7,14 +7,20 @@ Implemented as a worker that prepares the stored CMS page for UE, injects the co
 
 Requests with `?quick-edit` load
 `https://da.live/nx/public/plugins/quick-edit/quick-edit-init.js` as a module in the
-HTML head, alongside the quick-edit import map. Injected scripts receive the
+HTML head, just before the first external script, or at the end of the head when
+there is none. It goes after the site's import map when that map comes later, as
+older browsers ignore an import map once a module script has started loading. The
+quick-edit import map is added at the start of the head or merged into the site's
+own. Nothing else in the head moves. Injected scripts receive the
 page's CSP nonce when present. If the document already contains a script whose
 `src` ends in `quick-edit-init.js` (optionally followed by a query or fragment),
 the quick-edit injection leaves the document unchanged.
 
 Site JavaScript is proxied unchanged; no quick-edit cookie is required. The
 initializer owns bootstrapping and handles coexistence with legacy quick-edit
-calls in site scripts.
+calls in site scripts. It imports the page's `scripts.js` and `aem.js` from the
+same-origin URLs in the head's script tags, so entry scripts in subfolders and local
+development, where those paths start with `/{org}/{site}`, work without changes here.
 
 ## Developing locally
 

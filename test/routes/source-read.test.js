@@ -1044,7 +1044,6 @@ describe('reading from the store that holds the site', () => {
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
       assert.strictEqual(res.status, 200);
-      assert.strictEqual(res.headers.get('Set-Cookie'), null);
       assert.match(await res.text(), /quick-edit-init\.js/);
     });
 
