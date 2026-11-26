@@ -138,7 +138,6 @@ async function readSource(env, daCtx, init) {
   }
 
   const store = getStore(env, daCtx, site.onSourceBus);
-  console.log(`-> ${init.method} ${store.url.toString()}`);
   return {
     response: await withUpstream(CONTENT_STORE, () => store.fetch(store.url, init)),
     head: site.head,
@@ -170,7 +169,7 @@ async function sourceGet({ req, env, daCtx }) {
     // itself: nothing renders an image, so the da:401 shell would only corrupt it.
     const { response, noSuchSite } = await readSource(env, daCtx, { method: 'GET', headers });
     if (noSuchSite) return get404();
-    console.log(`<- ${daCtx.sourcePath}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+    if (response.status >= 500) console.warn(`<- ${daCtx.sourcePath}. ${response.status} ${response.statusText}`);
     return response;
   }
 
@@ -190,7 +189,7 @@ async function sourceGet({ req, env, daCtx }) {
     return get404(SITE_NOT_FOUND_HTML_MESSAGE);
   }
 
-  console.log(`<- ${daCtx.sourcePath}. ${sourceResp.status} ${sourceResp.statusText}`, { status: sourceResp.status, statusText: sourceResp.statusText });
+  if (sourceResp.status >= 500) console.warn(`<- ${daCtx.sourcePath}. ${sourceResp.status} ${sourceResp.statusText}`);
 
   // the store is the only thing to see the token, and the authorbus extension recovers off the
   // da:401 meta rather than the status, so a refusal from the store gets that shell
@@ -222,7 +221,6 @@ async function sourceGet({ req, env, daCtx }) {
     // the composed head owns its policy because applyCsp rewrote it
     const entryPath = applyQuickEditToDocument(documentTree, nonce);
     if (entryPath) {
-      console.log(`[quick-edit] doc compose: entry script ${entryPath} found, setting cookie`);
       extraHeaders.push(['Set-Cookie', buildQuickEditCookie(entryPath)]);
     }
   } else if (isUE) {
@@ -261,7 +259,7 @@ async function sourceHead({ env, daCtx }) {
 
   const { response, noSuchSite } = await readSource(env, daCtx, { method: 'HEAD', headers });
   if (noSuchSite) return head404();
-  console.log(`<- HEAD ${daCtx.sourcePath}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+  if (response.status >= 500) console.warn(`<- HEAD ${daCtx.sourcePath}. ${response.status} ${response.statusText}`);
   return new Response(null, { status: response.status, headers: response.headers });
 }
 
@@ -336,13 +334,12 @@ async function sourcePost({ req, env, daCtx }) {
     const store = getStore(env, daCtx, onSourceBus);
     const body = new FormData();
     body.set('data', new Blob([bodyContent], { type: 'text/html' }));
-    console.log(`-> ${store.url.toString()}`);
     const response = await withUpstream(CONTENT_STORE, () => store.fetch(new Request(store.url, {
       method: 'POST',
       body,
       headers: { Authorization: authToken },
     })));
-    console.log(`<- ${store.url.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+    if (response.status >= 500) console.warn(`<- ${store.url.toString()}. ${response.status} ${response.statusText}`);
     return response;
   }
 

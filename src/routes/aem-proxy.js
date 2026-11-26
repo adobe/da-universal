@@ -47,9 +47,8 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
     req.headers.delete('Accept-Encoding');
   }
 
-  console.log(`-> ${aemUrl.toString()}`);
   let response = await withUpstream(PREVIEW_HOST, () => fetch(req, { cf: { cacheTtl: 0 } }));
-  console.log(`<- ${aemUrl.toString()}. ${response.status} ${response.statusText}`, { status: response.status, statusText: response.statusText });
+  if (response.status >= 500) console.warn(`<- ${aemUrl.toString()}. ${response.status} ${response.statusText}`);
 
   if (req.method === 'HEAD') {
     return new Response(null, response);
