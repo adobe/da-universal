@@ -332,4 +332,27 @@ describe('AEM proxy upstream failures', () => {
       (e) => e instanceof UpstreamError && e.upstream === PREVIEW_HOST,
     );
   });
+
+  it('logs only upstream 5xx responses', async () => {
+    const req = new Request('https://main--site--org.ue.da.live/styles/styles.css');
+    const daCtx = getDaCtx(req);
+    const logged = [];
+    const { log, warn } = console;
+    console.log = (...args) => logged.push(['log', ...args]);
+    console.warn = (...args) => logged.push(['warn', ...args]);
+    try {
+      globalThis.fetch = async () => new Response('ok', { status: 200 });
+      await handleAEMProxyRequest({ req, env, daCtx });
+      assert.deepStrictEqual(logged, []);
+
+      globalThis.fetch = async () => new Response('down', { status: 503, statusText: 'Service Unavailable' });
+      await handleAEMProxyRequest({ req, env, daCtx });
+      assert.strictEqual(logged.length, 1);
+      assert.strictEqual(logged[0][0], 'warn');
+      assert.match(logged[0][1], /^<- .*styles\.css\. 503 Service Unavailable$/);
+    } finally {
+      console.log = log;
+      console.warn = warn;
+    }
+  });
 });
