@@ -14,31 +14,64 @@
 import assert from 'assert';
 import { fromHtml } from 'hast-util-from-html';
 import { toHtml } from 'hast-util-to-html';
+import { select, selectAll } from 'hast-util-select';
 import * as quickEdit from '../../src/utils/quick-edit.js';
 
-const SCRIPTS_JS = `import { initIms } from '../blocks/shared/utils.js';
-import { setNx, nxJS, nxCSS } from './utils.js';
-
-const { loadArea } = await import('./nx.js');
-const CONFIG = { codeBase: import.meta.url.replace('/scripts/scripts.js', '') };
-
-export default async function loadPage() {
-  await loadArea();
-}
-
-loadPage();
-`;
-
-describe('quick-edit script transform', () => {
+describe('quick-edit head injection', () => {
   describe('prepareQuickEditDocument', () => {
     const countImportMaps = (html) => (html.match(/type\s*=\s*["']importmap["']/gi) || []).length;
 
-    it('injects import map at the start of head and finds entry script', () => {
+    it('injects import map at the start of head and adds a module initializer', () => {
       const html = '<html><head><script src="/scripts/scripts.js" type="module"></script></head><body></body></html>';
-      const { html: out, entryPath } = quickEdit.prepareQuickEditDocument(html);
-      assert.strictEqual(entryPath, '/scripts/scripts.js');
+      const { html: out } = quickEdit.prepareQuickEditDocument(html);
       assert.ok(out.includes('<head><script type="importmap">'));
       assert.ok(out.includes('"da-lit"'));
+      const tree = fromHtml(out);
+      const initializer = select('head script[src$="/quick-edit-init.js"]', tree);
+      assert.strictEqual(initializer.properties.type, 'module');
+      assert.strictEqual(
+        initializer.properties.src,
+        'https://da.live/nx/public/plugins/quick-edit/quick-edit-init.js',
+      );
+      assert.ok(out.indexOf('importmap') < out.indexOf('quick-edit-init.js'));
+      assert.ok(out.indexOf('quick-edit-init.js') < out.indexOf('/scripts/scripts.js'));
+    });
+
+    const INIT = 'https://da.live/nx/public/plugins/quick-edit/quick-edit-init.js';
+    const headOrder = (html) => select('head', fromHtml(html)).children
+      .filter((node) => node.type === 'element')
+      .map(({ tagName, properties }) => properties.src ?? properties.type ?? tagName);
+
+    it('inserts the initializer just before the first external script and leaves the rest of the head in place', () => {
+      const { html: out } = quickEdit.prepareQuickEditDocument('<html><head>'
+        + '<title>Page</title><meta name="template" content="article">'
+        + '<script type="application/ld+json">{}</script>'
+        + '<meta http-equiv="Content-Security-Policy" content="script-src \'nonce-test\'">'
+        + '<script>window.template = document.querySelector(\'meta[name="template"]\')?.content;</script>'
+        + '<script src="/scripts/aem.js" type="module"></script>'
+        + '<script src="/scripts/scripts.js" type="module"></script>'
+        + '<link rel="stylesheet" href="/styles/styles.css"></head><body></body></html>', 'test');
+      assert.deepStrictEqual(headOrder(out), [
+        'importmap', 'title', 'meta', 'application/ld+json', 'meta', 'script',
+        INIT, '/scripts/aem.js', '/scripts/scripts.js', 'link',
+      ]);
+    });
+
+    it('inserts the initializer after an existing import map that follows the first external script', () => {
+      const { html: out } = quickEdit.prepareQuickEditDocument('<html><head>'
+        + '<script src="/classic.js"></script><base href="/assets/">'
+        + '<script type="importmap">{"imports":{"app":"./app.js"}}</script>'
+        + '<script type="module" src="/scripts/scripts.js"></script></head></html>');
+      assert.deepStrictEqual(headOrder(out), [
+        '/classic.js', 'base', 'importmap', INIT, '/scripts/scripts.js',
+      ]);
+      assert.ok(out.includes('"app":"./app.js"'));
+    });
+
+    it('appends the initializer to the head when there is no external script', () => {
+      const { html: out } = quickEdit.prepareQuickEditDocument('<html><head>'
+        + '<title>Page</title><script>window.inline = true;</script></head><body></body></html>');
+      assert.deepStrictEqual(headOrder(out), ['importmap', 'title', 'script', INIT]);
     });
 
     it('injects import map before module scripts in head', () => {
@@ -115,199 +148,104 @@ describe('quick-edit script transform', () => {
       assert.ok(out.includes('"da-lit"'));
     });
 
-    it('applies the CSP nonce only to an import map it creates', () => {
+    it('applies the CSP nonce to injected scripts but not author scripts', () => {
       const html = '<html><head><script src="/scripts/scripts.js" type="module"></script></head><body></body></html>';
       const { html: out } = quickEdit.prepareQuickEditDocument(html, 'abc123');
       const tree = fromHtml(out);
-      assert.strictEqual(tree.children[0].children[0].children[0].properties.nonce, 'abc123');
-      assert.strictEqual(tree.children[0].children[0].children[1].properties.nonce, undefined);
+      assert.strictEqual(select('head script[type="importmap"]', tree).properties.nonce, 'abc123');
+      assert.strictEqual(select('head script[src$="/quick-edit-init.js"]', tree).properties.nonce, 'abc123');
+      assert.strictEqual(select('head script[src="/scripts/scripts.js"]', tree).properties.nonce, undefined);
     });
 
     it('does not apply the CSP nonce to an existing author import map', () => {
       const html = '<html><head><script type="importmap">{"imports":{"author":"/author.js"}}</script></head></html>';
       const { html: out } = quickEdit.prepareQuickEditDocument(html, 'abc123');
-      assert.ok(!out.includes('nonce='));
+      const tree = fromHtml(out);
+      assert.strictEqual(select('head script[type="importmap"]', tree).properties.nonce, undefined);
+      assert.strictEqual(select('head script[src$="/quick-edit-init.js"]', tree).properties.nonce, 'abc123');
     });
   });
 
   describe('applyQuickEditToDocument', () => {
-    it('injects a nonced import map and finds the entry script', () => {
+    it('injects a nonced import map and initializer without changing site scripts', () => {
       const tree = fromHtml('<html><head><script src="/scripts/scripts.js" type="module"></script></head><body></body></html>');
-      const entryPath = quickEdit.applyQuickEditToDocument(tree, 'abc123');
+      quickEdit.applyQuickEditToDocument(tree, 'abc123');
       const out = toHtml(tree, { allowDangerousHtml: true });
-      assert.strictEqual(entryPath, '/scripts/scripts.js');
       assert.ok(out.includes('<head><script type="importmap" nonce="abc123"'));
       assert.ok(out.includes('"da-lit"'));
       assert.ok(!out.includes('<script src="/scripts/scripts.js" type="module" nonce='));
     });
 
-    it('returns undefined entry path when there is no entry script', () => {
+    it('injects the initializer even when there is no site entry script', () => {
       const tree = fromHtml('<html><head></head><body>content</body></html>');
-      const entryPath = quickEdit.applyQuickEditToDocument(tree, undefined);
+      quickEdit.applyQuickEditToDocument(tree, undefined);
       const out = toHtml(tree, { allowDangerousHtml: true });
-      assert.strictEqual(entryPath, undefined);
       assert.ok(out.includes('"da-y-wrapper"'));
+      assert.ok(select('head script[src$="/quick-edit-init.js"]', tree));
       // no nonce stamped when none is provided
       assert.ok(!out.includes('nonce='));
+    });
+
+    [
+      'quick-edit-init.js',
+      '/tools/quick-edit-init.js?v=2#init',
+      'https://da.live/nx/public/plugins/quick-edit/quick-edit-init.js',
+      '//example.com/quick-edit-init.js',
+    ].forEach((src) => {
+      it(`leaves the entire document unchanged when it already loads ${src}`, () => {
+        const tree = fromHtml(`<html><head><script type="importmap">{"imports":{"author":"/author.js"}}</script><script type="module" src="${src}"></script></head><body></body></html>`);
+        const before = toHtml(tree);
+        quickEdit.applyQuickEditToDocument(tree, 'abc123');
+        assert.strictEqual(toHtml(tree), before);
+      });
+    });
+
+    it('recognizes an existing initializer in the body', () => {
+      const tree = fromHtml('<html><head></head><body><script type="module" src="/quick-edit-init.js"></script></body></html>');
+      const before = toHtml(tree);
+      quickEdit.applyQuickEditToDocument(tree);
+      assert.strictEqual(toHtml(tree), before);
+    });
+
+    it('does not mistake a similar filename for the initializer', () => {
+      const tree = fromHtml('<html><head><script src="/not-quick-edit-init.js"></script><script src="/quick-edit-init.js.bak"></script></head><body></body></html>');
+      quickEdit.applyQuickEditToDocument(tree);
+      assert.ok(select('head script[src="https://da.live/nx/public/plugins/quick-edit/quick-edit-init.js"]', tree));
+    });
+
+    [
+      '/loader.js?module=/quick-edit-init.js',
+      '/loader.js#/quick-edit-init.js',
+      'https://quick-edit-init.js',
+      'https://[invalid',
+    ].forEach((src) => {
+      it(`does not suppress injection for an unrelated script ${src}`, () => {
+        const tree = fromHtml(`<html><head><script src="${src}"></script></head><body></body></html>`);
+        quickEdit.applyQuickEditToDocument(tree);
+        assert.ok(select('head script[src="https://da.live/nx/public/plugins/quick-edit/quick-edit-init.js"]', tree));
+        assert.ok(select('head script[type="importmap"]', tree));
+      });
+    });
+
+    it('does not inject twice when applied repeatedly', () => {
+      const tree = fromHtml('<html><head></head><body></body></html>');
+      quickEdit.applyQuickEditToDocument(tree);
+      const before = toHtml(tree);
+      quickEdit.applyQuickEditToDocument(tree);
+      assert.strictEqual(toHtml(tree), before);
+      assert.strictEqual(selectAll('script[src$="/quick-edit-init.js"]', tree).length, 1);
     });
   });
 
   describe('buildQuickEditNotFoundResponse', () => {
-    it('returns a 404 shell with the import map injected and no entry script', async () => {
+    it('returns a 404 shell with the import map and initializer', async () => {
       const res = quickEdit.buildQuickEditNotFoundResponse();
       assert.strictEqual(res.status, 404);
       const html = await res.text();
       assert.ok(html.includes('<script type="importmap"'));
       assert.ok(html.includes('"da-lit"'));
       assert.ok(!html.includes('scripts.js'));
-    });
-  });
-
-  describe('findEntryScriptPath', () => {
-    it('finds /scripts/scripts.js from a script tag', () => {
-      const html = '<head><script src="/scripts/scripts.js" type="module"></script></head>';
-      assert.strictEqual(quickEdit.findEntryScriptPath(html), '/scripts/scripts.js');
-    });
-
-    it('finds a nested/subfolder entry script', () => {
-      const html = '<script src="/nx2/scripts/scripts.js" type="module"></script>';
-      assert.strictEqual(quickEdit.findEntryScriptPath(html), '/nx2/scripts/scripts.js');
-    });
-
-    it('normalizes a full URL src to its pathname', () => {
-      const html = '<script src="https://host.example/foo/scripts.js"></script>';
-      assert.strictEqual(quickEdit.findEntryScriptPath(html), '/foo/scripts.js');
-    });
-
-    it('strips a query string from the src', () => {
-      const html = '<script src="/scripts/scripts.js?v=2"></script>';
-      assert.strictEqual(quickEdit.findEntryScriptPath(html), '/scripts/scripts.js');
-    });
-
-    it('ignores unrelated scripts and picks the scripts.js entry', () => {
-      const html = '<script src="/vendor/analytics.js"></script>'
-        + '<script src="/scripts/utils.js"></script>'
-        + '<script src="/scripts/scripts.js"></script>';
-      assert.strictEqual(quickEdit.findEntryScriptPath(html), '/scripts/scripts.js');
-    });
-
-    it('does not match a filename merely ending in scripts.js', () => {
-      const html = '<script src="/scripts/myscripts.js"></script>';
-      assert.strictEqual(quickEdit.findEntryScriptPath(html), undefined);
-    });
-
-    it('returns undefined when there is no entry script', () => {
-      assert.strictEqual(quickEdit.findEntryScriptPath('<head></head>'), undefined);
-    });
-  });
-
-  describe('quick-edit cookie', () => {
-    it('round-trips the entry path through the cookie', () => {
-      const setCookie = quickEdit.buildQuickEditCookie('/scripts/scripts.js');
-      assert.ok(setCookie.startsWith('da-quick-edit=%2Fscripts%2Fscripts.js'));
-      assert.ok(setCookie.includes('HttpOnly'));
-      assert.ok(setCookie.includes('SameSite=None'));
-      assert.ok(setCookie.includes('Secure'));
-      // emulate the browser echoing it back
-      const sent = setCookie.split(';')[0];
-      assert.strictEqual(quickEdit.getQuickEditCookiePath(sent), '/scripts/scripts.js');
-    });
-
-    it('reads the path from a header with other cookies', () => {
-      const header = 'auth_token=abc; da-quick-edit=%2Fnx2%2Fscripts%2Fscripts.js; site_token=xyz';
-      assert.strictEqual(quickEdit.getQuickEditCookiePath(header), '/nx2/scripts/scripts.js');
-    });
-
-    it('returns undefined when the cookie is absent', () => {
-      assert.strictEqual(quickEdit.getQuickEditCookiePath('auth_token=abc'), undefined);
-      assert.strictEqual(quickEdit.getQuickEditCookiePath(null), undefined);
-    });
-  });
-
-  describe('hasLoadPageFn', () => {
-    it('detects an exported async function declaration', () => {
-      assert.ok(quickEdit.hasLoadPageFn('export default async function loadPage() {}'));
-    });
-
-    it('detects an arrow assignment', () => {
-      assert.ok(quickEdit.hasLoadPageFn('const loadPage = async () => {};'));
-    });
-
-    it('returns false when absent', () => {
-      assert.strictEqual(quickEdit.hasLoadPageFn('function other() {}'), false);
-    });
-  });
-
-  describe('alreadyImportsQuickEdit', () => {
-    it('detects a root-level quick-edit import', () => {
-      assert.ok(quickEdit.alreadyImportsQuickEdit("import('/quick-edit.js')"));
-    });
-
-    it('detects an arbitrary path before quick-edit.js', () => {
-      assert.ok(quickEdit.alreadyImportsQuickEdit("import('../tools/quick-edit/quick-edit.js')"));
-    });
-
-    it('ignores unrelated dynamic imports', () => {
-      assert.strictEqual(quickEdit.alreadyImportsQuickEdit("import('./nx.js')"), false);
-    });
-
-    it('only matches dynamic imports, not static ones', () => {
-      assert.strictEqual(quickEdit.alreadyImportsQuickEdit("import x from '/quick-edit.js';"), false);
-    });
-  });
-
-  describe('transformScriptForQuickEdit', () => {
-    it('appends the bootstrap when loadPage is present', () => {
-      const out = quickEdit.transformScriptForQuickEdit(SCRIPTS_JS);
-      assert.ok(out.startsWith(SCRIPTS_JS), 'original source is preserved verbatim at the top');
-      assert.ok(out.length > SCRIPTS_JS.length);
-      // runtime-gated on the quick-edit param
-      assert.ok(out.includes("params.has('quick-edit')"));
-      // uses loadPage from module scope (does not import it)
-      assert.ok(out.includes('loadQuickEdit(payload, loadPage)'));
-      assert.ok(!out.includes('import { loadPage }'));
-      // loads the plugin
-      assert.ok(out.includes('da.live/nx/public/plugins/quick-edit/quick-edit.js'));
-    });
-
-    it('leaves the source unchanged when there is no loadPage', () => {
-      const code = 'export function nope() {}';
-      assert.strictEqual(quickEdit.transformScriptForQuickEdit(code), code);
-    });
-
-    it('leaves the source unchanged when it already imports quick-edit', () => {
-      const code = `${SCRIPTS_JS}\nif (qe) import('../tools/quick-edit/quick-edit.js');`;
-      assert.strictEqual(quickEdit.transformScriptForQuickEdit(code), code);
-    });
-  });
-
-  describe('applyQuickEditToScript', () => {
-    it('returns transformed JS and drops stale length/encoding headers', async () => {
-      const response = new Response(SCRIPTS_JS, {
-        status: 200,
-        headers: {
-          'Content-Type': 'text/javascript',
-          'Content-Length': String(SCRIPTS_JS.length),
-          'Content-Encoding': 'gzip',
-          'X-Test': '1',
-        },
-      });
-      const out = await quickEdit.applyQuickEditToScript(response);
-      assert.strictEqual(out.status, 200);
-      assert.strictEqual(out.headers.get('X-Test'), '1');
-      assert.strictEqual(out.headers.get('Content-Length'), null);
-      assert.strictEqual(out.headers.get('Content-Encoding'), null);
-      assert.ok((await out.text()).includes('loadQuickEdit(payload, loadPage)'));
-    });
-
-    it('passes through unchanged JS when there is no loadPage', async () => {
-      const code = 'export const x = 1;';
-      const response = new Response(code, {
-        status: 200,
-        headers: { 'Content-Type': 'text/javascript' },
-      });
-      const out = await quickEdit.applyQuickEditToScript(response);
-      assert.strictEqual(await out.text(), code);
+      assert.ok(select('head script[src$="/quick-edit-init.js"]', fromHtml(html)));
     });
   });
 });

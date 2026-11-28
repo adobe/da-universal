@@ -153,9 +153,7 @@ describe('daSourceGet', () => {
         applyQuickEditToDocument: (documentTree, nonce) => {
           calls.quickEdit += 1;
           calls.quickEditNonce = nonce;
-          return '/scripts/scripts.js';
         },
-        buildQuickEditCookie: (p) => `da-quick-edit=${encodeURIComponent(p)}; Path=/`,
       },
       '../../src/storage/config.js': {
         // da-admin answers a site with no config with a 404, which getEditorConfig reports as null
@@ -175,7 +173,6 @@ describe('daSourceGet', () => {
     assert.strictEqual(calls.ue, 1);
     assert.strictEqual(calls.ueNonce, 'abc123');
     assert.strictEqual(calls.quickEdit, 0);
-    assert.strictEqual(res.headers.get('Set-Cookie'), null);
   });
 
   it('applies UE instrumentation on a stage UE host', async () => {
@@ -231,7 +228,7 @@ describe('daSourceGet', () => {
     assert.strictEqual(calls.quickEdit, 0);
   });
 
-  it('applies quick-edit injection and sets the cookie when quick-edit is requested', async () => {
+  it('applies quick-edit head injection with the minted nonce when requested', async () => {
     const daSourceGet = await mockDaSourceGet();
     const req = authedReq('https://main--site--org.ue.da.live/folder/content?quick-edit');
     const daCtx = getDaCtx(req);
@@ -242,7 +239,6 @@ describe('daSourceGet', () => {
     assert.strictEqual(calls.quickEdit, 1);
     assert.strictEqual(calls.quickEditNonce, 'abc123');
     assert.strictEqual(calls.ue, 0);
-    assert.ok(res.headers.get('Set-Cookie')?.includes('da-quick-edit=%2Fscripts%2Fscripts.js'));
   });
 
   it('composes a template when the stored content is missing', async () => {
@@ -274,13 +270,12 @@ describe('daSourceGet', () => {
     const res = await daSourceGet({ req, env: missingEnv, daCtx });
 
     // status doesn't matter here — what matters is a working shell: the full
-    // compose pipeline (real head.html, template body) ran, quick-edit
-    // instrumentation applied, and the cookie got set from the real head.html
+    // compose pipeline (real head.html, template body) ran and quick-edit
+    // instrumentation was applied
     assert.strictEqual(res.status, 200);
     assert.strictEqual(calls.compose.length, 1);
     assert.ok(!calls.compose[0].includes('stored'));
     assert.strictEqual(calls.quickEdit, 1);
-    assert.ok(res.headers.get('Set-Cookie')?.includes('da-quick-edit=%2Fscripts%2Fscripts.js'));
     assert.strictEqual(await res.text(), '<html>composed</html>');
   });
 
@@ -389,7 +384,7 @@ describe('daSourceGet CSP nonce', () => {
     assert.ok(!html.includes('nonce="aem"'));
   });
 
-  it('stamps the minted nonce on the injected quick-edit import map', async () => {
+  it('stamps the minted nonce on the injected quick-edit import map and initializer', async () => {
     const html = await serve('https://main--site--org.ue.da.live/folder/content?quick-edit');
     const tree = fromHtml(html);
     const nonce = mintedNonce(tree);
@@ -397,6 +392,7 @@ describe('daSourceGet CSP nonce', () => {
     assert.ok(nonce);
     assert.notStrictEqual(nonce, 'aem');
     assert.strictEqual(select('head script[type="importmap"]', tree).properties.nonce, nonce);
+    assert.strictEqual(select('head script[src$="/quick-edit-init.js"]', tree).properties.nonce, nonce);
     assert.ok(!html.includes('nonce="aem"'));
   });
 });

@@ -26,32 +26,7 @@ const QUICK_EDIT_IMPORT_MAP = {
   },
 };
 
-// Appended to the bottom of the project's scripts/scripts.js. Because it runs
-// inside that module, `loadPage` is already in scope (no import needed) and the
-// module is only ever evaluated once (no double execution from inlining).
-// The quick-edit gate is at runtime: the script request itself carries no query
-// param, so we read it from the live page URL when the module evaluates.
-const QUICK_EDIT_BOOTSTRAP = `
-;(() => {
-  const params = new URLSearchParams(window.location.search);
-  if (!params.has('quick-edit')) return;
-
-  document.body.classList.add('quick-edit');
-
-  const payload = (() => {
-    try {
-      const q = params.get('quick-edit');
-      return q && q !== 'on' ? JSON.parse(decodeURIComponent(q)) : {};
-    } catch { return {}; }
-  })();
-
-  import('https://da.live/nx/public/plugins/quick-edit/quick-edit.js')
-    .then(({ default: loadQuickEdit }) => loadQuickEdit(payload, loadPage))
-    .catch((e) => { console.error('[quick-edit] failed to load plugin', e); });
-})();
-`;
-
-export const QUICK_EDIT_COOKIE = 'da-quick-edit';
+const QUICK_EDIT_INIT = 'https://da.live/nx/public/plugins/quick-edit/quick-edit-init.js';
 
 /** @param {object} map */
 function quickEditSatisfied(map) {
@@ -75,21 +50,6 @@ function mergeImportMaps(existing, overlay) {
 }
 
 // ─── hast tree helpers ────────────────────────────────────────────────────────
-
-/**
- * Walk the tree and return the pathname of the first `<script src="…/scripts.js">`.
- * @param {import('hast').Root} tree
- * @returns {string | undefined}
- */
-function findEntryScriptInTree(tree) {
-  for (const node of selectAll('script[src]', tree)) {
-    try {
-      const { pathname } = new URL(String(node.properties.src), 'https://da.local');
-      if (/\/scripts\.js$/.test(pathname)) return pathname;
-    } catch { /* ignore */ }
-  }
-  return undefined;
-}
 
 /**
  * Inject or update the quick-edit import map in the tree.
@@ -117,12 +77,7 @@ function injectImportMap(tree, nonce) {
     type: 'importmap',
     ...(nonce === undefined ? {} : { nonce }),
   }, JSON.stringify(QUICK_EDIT_IMPORT_MAP));
-  const head = select('head', tree);
-  if (head) {
-    head.children.unshift(node);
-  } else {
-    tree.children = [node, ...(tree.children ?? [])];
-  }
+  select('head', tree).children.unshift(node);
   return true;
 }
 
@@ -143,43 +98,56 @@ export function extractCspNonce(cspHeader) {
 }
 
 /**
- * Find the project's entry script path in an HTML document. Looks for a
- * `<script src="…/scripts.js">` tag and returns its normalized pathname.
- * @param {string} html The page HTML
- * @returns {string | undefined}
- */
-export function findEntryScriptPath(html) {
-  return findEntryScriptInTree(fromHtml(html, { fragment: true }));
-}
-
-/**
- * Apply quick-edit document transforms to a hast tree in place: inject the
- * import map and discover the entry script path (used to set the quick-edit cookie).
+ * Inject the quick-edit import map, and the initializer just before the first
+ * external head script, unless the document already loads quick-edit-init.js.
  * @param {import('hast').Root} tree The document tree (mutated in place)
- * @param {string | undefined} [nonce] CSP nonce for an injected import map
- * @returns {string | undefined} The entry script path, if found
+ * @param {string | undefined} [nonce] CSP nonce for injected scripts
  */
 export function applyQuickEditToDocument(tree, nonce) {
-  const entryPath = findEntryScriptInTree(tree);
+  const alreadyInitialized = selectAll('script[src]', tree).some((node) => {
+    try {
+      const { pathname } = new URL(node.properties.src, 'https://da.local');
+      return /\/quick-edit-init\.js$/.test(pathname);
+    } catch (e) {
+      if (!(e instanceof TypeError)) throw e;
+      console.warn('[quick-edit] Ignoring a script with an invalid src URL.');
+      return false;
+    }
+  });
+  if (alreadyInitialized) return;
+
   injectImportMap(tree, nonce);
-  return entryPath;
+  const head = select('head', tree);
+  const isScript = (node) => node.tagName === 'script';
+  const firstExternal = head.children.findIndex((node) => isScript(node) && node.properties.src);
+  // Older browsers ignore an import map that follows a module script that has started loading.
+  const afterImportMaps = head.children
+    .findLastIndex((node) => isScript(node) && node.properties.type === 'importmap') + 1;
+  const position = firstExternal === -1
+    ? head.children.length
+    : Math.max(firstExternal, afterImportMaps);
+  head.children.splice(position, 0, h('script', {
+    type: 'module',
+    src: QUICK_EDIT_INIT,
+    ...(nonce === undefined ? {} : { nonce }),
+  }));
 }
 
 /**
- * Apply quick-edit document transforms: discover the entry script and inject the import map.
+ * Apply quick-edit document transforms: inject the import map and initializer.
  * @param {string} html
- * @param {string | undefined} [nonce] CSP nonce for an injected import map
- * @returns {{ html: string, entryPath: string | undefined }}
+ * @param {string | undefined} [nonce] CSP nonce for injected scripts
+ * @returns {{ html: string }}
  */
 export function prepareQuickEditDocument(html, nonce) {
   const tree = fromHtml(html);
-  const entryPath = applyQuickEditToDocument(tree, nonce);
-  return { html: toHtml(tree, { allowDangerousHtml: true }), entryPath };
+  applyQuickEditToDocument(tree, nonce);
+  return { html: toHtml(tree, { allowDangerousHtml: true }) };
 }
 
 /**
  * Build the quick-edit 404 response for when there is no such site: a minimal page shell with
- * the import map injected and no entry script, so the editor can still load into it.
+ * the import map and initializer injected, so the editor can still load into it.
  * @returns {Response}
  */
 export function buildQuickEditNotFoundResponse() {
@@ -192,88 +160,5 @@ export function buildQuickEditNotFoundResponse() {
     body,
     contentLength: body.length,
     contentType: 'text/html; charset=utf-8',
-  });
-}
-
-/**
- * Build the Set-Cookie value that remembers the quick-edit entry script path.
- * Presence of the cookie means "this session wants quick-edit"; the value is
- * the exact path whose request should receive the bootstrap.
- * @param {string} path The entry script pathname
- * @returns {string}
- */
-export function buildQuickEditCookie(path) {
-  const value = encodeURIComponent(path);
-  return `${QUICK_EDIT_COOKIE}=${value}; Secure; Path=/; HttpOnly; SameSite=None; Partitioned; Max-Age=3600`;
-}
-
-/**
- * Read the remembered entry script path from a request Cookie header.
- * @param {string | null} cookieHeader The raw Cookie header
- * @returns {string | undefined} The stored entry script pathname, if any
- */
-export function getQuickEditCookiePath(cookieHeader) {
-  if (!cookieHeader) return undefined;
-  const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${QUICK_EDIT_COOKIE}=([^;]+)`));
-  if (!match) return undefined;
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Detect that the scripts already import quick-edit themselves (a manually
- * migrated client). Matches a dynamic import to any path ending in
- * `quick-edit.js`, e.g. `import('/quick-edit.js')` or
- * `import('../tools/quick-edit/quick-edit.js')`.
- * @param {string} code The scripts.js source
- * @returns {boolean}
- */
-export function alreadyImportsQuickEdit(code) {
-  return /\bimport\s*\(\s*['"][^'"]*quick-edit\.js['"]\s*\)/.test(code);
-}
-
-/**
- * Detect a top-level `loadPage` function (declaration or assignment).
- * @param {string} code The scripts.js source
- * @returns {boolean}
- */
-export function hasLoadPageFn(code) {
-  return /\bfunction\s+loadPage\s*\(/.test(code)
-    || /\bloadPage\s*=\s*(?:async\s+)?function\b/.test(code)
-    || /\bloadPage\s*=\s*(?:async\s+)?(?:\([^)]*\)|[A-Za-z0-9_$]+)\s*=>/.test(code);
-}
-
-/**
- * Append the quick-edit bootstrap to a scripts.js source, unless the project
- * has no `loadPage` or already wires up quick-edit itself.
- * @param {string} code The scripts.js source
- * @returns {string} The (possibly unchanged) source
- */
-export function transformScriptForQuickEdit(code) {
-  if (alreadyImportsQuickEdit(code) || !hasLoadPageFn(code)) return code;
-  return `${code}\n${QUICK_EDIT_BOOTSTRAP}\n`;
-}
-
-/**
- * Apply the quick-edit bootstrap to a proxied scripts.js response.
- * @param {Response} response The upstream scripts.js response
- * @returns {Promise<Response>}
- */
-export async function applyQuickEditToScript(response) {
-  const code = await response.text();
-  const transformed = transformScriptForQuickEdit(code);
-
-  const headers = new Headers(response.headers);
-  // Body length changed and it is no longer encoded as the origin declared.
-  headers.delete('Content-Length');
-  headers.delete('Content-Encoding');
-
-  return new Response(transformed, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
   });
 }

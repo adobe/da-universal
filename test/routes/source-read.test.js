@@ -1037,15 +1037,14 @@ describe('reading from the store that holds the site', () => {
       assert.strictEqual(seen.ue, 1);
     });
 
-    // sets no cookie: the cookie names the entry script, and no head.html means no entry script
-    it('serves quick-edit the page without an entry-script cookie', async () => {
-      const { daSourceGet, env } = await build({ headHtml: undefined });
+    it('serves quick-edit with the initializer even without head.html', async () => {
+      const { daSourceGet, env } = await buildComposing();
       const req = authedReq('https://main--site--org.ue.da.live/folder/content?quick-edit');
 
       const res = await daSourceGet({ req, env, daCtx: getDaCtx(req) });
 
       assert.strictEqual(res.status, 200);
-      assert.strictEqual(res.headers.get('Set-Cookie'), null);
+      assert.match(await res.text(), /quick-edit-init\.js/);
     });
 
     it('is not answered 404 by a missing head.html alone', async () => {

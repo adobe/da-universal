@@ -11,14 +11,9 @@
  */
 import { getAemCtx } from '../utils/aemCtx.js';
 import { PREVIEW_HOST, withUpstream } from '../utils/upstream.js';
-import {
-  applyQuickEditToScript,
-  getQuickEditCookiePath,
-} from '../utils/quick-edit.js';
 
 export async function handleAEMProxyRequest({ req, env, daCtx }) {
   const requestUrl = new URL(req.url);
-  const cookieHeader = req.headers.get('Cookie');
   const aemCtx = getAemCtx(env, daCtx);
   const { search } = requestUrl;
   const aemUrl = new URL(`${daCtx.aemPathname}${search}`, aemCtx.previewUrl);
@@ -31,41 +26,12 @@ export async function handleAEMProxyRequest({ req, env, daCtx }) {
     req.headers.set('Authorization', daCtx.siteToken);
   }
 
-  // Quick-edit is two-phase. The document phase (discovering the entry script
-  // and setting the cookie) happens while composing the page in daSourceGet.
-  // The follow-up script request carries no param, so we recognize it here by
-  // matching that cookie — which handles entry scripts in subfolders and
-  // ignores unrelated files named scripts.js — and append the bootstrap.
-  const cookiePath = getQuickEditCookiePath(cookieHeader);
-  const isEntryScript = req.method === 'GET' && !!cookiePath && cookiePath === daCtx.aemPathname;
-
-  // Request an uncompressed body when we are going to read it to inject the
-  // bootstrap. Otherwise the body comes back gzip/brotli encoded and
-  // re-emitting it with the origin's Content-Encoding header yields garbled
-  // output.
-  if (isEntryScript) {
-    req.headers.delete('Accept-Encoding');
-  }
-
-  let response = await withUpstream(PREVIEW_HOST, () => fetch(req, { cf: { cacheTtl: 0 } }));
+  const response = await withUpstream(PREVIEW_HOST, () => fetch(req, { cf: { cacheTtl: 0 } }));
   if (response.status >= 500) console.warn(`<- ${aemUrl.toString()}. ${response.status} ${response.statusText}`);
 
   if (req.method === 'HEAD') {
     return new Response(null, response);
   }
 
-  const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
-  const isJs = contentType.includes('javascript');
-
-  if (isEntryScript && response.ok && isJs) {
-    console.log(`[quick-edit] entry script ${daCtx.aemPathname} matched cookie, attempting bootstrap injection`);
-    response = await applyQuickEditToScript(response);
-  } else {
-    if (isEntryScript) {
-      console.log(`[quick-edit] skip injection for ${daCtx.aemPathname} (ok=${response.ok}, content-type=${contentType})`);
-    }
-    response = new Response(response.body, response);
-  }
-
-  return response;
+  return new Response(response.body, response);
 }
